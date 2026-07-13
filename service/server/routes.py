@@ -18,6 +18,7 @@ from routes_misc import register_misc_routes
 from routes_research import register_research_routes
 from routes_shared import RouteContext
 from routes_signals import register_signal_routes
+from routes_suhas import register_suhas_routes
 from routes_team_missions import register_team_mission_routes
 from routes_trading import register_trading_routes
 from routes_users import register_user_routes
@@ -51,5 +52,6 @@ def create_app() -> FastAPI:
     register_challenge_routes(app, ctx)
     register_team_mission_routes(app, ctx)
     register_user_routes(app, ctx)
+    register_suhas_routes(app)
     register_misc_routes(app)
     return app
