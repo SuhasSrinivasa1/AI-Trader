@@ -1,0 +1,19 @@
+name: Dhruva APK Builder
+
+on:
+  push:
+    branches:
+      - 'dhruva-apk-build-*'
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create test artifact
+        run: echo builder-ready > builder-ready.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: builder-ready
+          path: builder-ready.txt
