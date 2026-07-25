@@ -1,0 +1,47 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.suhas.multyfiautobuy.stable'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.suhas.multyfiautobuy.stable'
+        minSdk 28
+        targetSdk 35
+        versionCode 110
+        versionName '1.1.0'
+        testInstrumentationRunner 'android.test.InstrumentationTestRunner'
+    }
+
+    buildTypes {
+        debug {
+            minifyEnabled false
+        }
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    testOptions {
+        unitTests.returnDefaultValues = true
+    }
+
+    lint {
+        abortOnError true
+        checkReleaseBuilds true
+        warningsAsErrors false
+    }
+}
+
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+}
