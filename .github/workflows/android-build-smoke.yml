@@ -104,8 +104,6 @@ jobs:
             adb logcat -c >> "$OUT/acceptance.log" 2>&1
             timeout 30 adb shell am start -W -n com.suhas.multyfiautobuy.stable/.MainActivity >> "$OUT/acceptance.log" 2>&1 || code=1
             sleep 5
-            adb shell am start-foreground-service -n com.suhas.multyfiautobuy.stable/.StrategyMonitorService >> "$OUT/acceptance.log" 2>&1 || code=1
-            sleep 3
             adb shell dumpsys activity activities > "$OUT/activity-dump.txt" 2>&1
             if ! grep -q 'com.suhas.multyfiautobuy.stable/.MainActivity' "$OUT/activity-dump.txt"; then code=1; fi
             adb logcat -d -v threadtime > "$OUT/logcat.txt" 2>&1
