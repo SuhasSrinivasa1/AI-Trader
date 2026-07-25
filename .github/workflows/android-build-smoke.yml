@@ -1,6 +1,11 @@
 name: Build Multyfi AutoBuy Stable
 
 on:
+  push:
+    branches: [android-stable-smoke]
+    paths:
+      - 'android-stable/**'
+      - '.github/workflows/android-build-smoke.yml'
   pull_request:
     branches: [main]
     paths:
