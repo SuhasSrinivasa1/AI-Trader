@@ -36,7 +36,9 @@ final class GrowwClient {
                 JSONObject payload = json.optJSONObject("payload");
                 if (payload != null) token = payload.optString("token", "");
             }
-            if (token.isEmpty()) return AuthResult.failure("Groww authentication succeeded but returned no access token.");
+            if (token.isEmpty()) {
+                return AuthResult.failure("Groww authentication succeeded but returned no access token.");
+            }
             return AuthResult.success(token);
         } catch (Exception e) {
             return AuthResult.failure("Authentication error: " + safeMessage(e));
@@ -52,17 +54,23 @@ final class GrowwClient {
             if (!http.isSuccess()) return apiFailure(http);
             JSONObject json = new JSONObject(http.body);
             JSONObject payload = json.optJSONObject("payload");
-            if (payload == null) return ApiResult.failure("", "Groww profile response had no payload.", http.code);
+            if (payload == null) {
+                return ApiResult.failure("", "Groww profile response had no payload.", http.code);
+            }
             boolean nseEnabled = payload.optBoolean("nse_enabled", false);
             String ucc = payload.optString("ucc", "");
-            if (!nseEnabled) return ApiResult.failure("", "NSE trading is not enabled for this Groww account.", http.code);
-            return ApiResult.success(ucc, "Groww account verified" + (ucc.isEmpty() ? "." : " (UCC " + ucc + ")."), http.code);
+            if (!nseEnabled) {
+                return ApiResult.failure("", "NSE trading is not enabled for this Groww account.", http.code);
+            }
+            return ApiResult.success(ucc,
+                    "Groww account verified" + (ucc.isEmpty() ? "." : " (UCC " + ucc + ")."),
+                    http.code);
         } catch (Exception e) {
             return ApiResult.failure("", "Profile verification error: " + safeMessage(e), 0);
         }
     }
 
-    static ApiResult createGtt(String accessToken, SignalParser.ParsedSignal signal, int quantity) {
+    static ApiResult createProtectedGtt(String accessToken, SignalParser.ParsedSignal signal, int quantity) {
         if (accessToken == null || accessToken.trim().isEmpty()) {
             return ApiResult.failure("", "Access token is missing.", 0);
         }
@@ -76,6 +84,20 @@ final class GrowwClient {
             order.put("price", price(signal.maxBuyPrice));
             order.put("transaction_type", "BUY");
 
+            JSONObject target = new JSONObject();
+            target.put("trigger_price", price(signal.targetPrice));
+            target.put("order_type", "LIMIT");
+            target.put("price", price(signal.targetPrice));
+
+            JSONObject stopLoss = new JSONObject();
+            stopLoss.put("trigger_price", price(signal.stopLossPrice));
+            stopLoss.put("order_type", "SL_M");
+            stopLoss.put("price", JSONObject.NULL);
+
+            JSONObject childLegs = new JSONObject();
+            childLegs.put("target", target);
+            childLegs.put("stop_loss", stopLoss);
+
             JSONObject body = new JSONObject();
             body.put("reference_id", signal.referenceId);
             body.put("smart_order_type", "GTT");
@@ -85,22 +107,55 @@ final class GrowwClient {
             body.put("trigger_price", price(signal.triggerPrice));
             body.put("trigger_direction", "UP");
             body.put("order", order);
+            body.put("child_legs", childLegs);
             body.put("product_type", "CNC");
             body.put("exchange", "NSE");
             body.put("duration", "DAY");
 
-            HttpResult http = request("POST", API_BASE + "/order-advance/create", accessToken.trim(), body);
+            HttpResult http = request("POST", API_BASE + "/order-advance/create",
+                    accessToken.trim(), body);
             if (!http.isSuccess()) return apiFailure(http);
 
             JSONObject json = new JSONObject(http.body);
             JSONObject payload = json.optJSONObject("payload");
             String smartOrderId = payload == null ? "" : payload.optString("smart_order_id", "");
             String status = payload == null ? "" : payload.optString("status", "");
-            String message = "Groww accepted GTT BUY" + (smartOrderId.isEmpty() ? "" : " " + smartOrderId)
-                    + (status.isEmpty() ? "." : " — " + status + ".");
+            JSONObject confirmedChildLegs = payload == null ? null : payload.optJSONObject("child_legs");
+
+            // Never leave an entry-only GTT active when Groww did not confirm target/SL child legs.
+            if (confirmedChildLegs == null) {
+                if (!smartOrderId.isEmpty()) {
+                    ApiResult cancellation = cancelGtt(accessToken.trim(), smartOrderId);
+                    String detail = cancellation.success
+                            ? "Groww did not confirm target/stop-loss child legs; the GTT was cancelled automatically."
+                            : "CRITICAL: Groww did not confirm child legs and automatic cancellation failed: "
+                                    + cancellation.message;
+                    return ApiResult.failure("PROTECTION_NOT_CONFIRMED", detail, http.code);
+                }
+                return ApiResult.failure("PROTECTION_NOT_CONFIRMED",
+                        "Groww accepted the request but did not confirm target/stop-loss child legs.",
+                        http.code);
+            }
+
+            String message = "Groww accepted protected GTT BUY"
+                    + (smartOrderId.isEmpty() ? "" : " " + smartOrderId)
+                    + (status.isEmpty() ? "." : " — " + status + ".")
+                    + " Target and stop-loss child legs confirmed.";
             return ApiResult.success(smartOrderId, message, http.code);
         } catch (Exception e) {
-            return ApiResult.failure("", "GTT request error: " + safeMessage(e), 0);
+            return ApiResult.failure("", "Protected GTT request error: " + safeMessage(e), 0);
+        }
+    }
+
+    private static ApiResult cancelGtt(String accessToken, String smartOrderId) {
+        try {
+            HttpResult http = request("POST",
+                    API_BASE + "/order-advance/cancel/CASH/GTT/" + smartOrderId,
+                    accessToken, null);
+            if (!http.isSuccess()) return apiFailure(http);
+            return ApiResult.success(smartOrderId, "GTT cancelled.", http.code);
+        } catch (Exception e) {
+            return ApiResult.failure("", "Cancellation error: " + safeMessage(e), 0);
         }
     }
 
@@ -119,7 +174,8 @@ final class GrowwClient {
         return ApiResult.failure(code, message, http.code);
     }
 
-    private static HttpResult request(String method, String url, String bearer, JSONObject body) throws Exception {
+    private static HttpResult request(String method, String url, String bearer, JSONObject body)
+            throws Exception {
         HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
         connection.setRequestMethod(method);
         connection.setConnectTimeout(7_000);
@@ -138,7 +194,8 @@ final class GrowwClient {
             }
         }
         int code = connection.getResponseCode();
-        InputStream stream = code >= 200 && code < 400 ? connection.getInputStream() : connection.getErrorStream();
+        InputStream stream = code >= 200 && code < 400
+                ? connection.getInputStream() : connection.getErrorStream();
         String response = read(stream);
         connection.disconnect();
         return new HttpResult(code, response);
@@ -146,7 +203,8 @@ final class GrowwClient {
 
     private static String read(InputStream stream) {
         if (stream == null) return "";
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(stream, StandardCharsets.UTF_8))) {
             StringBuilder out = new StringBuilder();
             String line;
             while ((line = reader.readLine()) != null && out.length() < 20_000) out.append(line);
@@ -162,7 +220,8 @@ final class GrowwClient {
 
     private static String safeMessage(Exception e) {
         String message = e.getMessage();
-        return message == null || message.trim().isEmpty() ? e.getClass().getSimpleName() : message;
+        return message == null || message.trim().isEmpty()
+                ? e.getClass().getSimpleName() : message;
     }
 
     static final class AuthResult {
@@ -192,7 +251,8 @@ final class GrowwClient {
         final String message;
         final int httpCode;
 
-        private ApiResult(boolean success, String id, String errorCode, String message, int httpCode) {
+        private ApiResult(boolean success, String id, String errorCode,
+                          String message, int httpCode) {
             this.success = success;
             this.id = id;
             this.errorCode = errorCode;
