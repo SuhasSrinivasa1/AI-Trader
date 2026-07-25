@@ -360,12 +360,10 @@ public final class MainActivity extends Activity {
     }
 
     private boolean hasNotificationAccess() {
-        try {
-            return NotificationManager.getEnabledNotificationListenerPackages(this).contains(getPackageName());
-        } catch (Exception e) {
-            String enabled = Settings.Secure.getString(getContentResolver(), "enabled_notification_listeners");
-            return enabled != null && enabled.contains(getPackageName());
-        }
+        NotificationManager manager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+        if (manager == null) return false;
+        return manager.isNotificationListenerAccessGranted(
+                new ComponentName(this, MultyfiNotificationService.class));
     }
 
     private void setBusy(Button button, boolean busy, String busyText, String normalText) {
