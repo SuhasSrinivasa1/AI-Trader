@@ -28,7 +28,13 @@ jobs:
           gradle-version: '8.9'
 
       - name: Unit tests, lint and APK
-        run: gradle --no-daemon -p android-stable :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+        shell: bash
+        run: |
+          set +e
+          gradle --no-daemon --console=plain -p android-stable :app:testDebugUnitTest :app:lintDebug :app:assembleDebug > android-build.log 2>&1
+          code=$?
+          tail -n 240 android-build.log
+          exit $code
 
       - name: Verify APK signature
         run: $ANDROID_HOME/build-tools/35.0.0/apksigner verify --verbose --print-certs android-stable/app/build/outputs/apk/debug/app-debug.apk
