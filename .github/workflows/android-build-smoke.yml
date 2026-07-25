@@ -1,4 +1,4 @@
-name: Android Build Smoke
+name: Build Multyfi AutoBuy Stable
 
 on:
   pull_request:
@@ -8,15 +8,58 @@ on:
       - '.github/workflows/android-build-smoke.yml'
 
 jobs:
-  smoke:
+  build-and-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Smoke
-        run: |
-          mkdir -p output
-          echo ok > output/status.txt
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK
+        run: yes | sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Unit tests, lint and APK
+        run: gradle --no-daemon -p android-stable :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+
+      - name: Verify APK signature
+        run: $ANDROID_HOME/build-tools/35.0.0/apksigner verify --verbose --print-certs android-stable/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Rename APK
+        run: cp android-stable/app/build/outputs/apk/debug/app-debug.apk android-stable/app/build/outputs/apk/debug/Multyfi-AutoBuy-Stable-v1.0.0.apk
+
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_7
+          disable-animations: true
+          script: |
+            adb install -r android-stable/app/build/outputs/apk/debug/Multyfi-AutoBuy-Stable-v1.0.0.apk
+            adb logcat -c
+            adb shell am start -W -n com.suhas.multyfiautobuy.stable/.MainActivity
+            sleep 5
+            adb shell dumpsys activity activities | grep -q 'com.suhas.multyfiautobuy.stable/.MainActivity'
+            if adb logcat -d -v brief | grep -E 'FATAL EXCEPTION|Process: com.suhas.multyfiautobuy.stable'; then
+              echo 'Application crashed during launch'
+              exit 1
+            fi
+            adb exec-out screencap -p > android-stable/app/build/outputs/apk/debug/startup.png
+
       - uses: actions/upload-artifact@v4
         with:
-          name: android-smoke
-          path: output/status.txt
+          name: Multyfi-AutoBuy-Stable-v1.0.0
+          path: |
+            android-stable/app/build/outputs/apk/debug/Multyfi-AutoBuy-Stable-v1.0.0.apk
+            android-stable/app/build/outputs/apk/debug/startup.png
+            android-stable/app/build/reports/tests/testDebugUnitTest/
+            android-stable/app/build/reports/lint-results-debug.html
+          if-no-files-found: error
