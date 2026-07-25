@@ -12,7 +12,9 @@ import java.util.TimeZone;
 
 final class AppPrefs {
     static final String MULTYFI_PACKAGE = "com.multyfi.invest";
-    static final int QUANTITY = 100;
+    static final int DEFAULT_QUANTITY = 10;
+    static final int MIN_QUANTITY = 1;
+    static final int MAX_QUANTITY = 10_000;
     static final int MAX_BUYS_PER_DAY = 3;
     static final double MAX_ORDER_VALUE = 500_000d;
     static final long MAX_SIGNAL_AGE_MS = 180_000L;
@@ -20,6 +22,7 @@ final class AppPrefs {
 
     private static final String FILE = "stable_prefs";
     private static final String K_ARMED = "armed";
+    private static final String K_QUANTITY = "order_quantity";
     private static final String K_STATIC_CONFIRMED = "static_confirmed";
     private static final String K_EXPECTED_IP = "expected_ip";
     private static final String K_IP_VERIFIED_AT = "ip_verified_at";
@@ -42,6 +45,22 @@ final class AppPrefs {
 
     static void setArmed(Context context, boolean value) {
         prefs(context).edit().putBoolean(K_ARMED, value).apply();
+    }
+
+    static int quantity(Context context) {
+        int value = prefs(context).getInt(K_QUANTITY, DEFAULT_QUANTITY);
+        return isValidQuantity(value) ? value : DEFAULT_QUANTITY;
+    }
+
+    static boolean isValidQuantity(int value) {
+        return value >= MIN_QUANTITY && value <= MAX_QUANTITY;
+    }
+
+    static void setQuantity(Context context, int value) {
+        if (!isValidQuantity(value)) {
+            throw new IllegalArgumentException("Quantity must be between " + MIN_QUANTITY + " and " + MAX_QUANTITY + ".");
+        }
+        prefs(context).edit().putInt(K_QUANTITY, value).apply();
     }
 
     static boolean isStaticConfirmed(Context context) {
