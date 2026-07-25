@@ -73,11 +73,19 @@ jobs:
           : > "$OUT/emulator.log"
           code=0
 
-          echo no | avdmanager create avd --force --name stable_api35 --package 'system-images;android-35;google_apis;x86_64' --device 'pixel_6' >> "$OUT/acceptance.log" 2>&1
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/android-avd"
+          export ANDROID_SDK_HOME="$RUNNER_TEMP/android-sdk-home"
+          mkdir -p "$ANDROID_AVD_HOME" "$ANDROID_SDK_HOME/.android"
+          AVD_PATH="$ANDROID_AVD_HOME/stable_api35.avd"
+
+          echo no | avdmanager create avd --force --name stable_api35 --package 'system-images;android-35;google_apis;x86_64' --device 'pixel_6' --path "$AVD_PATH" >> "$OUT/acceptance.log" 2>&1
           if [ $? -ne 0 ]; then
             echo 'AVD creation failed.' >> "$OUT/acceptance.log"
             code=1
           fi
+          echo 'Available AVDs:' >> "$OUT/acceptance.log"
+          "$ANDROID_HOME/emulator/emulator" -list-avds >> "$OUT/acceptance.log" 2>&1
+          find "$ANDROID_AVD_HOME" -maxdepth 2 -type f -print >> "$OUT/acceptance.log" 2>&1
 
           "$ANDROID_HOME/emulator/emulator" -avd stable_api35 -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none > "$OUT/emulator.log" 2>&1 &
           EMULATOR_PID=$!
