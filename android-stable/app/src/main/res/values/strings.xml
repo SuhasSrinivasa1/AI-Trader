@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Multyfi AutoBuy Stable</string>
+    <string name="notification_service_name">Multyfi recommendation listener</string>
+    <string name="subtitle">Notification → Groww GTT BUY</string>
+    <string name="status_not_ready">SETUP REQUIRED</string>
+    <string name="status_ready">READY</string>
+    <string name="notification_access">Notification access</string>
+    <string name="groww_authentication">Groww authentication</string>
+    <string name="vpn_static_ip">VPN / static IP</string>
+    <string name="auto_buy">Live automatic buying</string>
+    <string name="open_notification_access">Open notification access</string>
+    <string name="save_credentials">Save credentials securely</string>
+    <string name="authenticate_today">Authenticate today</string>
+    <string name="verify_groww">Verify Groww account</string>
+    <string name="verify_ip">Verify VPN IP</string>
+    <string name="run_parser_test">Run local parser test</string>
+    <string name="api_key_hint">Groww API key</string>
+    <string name="totp_secret_hint">Groww TOTP secret (Base32)</string>
+    <string name="access_token_hint">Today’s access token (optional)</string>
+    <string name="expected_ip_hint">Whitelisted static public IP</string>
+    <string name="locked_rules">LOCKED EXECUTION RULES</string>
+    <string name="rules_summary">GTT BUY • NSE CASH • CNC • Quantity 100 • Trigger at entry low • Limit up to 1% above entry high • No sell, target or stop-loss</string>
+    <string name="audit_log">LOCAL AUDIT LOG</string>
+    <string name="clear_log">Clear</string>
+    <string name="static_ip_confirm">Turbo VPN dedicated IP is active and whitelisted in Groww</string>
+    <string name="arm_warning">Arming this switch allows real GTT buy orders from Multyfi equity notifications.</string>
+    <string name="daily_approval_note">Groww’s official TOTP flow may require approval each trading day. The app cannot bypass broker approval.</string>
+</resources>
