@@ -62,16 +62,45 @@ jobs:
           profile: pixel_7
           disable-animations: true
           script: |
-            adb install -r android-stable/app/build/outputs/apk/debug/Multyfi-AutoBuy-Stable-v1.0.0.apk
-            adb logcat -c
-            adb shell am start -W -n com.suhas.multyfiautobuy.stable/.MainActivity
+            set +e
+            OUT=android-stable/app/build/outputs/apk/debug
+            mkdir -p "$OUT"
+            : > "$OUT/acceptance.log"
+            code=0
+            adb install -r "$OUT/Multyfi-AutoBuy-Stable-v1.0.0.apk" >> "$OUT/acceptance.log" 2>&1 || code=1
+            adb logcat -c >> "$OUT/acceptance.log" 2>&1
+            adb shell am start -W -n com.suhas.multyfiautobuy.stable/.MainActivity >> "$OUT/acceptance.log" 2>&1 || code=1
             sleep 5
-            adb shell dumpsys activity activities | grep -q 'com.suhas.multyfiautobuy.stable/.MainActivity'
-            if adb logcat -d -v brief | grep -E 'FATAL EXCEPTION|Process: com.suhas.multyfiautobuy.stable'; then
-              echo 'Application crashed during launch'
-              exit 1
+            adb shell dumpsys activity activities > "$OUT/activity-dump.txt" 2>&1
+            if ! grep -q 'com.suhas.multyfiautobuy.stable/.MainActivity' "$OUT/activity-dump.txt"; then
+              echo 'MainActivity is not present in the activity stack.' >> "$OUT/acceptance.log"
+              code=1
             fi
-            adb exec-out screencap -p > android-stable/app/build/outputs/apk/debug/startup.png
+            adb logcat -d -v threadtime > "$OUT/logcat.txt" 2>&1
+            if grep -E 'FATAL EXCEPTION|Process: com.suhas.multyfiautobuy.stable|AndroidRuntime.*com.suhas.multyfiautobuy.stable' "$OUT/logcat.txt" >> "$OUT/acceptance.log"; then
+              echo 'Application crash detected.' >> "$OUT/acceptance.log"
+              code=1
+            fi
+            adb exec-out screencap -p > "$OUT/startup.png" 2>> "$OUT/acceptance.log"
+            echo "$code" > "$OUT/acceptance-exit-code.txt"
+            exit 0
+
+      - name: Upload emulator acceptance diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Multyfi-AutoBuy-emulator-acceptance
+          path: |
+            android-stable/app/build/outputs/apk/debug/acceptance.log
+            android-stable/app/build/outputs/apk/debug/acceptance-exit-code.txt
+            android-stable/app/build/outputs/apk/debug/activity-dump.txt
+            android-stable/app/build/outputs/apk/debug/logcat.txt
+            android-stable/app/build/outputs/apk/debug/startup.png
+          if-no-files-found: warn
+
+      - name: Stop if emulator acceptance failed
+        shell: bash
+        run: test "$(cat android-stable/app/build/outputs/apk/debug/acceptance-exit-code.txt)" = "0"
 
       - uses: actions/upload-artifact@v4
         with:
