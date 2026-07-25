@@ -1,4 +1,4 @@
-name: Build Multyfi AutoBuy Stable
+name: Build Multyfi AutoBuy Final
 
 on:
   pull_request:
@@ -39,7 +39,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Multyfi-AutoBuy-build-diagnostics
+          name: Multyfi-AutoBuy-Final-build-diagnostics
           path: |
             android-build.log
             android-build-exit-code.txt
@@ -49,11 +49,19 @@ jobs:
         shell: bash
         run: test "$(cat android-build-exit-code.txt)" = "0"
 
+      - name: Verify protected-order source contract
+        shell: bash
+        run: |
+          grep -q 'body.put("child_legs", childLegs)' android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/GrowwClient.java
+          grep -q 'PROTECTION_NOT_CONFIRMED' android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/GrowwClient.java
+          grep -q 'TARGET_PATTERN' android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/SignalParser.java
+          grep -q 'STOP_LOSS_PATTERN' android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/SignalParser.java
+
       - name: Verify APK signature
         run: $ANDROID_HOME/build-tools/35.0.0/apksigner verify --verbose --print-certs android-stable/app/build/outputs/apk/debug/app-debug.apk
 
       - name: Rename APK
-        run: cp android-stable/app/build/outputs/apk/debug/app-debug.apk android-stable/app/build/outputs/apk/debug/Multyfi-AutoBuy-Stable-v1.1.0.apk
+        run: cp android-stable/app/build/outputs/apk/debug/app-debug.apk android-stable/app/build/outputs/apk/debug/Multyfi-AutoBuy-Final-v1.2.0.apk
 
       - name: Enable KVM access
         run: |
@@ -76,20 +84,16 @@ jobs:
           export ANDROID_AVD_HOME="$RUNNER_TEMP/android-avd"
           export ANDROID_SDK_HOME="$RUNNER_TEMP/android-sdk-home"
           mkdir -p "$ANDROID_AVD_HOME" "$ANDROID_SDK_HOME/.android"
-          AVD_PATH="$ANDROID_AVD_HOME/stable_api35.avd"
+          AVD_PATH="$ANDROID_AVD_HOME/final_api35.avd"
 
-          echo no | avdmanager create avd --force --name stable_api35 --package 'system-images;android-35;google_apis;x86_64' --device 'pixel_6' --path "$AVD_PATH" >> "$OUT/acceptance.log" 2>&1
+          echo no | avdmanager create avd --force --name final_api35 --package 'system-images;android-35;google_apis;x86_64' --device 'pixel_6' --path "$AVD_PATH" >> "$OUT/acceptance.log" 2>&1
           if [ $? -ne 0 ]; then
             echo 'AVD creation failed.' >> "$OUT/acceptance.log"
             code=1
           fi
-          echo 'Available AVDs:' >> "$OUT/acceptance.log"
-          "$ANDROID_HOME/emulator/emulator" -list-avds >> "$OUT/acceptance.log" 2>&1
-          find "$ANDROID_AVD_HOME" -maxdepth 2 -type f -print >> "$OUT/acceptance.log" 2>&1
 
-          "$ANDROID_HOME/emulator/emulator" -avd stable_api35 -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none > "$OUT/emulator.log" 2>&1 &
+          "$ANDROID_HOME/emulator/emulator" -avd final_api35 -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none > "$OUT/emulator.log" 2>&1 &
           EMULATOR_PID=$!
-          echo "$EMULATOR_PID" > "$OUT/emulator.pid"
 
           if ! timeout 180 adb wait-for-device >> "$OUT/acceptance.log" 2>&1; then
             echo 'ADB did not detect the emulator within 180 seconds.' >> "$OUT/acceptance.log"
@@ -116,7 +120,7 @@ jobs:
           fi
 
           if [ "$booted" = "1" ]; then
-            timeout 60 adb install -r "$OUT/Multyfi-AutoBuy-Stable-v1.1.0.apk" >> "$OUT/acceptance.log" 2>&1 || code=1
+            timeout 60 adb install -r "$OUT/Multyfi-AutoBuy-Final-v1.2.0.apk" >> "$OUT/acceptance.log" 2>&1 || code=1
             adb logcat -c >> "$OUT/acceptance.log" 2>&1
             timeout 30 adb shell am start -W -n com.suhas.multyfiautobuy.stable/.MainActivity >> "$OUT/acceptance.log" 2>&1 || code=1
             sleep 5
@@ -132,7 +136,7 @@ jobs:
             fi
             adb exec-out screencap -p > "$OUT/startup.png" 2>> "$OUT/acceptance.log"
           else
-            touch "$OUT/activity-dump.txt" "$OUT/logcat.txt"
+            touch "$OUT/activity-dump.txt" "$OUT/logcat.txt" "$OUT/startup.png"
           fi
 
           echo "$code" > "$OUT/acceptance-exit-code.txt"
@@ -143,7 +147,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Multyfi-AutoBuy-emulator-acceptance
+          name: Multyfi-AutoBuy-Final-emulator-acceptance
           path: |
             android-stable/app/build/outputs/apk/debug/acceptance.log
             android-stable/app/build/outputs/apk/debug/acceptance-exit-code.txt
@@ -159,9 +163,9 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Multyfi-AutoBuy-Stable-v1.1.0
+          name: Multyfi-AutoBuy-Final-v1.2.0
           path: |
-            android-stable/app/build/outputs/apk/debug/Multyfi-AutoBuy-Stable-v1.1.0.apk
+            android-stable/app/build/outputs/apk/debug/Multyfi-AutoBuy-Final-v1.2.0.apk
             android-stable/app/build/outputs/apk/debug/startup.png
             android-stable/app/build/reports/tests/testDebugUnitTest/
             android-stable/app/build/reports/lint-results-debug.html
