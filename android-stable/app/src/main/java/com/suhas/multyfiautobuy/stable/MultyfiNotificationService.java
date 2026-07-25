@@ -18,14 +18,17 @@ public final class MultyfiNotificationService extends NotificationListenerServic
     @Override
     public void onListenerConnected() {
         super.onListenerConnected();
-        AppPrefs.log(this, "LISTENER READY", "Android connected the Multyfi notification listener.");
+        AppPrefs.log(this, "LISTENER READY",
+                "Android connected the strict Multyfi recommendation listener.");
     }
 
     @Override
     public void onListenerDisconnected() {
-        AppPrefs.log(this, "LISTENER DISCONNECTED", "Android disconnected the notification listener.");
+        AppPrefs.log(this, "LISTENER DISCONNECTED",
+                "Android disconnected the notification listener.");
         try {
-            requestRebind(new android.content.ComponentName(this, MultyfiNotificationService.class));
+            requestRebind(new android.content.ComponentName(this,
+                    MultyfiNotificationService.class));
         } catch (Exception ignored) { }
         super.onListenerDisconnected();
     }
@@ -35,8 +38,11 @@ public final class MultyfiNotificationService extends NotificationListenerServic
         if (sbn == null || sbn.getNotification() == null) return;
         if (!AppPrefs.MULTYFI_PACKAGE.equals(sbn.getPackageName())) return;
 
-        final String rawText = extractText(sbn.getNotification());
         final long postTime = sbn.getPostTime();
+        // Ignore promotional/pre-market/post-market noise before parsing anything.
+        if (!SignalParser.isAllowedSignalTime(postTime)) return;
+
+        final String rawText = extractText(sbn.getNotification());
         executor.execute(() -> process(rawText, postTime));
     }
 
@@ -52,21 +58,19 @@ public final class MultyfiNotificationService extends NotificationListenerServic
             PowerManager manager = (PowerManager) getSystemService(POWER_SERVICE);
             if (manager != null) {
                 wakeLock = manager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,
-                        getPackageName() + ":multyfi-order");
+                        getPackageName() + ":multyfi-protected-order");
                 wakeLock.acquire(30_000L);
             }
 
+            // Only a complete, internally valid recommendation is returned.
             SignalParser.ParsedSignal signal = SignalParser.parse(rawText, postTime);
-            if (signal == null) {
-                AppPrefs.log(this, "IGNORED", "Multyfi notification was not a supported equity BUY with Stock Name and Entry Range.");
-                return;
-            }
+            if (signal == null) return;
 
             final int quantity = AppPrefs.quantity(this);
             final String summary = signal.summary(quantity);
 
             if (!AppPrefs.isArmed(this)) {
-                AppPrefs.log(this, "CAPTURED — DISARMED", summary);
+                AppPrefs.log(this, "COMPLETE SIGNAL — DISARMED", summary);
                 return;
             }
 
@@ -111,7 +115,9 @@ public final class MultyfiNotificationService extends NotificationListenerServic
 
             if (signal.maximumOrderValue(quantity) > AppPrefs.MAX_ORDER_VALUE) {
                 AppPrefs.log(this, "REJECTED — VALUE LIMIT", summary
-                        + " • maximum value ₹" + String.format(java.util.Locale.US, "%.2f", signal.maximumOrderValue(quantity)));
+                        + " • maximum value ₹"
+                        + String.format(java.util.Locale.US, "%.2f",
+                        signal.maximumOrderValue(quantity)));
                 return;
             }
 
@@ -122,22 +128,29 @@ public final class MultyfiNotificationService extends NotificationListenerServic
                 return;
             }
 
-            AppPrefs.log(this, "SUBMITTING", summary);
-            GrowwClient.ApiResult result = GrowwClient.createGtt(token, signal, quantity);
+            AppPrefs.log(this, "SUBMITTING PROTECTED GTT", summary);
+            GrowwClient.ApiResult result = GrowwClient.createProtectedGtt(
+                    token, signal, quantity);
             if (result.success) {
                 AppPrefs.markProcessed(this, signal.eventId);
                 AppPrefs.incrementDailyBuyCount(this);
-                AppPrefs.log(this, "GTT ACCEPTED", summary + "\n" + result.message);
+                AppPrefs.log(this, "PROTECTED GTT ACCEPTED",
+                        summary + "\n" + result.message);
             } else if ("GA007".equals(result.errorCode)) {
                 AppPrefs.markProcessed(this, signal.eventId);
                 AppPrefs.log(this, "DUPLICATE CONFIRMED", summary
                         + " • Groww rejected the repeated reference ID.");
+            } else if ("PROTECTION_NOT_CONFIRMED".equals(result.errorCode)) {
+                rejectAndDisarm(result.message, summary);
             } else {
-                AppPrefs.log(this, "GTT FAILED", summary + "\n" + result.message
-                        + (result.errorCode.isEmpty() ? "" : " [" + result.errorCode + "]"));
+                AppPrefs.log(this, "PROTECTED GTT FAILED",
+                        summary + "\n" + result.message
+                                + (result.errorCode.isEmpty()
+                                ? "" : " [" + result.errorCode + "]"));
             }
         } catch (Exception e) {
-            AppPrefs.log(this, "PROCESSING ERROR", e.getClass().getSimpleName() + ": " + e.getMessage());
+            AppPrefs.log(this, "PROCESSING ERROR",
+                    e.getClass().getSimpleName() + ": " + e.getMessage());
         } finally {
             if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
         }
@@ -158,7 +171,8 @@ public final class MultyfiNotificationService extends NotificationListenerServic
         try {
             SecureStore.put(this, SecureStore.ACCESS_TOKEN, auth.accessToken);
             SecureStore.put(this, SecureStore.ACCESS_TOKEN_DATE, AppPrefs.istDate());
-            AppPrefs.log(this, "TOKEN REFRESHED", "Groww access token generated from TOTP.");
+            AppPrefs.log(this, "TOKEN REFRESHED",
+                    "Groww access token generated from TOTP.");
             return auth.accessToken;
         } catch (Exception e) {
             AppPrefs.log(this, "TOKEN STORE FAILED", e.getMessage());
