@@ -1,1 +1,1 @@
-trigger-8
+trigger-v1.1.0
