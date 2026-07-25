@@ -85,9 +85,15 @@ public final class MainActivity extends Activity {
         quantityInput.setText(String.valueOf(AppPrefs.quantity(this)));
         expectedIpInput.setText(AppPrefs.expectedIp(this));
         staticIpConfirm.setChecked(AppPrefs.isStaticConfirmed(this));
-        if (SecureStore.has(this, SecureStore.API_KEY)) apiKeyInput.setHint("API key saved securely");
-        if (SecureStore.has(this, SecureStore.TOTP_SECRET)) totpSecretInput.setHint("TOTP secret saved securely");
-        if (SecureStore.has(this, SecureStore.ACCESS_TOKEN)) accessTokenInput.setHint("Access token saved for today");
+        if (SecureStore.has(this, SecureStore.API_KEY)) {
+            apiKeyInput.setHint("API key saved securely");
+        }
+        if (SecureStore.has(this, SecureStore.TOTP_SECRET)) {
+            totpSecretInput.setHint("TOTP secret saved securely");
+        }
+        if (SecureStore.has(this, SecureStore.ACCESS_TOKEN)) {
+            accessTokenInput.setHint("Access token saved for today");
+        }
         suppressSwitch = true;
         armedSwitch.setChecked(AppPrefs.isArmed(this));
         suppressSwitch = false;
@@ -133,8 +139,9 @@ public final class MainActivity extends Activity {
                     toast(issue);
                 } else {
                     AppPrefs.setArmed(this, true);
-                    AppPrefs.log(this, "ARMED", "Live Multyfi notification-to-Groww GTT buying enabled with quantity "
-                            + AppPrefs.quantity(this) + ".");
+                    AppPrefs.log(this, "ARMED",
+                            "Autonomous complete-signal protected GTT buying enabled with quantity "
+                                    + AppPrefs.quantity(this) + ".");
                 }
             } else {
                 AppPrefs.setArmed(this, false);
@@ -148,7 +155,8 @@ public final class MainActivity extends Activity {
         try {
             int quantity = readQuantityInput();
             if (!AppPrefs.isValidQuantity(quantity)) {
-                toast("Quantity must be between " + AppPrefs.MIN_QUANTITY + " and " + AppPrefs.MAX_QUANTITY + ".");
+                toast("Quantity must be between " + AppPrefs.MIN_QUANTITY
+                        + " and " + AppPrefs.MAX_QUANTITY + ".");
                 return;
             }
 
@@ -174,12 +182,16 @@ public final class MainActivity extends Activity {
             totpSecretInput.setText("");
             accessTokenInput.setText("");
             loadSavedState();
-            AppPrefs.log(this, "CONFIG SAVED", "Order quantity " + quantity + ". Static IP: "
-                    + (AppPrefs.expectedIp(this).isEmpty() ? "not entered" : AppPrefs.expectedIp(this))
-                    + ". Groww authentication: " + (hasToken || hasTotp ? "configured" : "not configured") + ".");
+            AppPrefs.log(this, "CONFIG SAVED",
+                    "Order quantity " + quantity + ". Static IP: "
+                            + (AppPrefs.expectedIp(this).isEmpty()
+                            ? "not entered" : AppPrefs.expectedIp(this))
+                            + ". Groww authentication: "
+                            + (hasToken || hasTotp ? "configured" : "not configured") + ".");
             toast(hasToken || hasTotp
                     ? "Configuration saved securely. Quantity: " + quantity + "."
-                    : "Quantity saved as " + quantity + ". Add Groww authentication before arming.");
+                    : "Quantity saved as " + quantity
+                    + ". Add Groww authentication before arming.");
             refreshStatus();
         } catch (Exception e) {
             toast("Could not save configuration: " + safeMessage(e));
@@ -198,7 +210,8 @@ public final class MainActivity extends Activity {
                     SecureStore.put(this, SecureStore.ACCESS_TOKEN_DATE, AppPrefs.istDate());
                     AppPrefs.log(this, "AUTH TOKEN READY", result.message);
                 } catch (Exception e) {
-                    AppPrefs.log(this, "AUTH FAILED", "Token was generated but could not be stored: " + safeMessage(e));
+                    AppPrefs.log(this, "AUTH FAILED",
+                            "Token was generated but could not be stored: " + safeMessage(e));
                 }
             } else {
                 AppPrefs.log(this, "AUTH FAILED", result.message);
@@ -216,7 +229,8 @@ public final class MainActivity extends Activity {
         executor.execute(() -> {
             String token = currentTokenOrAuthenticate();
             GrowwClient.ApiResult result = token.isEmpty()
-                    ? GrowwClient.ApiResult.failure("", "No valid Groww access token is available.", 0)
+                    ? GrowwClient.ApiResult.failure("",
+                    "No valid Groww access token is available.", 0)
                     : GrowwClient.verifyProfile(token);
             if (result.success) {
                 AppPrefs.setAuthVerified(this, result.id);
@@ -281,17 +295,24 @@ public final class MainActivity extends Activity {
 
     private void runParserTest() {
         String sample = "Today’s Free Equity Recommendation\n"
-                + "Stock Name : SGFIN\nTarget: ₹700\nEntry Range: ₹681-684\nStop Loss: ₹676";
-        SignalParser.ParsedSignal signal = SignalParser.parse(sample, System.currentTimeMillis());
+                + "Stock Name : SGFIN\n"
+                + "Target: ₹700\n"
+                + "Entry Range: ₹681-684\n"
+                + "Stop Loss: ₹676";
+        SignalParser.ParsedSignal signal = SignalParser.parse(
+                sample, System.currentTimeMillis());
         int quantity = AppPrefs.quantity(this);
         if (signal == null) {
             AppPrefs.setParserTestPassed(this, false);
-            AppPrefs.log(this, "PARSER TEST FAILED", "SGFIN sample was not parsed.");
+            AppPrefs.log(this, "PARSER TEST FAILED",
+                    "Complete SGFIN sample was not parsed.");
             toast("Parser test failed.");
         } else {
             AppPrefs.setParserTestPassed(this, true);
-            AppPrefs.log(this, "PARSER TEST PASSED", signal.summary(quantity) + " • no order submitted.");
-            toast("Parsed: " + signal.summary(quantity));
+            AppPrefs.log(this, "PARSER TEST PASSED",
+                    signal.summary(quantity)
+                            + " • target/SL recognised • no order submitted.");
+            toast("Complete signal parsed: " + signal.summary(quantity));
         }
         refreshStatus();
     }
@@ -326,11 +347,13 @@ public final class MainActivity extends Activity {
         notificationStatus.setText(notificationReady
                 ? "● Notification access: granted"
                 : "● Notification access: not granted");
-        notificationStatus.setTextColor(getColor(notificationReady ? R.color.success : R.color.danger));
+        notificationStatus.setTextColor(getColor(
+                notificationReady ? R.color.success : R.color.danger));
 
         String ucc = AppPrefs.ucc(this);
         authStatus.setText(authReady
-                ? "● Groww authentication: verified today" + (ucc.isEmpty() ? "" : " • UCC " + ucc)
+                ? "● Groww authentication: verified today"
+                + (ucc.isEmpty() ? "" : " • UCC " + ucc)
                 : "● Groww authentication: not verified today");
         authStatus.setTextColor(getColor(authReady ? R.color.success : R.color.danger));
 
@@ -341,19 +364,23 @@ public final class MainActivity extends Activity {
 
         String issue = readinessIssue();
         boolean ready = issue == null;
-        systemStatus.setText(ready ? getString(R.string.status_ready) : getString(R.string.status_not_ready));
-        systemStatus.setTextColor(getColor(ready ? R.color.success : R.color.warning));
+        systemStatus.setText(ready
+                ? getString(R.string.status_ready)
+                : getString(R.string.status_not_ready));
+        systemStatus.setTextColor(getColor(
+                ready ? R.color.success : R.color.warning));
         statusDetail.setText(ready
-                ? "All gates passed. Turn on Live automatic buying when you are ready. Quantity: "
-                    + AppPrefs.quantity(this) + "."
-                : issue + (parserReady ? "" : " Run the local parser test."));
+                ? "All gates passed. Complete Multyfi signals will be handled autonomously. Quantity: "
+                + AppPrefs.quantity(this) + "."
+                : issue + (parserReady ? "" : " Run the complete-signal parser test."));
 
         if (AppPrefs.isArmed(this) && !ready) {
             AppPrefs.setArmed(this, false);
             suppressSwitch = true;
             armedSwitch.setChecked(false);
             suppressSwitch = false;
-            AppPrefs.log(this, "AUTO-DISARMED", "A required readiness gate is no longer valid: " + issue);
+            AppPrefs.log(this, "AUTO-DISARMED",
+                    "A required readiness gate is no longer valid: " + issue);
         } else {
             suppressSwitch = true;
             armedSwitch.setChecked(AppPrefs.isArmed(this));
@@ -364,21 +391,34 @@ public final class MainActivity extends Activity {
 
     private String readinessIssue() {
         if (!hasNotificationAccess()) return "Grant notification access.";
-        if (!AppPrefs.parserTestPassed(this)) return "Local parser test has not passed.";
+        if (!AppPrefs.parserTestPassed(this)) {
+            return "Complete-signal parser test has not passed.";
+        }
         boolean hasToken = SecureStore.has(this, SecureStore.ACCESS_TOKEN);
         boolean hasTotp = SecureStore.has(this, SecureStore.API_KEY)
                 && SecureStore.has(this, SecureStore.TOTP_SECRET);
         if (!hasToken && !hasTotp) return "Save Groww authentication credentials.";
-        if (!AppPrefs.isAuthVerifiedToday(this)) return "Verify the Groww account for today.";
-        if (!AppPrefs.isStaticConfirmed(this)) return "Confirm the whitelisted static VPN IP.";
-        if (AppPrefs.expectedIp(this).isEmpty()) return "Enter the whitelisted static public IP.";
-        if (!NetworkUtil.isVpnActive(this)) return "Connect Turbo VPN using the dedicated static IP.";
-        if (!AppPrefs.isIpRecentlyVerified(this)) return "Verify the current VPN public IP.";
+        if (!AppPrefs.isAuthVerifiedToday(this)) {
+            return "Verify the Groww account for today.";
+        }
+        if (!AppPrefs.isStaticConfirmed(this)) {
+            return "Confirm the whitelisted static VPN IP.";
+        }
+        if (AppPrefs.expectedIp(this).isEmpty()) {
+            return "Enter the whitelisted static public IP.";
+        }
+        if (!NetworkUtil.isVpnActive(this)) {
+            return "Connect Turbo VPN using the dedicated static IP.";
+        }
+        if (!AppPrefs.isIpRecentlyVerified(this)) {
+            return "Verify the current VPN public IP.";
+        }
         return null;
     }
 
     private boolean hasNotificationAccess() {
-        NotificationManager manager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+        NotificationManager manager =
+                (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         if (manager == null) return false;
         return manager.isNotificationListenerAccessGranted(
                 new ComponentName(this, MultyfiNotificationService.class));
@@ -396,11 +436,17 @@ public final class MainActivity extends Activity {
 
     private void updateRulesSummary() {
         if (rulesSummary == null) return;
-        rulesSummary.setText("GTT BUY • NSE CASH • CNC • Quantity " + AppPrefs.quantity(this)
-                + " • Trigger at entry low • Limit up to 1% above entry high • No sell, target or stop-loss");
+        rulesSummary.setText("PROTECTED GTT BUY • NSE CASH • CNC • Quantity "
+                + AppPrefs.quantity(this)
+                + " • Requires stock + entry/buy range + target + stop-loss"
+                + " • Buy limit up to 1% above entry high"
+                + " • Target and SL attached as child legs"
+                + " • Incomplete/promotional/out-of-window notifications ignored"
+                + " • No unprotected fallback");
     }
 
-    private void setBusy(Button button, boolean busy, String busyText, String normalText) {
+    private void setBusy(Button button, boolean busy,
+                         String busyText, String normalText) {
         runOnUiThread(() -> {
             button.setEnabled(!busy);
             button.setText(busy ? busyText : normalText);
@@ -408,12 +454,14 @@ public final class MainActivity extends Activity {
     }
 
     private static String text(EditText editText) {
-        return editText.getText() == null ? "" : editText.getText().toString().trim();
+        return editText.getText() == null
+                ? "" : editText.getText().toString().trim();
     }
 
     private static String safeMessage(Exception e) {
         String message = e.getMessage();
-        return message == null || message.trim().isEmpty() ? e.getClass().getSimpleName() : message;
+        return message == null || message.trim().isEmpty()
+                ? e.getClass().getSimpleName() : message;
     }
 
     private void toast(String message) {
