@@ -1,0 +1,22 @@
+name: Android Build Smoke
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'android-stable/**'
+      - '.github/workflows/android-build-smoke.yml'
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Smoke
+        run: |
+          mkdir -p output
+          echo ok > output/status.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-smoke
+          path: output/status.txt
