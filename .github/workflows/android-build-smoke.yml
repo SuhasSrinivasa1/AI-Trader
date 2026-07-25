@@ -63,6 +63,7 @@ jobs:
           ls -l /dev/kvm || true
 
       - name: Emulator install and startup acceptance
+        timeout-minutes: 12
         shell: bash
         run: |
           set +e
@@ -82,28 +83,34 @@ jobs:
           EMULATOR_PID=$!
           echo "$EMULATOR_PID" > "$OUT/emulator.pid"
 
-          adb wait-for-device >> "$OUT/acceptance.log" 2>&1
+          if ! timeout 180 adb wait-for-device >> "$OUT/acceptance.log" 2>&1; then
+            echo 'ADB did not detect the emulator within 180 seconds.' >> "$OUT/acceptance.log"
+            code=1
+          fi
+
           booted=0
-          for i in $(seq 1 120); do
-            state=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
-            if [ "$state" = "1" ]; then
-              booted=1
-              break
-            fi
-            if ! kill -0 "$EMULATOR_PID" 2>/dev/null; then
-              break
-            fi
-            sleep 5
-          done
+          if adb get-state >/dev/null 2>&1; then
+            for i in $(seq 1 72); do
+              state=$(timeout 10 adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+              if [ "$state" = "1" ]; then
+                booted=1
+                break
+              fi
+              if ! kill -0 "$EMULATOR_PID" 2>/dev/null; then
+                break
+              fi
+              sleep 5
+            done
+          fi
           if [ "$booted" != "1" ]; then
             echo 'Emulator did not complete boot.' >> "$OUT/acceptance.log"
             code=1
           fi
 
           if [ "$booted" = "1" ]; then
-            adb install -r "$OUT/Multyfi-AutoBuy-Stable-v1.0.0.apk" >> "$OUT/acceptance.log" 2>&1 || code=1
+            timeout 60 adb install -r "$OUT/Multyfi-AutoBuy-Stable-v1.0.0.apk" >> "$OUT/acceptance.log" 2>&1 || code=1
             adb logcat -c >> "$OUT/acceptance.log" 2>&1
-            adb shell am start -W -n com.suhas.multyfiautobuy.stable/.MainActivity >> "$OUT/acceptance.log" 2>&1 || code=1
+            timeout 30 adb shell am start -W -n com.suhas.multyfiautobuy.stable/.MainActivity >> "$OUT/acceptance.log" 2>&1 || code=1
             sleep 5
             adb shell dumpsys activity activities > "$OUT/activity-dump.txt" 2>&1
             if ! grep -q 'com.suhas.multyfiautobuy.stable/.MainActivity' "$OUT/activity-dump.txt"; then
@@ -121,7 +128,7 @@ jobs:
           fi
 
           echo "$code" > "$OUT/acceptance-exit-code.txt"
-          adb emu kill >> "$OUT/acceptance.log" 2>&1 || true
+          timeout 15 adb emu kill >> "$OUT/acceptance.log" 2>&1 || true
           exit 0
 
       - name: Upload emulator acceptance diagnostics
