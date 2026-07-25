@@ -62,11 +62,14 @@ final class GrowwClient {
         }
     }
 
-    static ApiResult createGtt(String accessToken, SignalParser.ParsedSignal signal) {
+    static ApiResult createGtt(String accessToken, SignalParser.ParsedSignal signal, int quantity) {
         if (accessToken == null || accessToken.trim().isEmpty()) {
             return ApiResult.failure("", "Access token is missing.", 0);
         }
         if (signal == null) return ApiResult.failure("", "Signal is missing.", 0);
+        if (!AppPrefs.isValidQuantity(quantity)) {
+            return ApiResult.failure("", "Configured quantity is invalid.", 0);
+        }
         try {
             JSONObject order = new JSONObject();
             order.put("order_type", "LIMIT");
@@ -78,7 +81,7 @@ final class GrowwClient {
             body.put("smart_order_type", "GTT");
             body.put("segment", "CASH");
             body.put("trading_symbol", signal.symbol);
-            body.put("quantity", AppPrefs.QUANTITY);
+            body.put("quantity", quantity);
             body.put("trigger_price", price(signal.triggerPrice));
             body.put("trigger_direction", "UP");
             body.put("order", order);
