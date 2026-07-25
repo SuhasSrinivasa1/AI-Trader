@@ -22,7 +22,9 @@ public class SignalParserTest {
         assertEquals(684.00d, signal.entryHigh, 0.001d);
         assertEquals(681.00d, signal.triggerPrice, 0.001d);
         assertEquals(690.80d, signal.maxBuyPrice, 0.001d);
-        assertEquals(69_080d, signal.maximumOrderValue(), 0.01d);
+        assertEquals(6_908d, signal.maximumOrderValue(10), 0.01d);
+        assertEquals(34_540d, signal.maximumOrderValue(50), 0.01d);
+        assertTrue(signal.summary(10).contains("qty 10"));
         assertTrue(signal.referenceId.length() >= 8 && signal.referenceId.length() <= 20);
     }
 
@@ -36,5 +38,14 @@ public class SignalParserTest {
     public void requiresStockAndEntryRange() {
         assertNull(SignalParser.parse("Stock Name: TCS", 1L));
         assertNull(SignalParser.parse("Entry Range: 100-110", 1L));
+    }
+
+    @Test
+    public void validatesQuantityBounds() {
+        assertTrue(AppPrefs.isValidQuantity(1));
+        assertTrue(AppPrefs.isValidQuantity(10));
+        assertTrue(AppPrefs.isValidQuantity(10_000));
+        assertTrue(!AppPrefs.isValidQuantity(0));
+        assertTrue(!AppPrefs.isValidQuantity(10_001));
     }
 }
