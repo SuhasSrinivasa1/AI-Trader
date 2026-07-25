@@ -93,14 +93,14 @@ final class SignalParser {
             this.rawText = rawText;
         }
 
-        double maximumOrderValue() {
-            return maxBuyPrice * AppPrefs.QUANTITY;
+        double maximumOrderValue(int quantity) {
+            return maxBuyPrice * quantity;
         }
 
-        String summary() {
+        String summary(int quantity) {
             return symbol + " | entry ₹" + money(entryLow) + "–₹" + money(entryHigh)
                     + " | trigger ₹" + money(triggerPrice) + " UP | limit ₹" + money(maxBuyPrice)
-                    + " | qty " + AppPrefs.QUANTITY;
+                    + " | qty " + quantity;
         }
 
         private static String money(double value) {
