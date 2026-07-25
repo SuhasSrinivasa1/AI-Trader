@@ -21,7 +21,7 @@ jobs:
       - uses: android-actions/setup-android@v3
 
       - name: Install Android SDK
-        run: yes | sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+        run: yes | sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools" "emulator" "system-images;android-35;google_apis;x86_64"
 
       - uses: gradle/actions/setup-gradle@v4
         with:
@@ -62,19 +62,45 @@ jobs:
           sudo udevadm trigger --name-match=kvm
           ls -l /dev/kvm || true
 
-      - uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 35
-          arch: x86_64
-          profile: pixel_6
-          disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
-          script: |
-            set +e
-            OUT=android-stable/app/build/outputs/apk/debug
-            mkdir -p "$OUT"
-            : > "$OUT/acceptance.log"
-            code=0
+      - name: Emulator install and startup acceptance
+        shell: bash
+        run: |
+          set +e
+          OUT=android-stable/app/build/outputs/apk/debug
+          mkdir -p "$OUT"
+          : > "$OUT/acceptance.log"
+          : > "$OUT/emulator.log"
+          code=0
+
+          echo no | avdmanager create avd --force --name stable_api35 --package 'system-images;android-35;google_apis;x86_64' --device 'pixel_6' >> "$OUT/acceptance.log" 2>&1
+          if [ $? -ne 0 ]; then
+            echo 'AVD creation failed.' >> "$OUT/acceptance.log"
+            code=1
+          fi
+
+          "$ANDROID_HOME/emulator/emulator" -avd stable_api35 -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none > "$OUT/emulator.log" 2>&1 &
+          EMULATOR_PID=$!
+          echo "$EMULATOR_PID" > "$OUT/emulator.pid"
+
+          adb wait-for-device >> "$OUT/acceptance.log" 2>&1
+          booted=0
+          for i in $(seq 1 120); do
+            state=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+            if [ "$state" = "1" ]; then
+              booted=1
+              break
+            fi
+            if ! kill -0 "$EMULATOR_PID" 2>/dev/null; then
+              break
+            fi
+            sleep 5
+          done
+          if [ "$booted" != "1" ]; then
+            echo 'Emulator did not complete boot.' >> "$OUT/acceptance.log"
+            code=1
+          fi
+
+          if [ "$booted" = "1" ]; then
             adb install -r "$OUT/Multyfi-AutoBuy-Stable-v1.0.0.apk" >> "$OUT/acceptance.log" 2>&1 || code=1
             adb logcat -c >> "$OUT/acceptance.log" 2>&1
             adb shell am start -W -n com.suhas.multyfiautobuy.stable/.MainActivity >> "$OUT/acceptance.log" 2>&1 || code=1
@@ -90,8 +116,13 @@ jobs:
               code=1
             fi
             adb exec-out screencap -p > "$OUT/startup.png" 2>> "$OUT/acceptance.log"
-            echo "$code" > "$OUT/acceptance-exit-code.txt"
-            exit 0
+          else
+            touch "$OUT/activity-dump.txt" "$OUT/logcat.txt"
+          fi
+
+          echo "$code" > "$OUT/acceptance-exit-code.txt"
+          adb emu kill >> "$OUT/acceptance.log" 2>&1 || true
+          exit 0
 
       - name: Upload emulator acceptance diagnostics
         if: always()
@@ -103,8 +134,9 @@ jobs:
             android-stable/app/build/outputs/apk/debug/acceptance-exit-code.txt
             android-stable/app/build/outputs/apk/debug/activity-dump.txt
             android-stable/app/build/outputs/apk/debug/logcat.txt
+            android-stable/app/build/outputs/apk/debug/emulator.log
             android-stable/app/build/outputs/apk/debug/startup.png
-          if-no-files-found: warn
+          if-no-files-found: error
 
       - name: Stop if emulator acceptance failed
         shell: bash
