@@ -20,7 +20,7 @@
     <string name="access_token_hint">Today’s access token (optional)</string>
     <string name="expected_ip_hint">Whitelisted static public IP</string>
     <string name="locked_rules">LOCKED EXECUTION RULES</string>
-    <string name="rules_summary">GTT BUY • NSE CASH • CNC • Quantity 100 • Trigger at entry low • Limit up to 1% above entry high • No sell, target or stop-loss</string>
+    <string name="rules_summary" formatted="false">GTT BUY • NSE CASH • CNC • Quantity 100 • Trigger at entry low • Limit up to 1% above entry high • No sell, target or stop-loss</string>
     <string name="audit_log">LOCAL AUDIT LOG</string>
     <string name="clear_log">Clear</string>
     <string name="static_ip_confirm">Turbo VPN dedicated IP is active and whitelisted in Groww</string>
