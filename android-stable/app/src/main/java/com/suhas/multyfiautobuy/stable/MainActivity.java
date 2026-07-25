@@ -26,11 +26,13 @@ public final class MainActivity extends Activity {
     private TextView notificationStatus;
     private TextView authStatus;
     private TextView ipStatus;
+    private TextView rulesSummary;
     private TextView auditLog;
     private Switch armedSwitch;
     private EditText apiKeyInput;
     private EditText totpSecretInput;
     private EditText accessTokenInput;
+    private EditText quantityInput;
     private EditText expectedIpInput;
     private CheckBox staticIpConfirm;
     private boolean suppressSwitch;
@@ -68,16 +70,19 @@ public final class MainActivity extends Activity {
         notificationStatus = findViewById(R.id.notificationStatus);
         authStatus = findViewById(R.id.authStatus);
         ipStatus = findViewById(R.id.ipStatus);
+        rulesSummary = findViewById(R.id.rulesSummary);
         auditLog = findViewById(R.id.auditLog);
         armedSwitch = findViewById(R.id.armedSwitch);
         apiKeyInput = findViewById(R.id.apiKeyInput);
         totpSecretInput = findViewById(R.id.totpSecretInput);
         accessTokenInput = findViewById(R.id.accessTokenInput);
+        quantityInput = findViewById(R.id.quantityInput);
         expectedIpInput = findViewById(R.id.expectedIpInput);
         staticIpConfirm = findViewById(R.id.staticIpConfirm);
     }
 
     private void loadSavedState() {
+        quantityInput.setText(String.valueOf(AppPrefs.quantity(this)));
         expectedIpInput.setText(AppPrefs.expectedIp(this));
         staticIpConfirm.setChecked(AppPrefs.isStaticConfirmed(this));
         if (SecureStore.has(this, SecureStore.API_KEY)) apiKeyInput.setHint("API key saved securely");
@@ -86,6 +91,7 @@ public final class MainActivity extends Activity {
         suppressSwitch = true;
         armedSwitch.setChecked(AppPrefs.isArmed(this));
         suppressSwitch = false;
+        updateRulesSummary();
     }
 
     private void wireActions() {
@@ -127,7 +133,8 @@ public final class MainActivity extends Activity {
                     toast(issue);
                 } else {
                     AppPrefs.setArmed(this, true);
-                    AppPrefs.log(this, "ARMED", "Live Multyfi notification-to-Groww GTT buying enabled.");
+                    AppPrefs.log(this, "ARMED", "Live Multyfi notification-to-Groww GTT buying enabled with quantity "
+                            + AppPrefs.quantity(this) + ".");
                 }
             } else {
                 AppPrefs.setArmed(this, false);
@@ -139,6 +146,12 @@ public final class MainActivity extends Activity {
 
     private void saveConfiguration() {
         try {
+            int quantity = readQuantityInput();
+            if (!AppPrefs.isValidQuantity(quantity)) {
+                toast("Quantity must be between " + AppPrefs.MIN_QUANTITY + " and " + AppPrefs.MAX_QUANTITY + ".");
+                return;
+            }
+
             String apiKey = text(apiKeyInput);
             String secret = text(totpSecretInput);
             String accessToken = text(accessTokenInput);
@@ -148,26 +161,28 @@ public final class MainActivity extends Activity {
                 SecureStore.put(this, SecureStore.ACCESS_TOKEN, accessToken);
                 SecureStore.put(this, SecureStore.ACCESS_TOKEN_DATE, AppPrefs.istDate());
             }
+
+            AppPrefs.setQuantity(this, quantity);
             AppPrefs.setExpectedIp(this, text(expectedIpInput));
             AppPrefs.setStaticConfirmed(this, staticIpConfirm.isChecked());
 
             boolean hasToken = SecureStore.has(this, SecureStore.ACCESS_TOKEN);
             boolean hasTotp = SecureStore.has(this, SecureStore.API_KEY)
                     && SecureStore.has(this, SecureStore.TOTP_SECRET);
-            if (!hasToken && !hasTotp) {
-                toast("Enter today’s access token or the Groww API key and TOTP secret.");
-                return;
-            }
+
             apiKeyInput.setText("");
             totpSecretInput.setText("");
             accessTokenInput.setText("");
             loadSavedState();
-            AppPrefs.log(this, "CONFIG SAVED", "Credentials encrypted with Android Keystore. Static IP: "
-                    + (AppPrefs.expectedIp(this).isEmpty() ? "not entered" : AppPrefs.expectedIp(this)) + ".");
-            toast("Configuration saved securely.");
+            AppPrefs.log(this, "CONFIG SAVED", "Order quantity " + quantity + ". Static IP: "
+                    + (AppPrefs.expectedIp(this).isEmpty() ? "not entered" : AppPrefs.expectedIp(this))
+                    + ". Groww authentication: " + (hasToken || hasTotp ? "configured" : "not configured") + ".");
+            toast(hasToken || hasTotp
+                    ? "Configuration saved securely. Quantity: " + quantity + "."
+                    : "Quantity saved as " + quantity + ". Add Groww authentication before arming.");
             refreshStatus();
         } catch (Exception e) {
-            toast("Could not save credentials: " + safeMessage(e));
+            toast("Could not save configuration: " + safeMessage(e));
         }
     }
 
@@ -268,14 +283,15 @@ public final class MainActivity extends Activity {
         String sample = "Today’s Free Equity Recommendation\n"
                 + "Stock Name : SGFIN\nTarget: ₹700\nEntry Range: ₹681-684\nStop Loss: ₹676";
         SignalParser.ParsedSignal signal = SignalParser.parse(sample, System.currentTimeMillis());
+        int quantity = AppPrefs.quantity(this);
         if (signal == null) {
             AppPrefs.setParserTestPassed(this, false);
             AppPrefs.log(this, "PARSER TEST FAILED", "SGFIN sample was not parsed.");
             toast("Parser test failed.");
         } else {
             AppPrefs.setParserTestPassed(this, true);
-            AppPrefs.log(this, "PARSER TEST PASSED", signal.summary() + " • no order submitted.");
-            toast("Parsed: " + signal.summary());
+            AppPrefs.log(this, "PARSER TEST PASSED", signal.summary(quantity) + " • no order submitted.");
+            toast("Parsed: " + signal.summary(quantity));
         }
         refreshStatus();
     }
@@ -306,6 +322,7 @@ public final class MainActivity extends Activity {
                 && NetworkUtil.isVpnActive(this);
         boolean parserReady = AppPrefs.parserTestPassed(this);
 
+        updateRulesSummary();
         notificationStatus.setText(notificationReady
                 ? "● Notification access: granted"
                 : "● Notification access: not granted");
@@ -327,7 +344,8 @@ public final class MainActivity extends Activity {
         systemStatus.setText(ready ? getString(R.string.status_ready) : getString(R.string.status_not_ready));
         systemStatus.setTextColor(getColor(ready ? R.color.success : R.color.warning));
         statusDetail.setText(ready
-                ? "All gates passed. Turn on Live automatic buying when you are ready."
+                ? "All gates passed. Turn on Live automatic buying when you are ready. Quantity: "
+                    + AppPrefs.quantity(this) + "."
                 : issue + (parserReady ? "" : " Run the local parser test."));
 
         if (AppPrefs.isArmed(this) && !ready) {
@@ -364,6 +382,22 @@ public final class MainActivity extends Activity {
         if (manager == null) return false;
         return manager.isNotificationListenerAccessGranted(
                 new ComponentName(this, MultyfiNotificationService.class));
+    }
+
+    private int readQuantityInput() {
+        String value = text(quantityInput);
+        if (value.isEmpty()) return AppPrefs.quantity(this);
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+            return -1;
+        }
+    }
+
+    private void updateRulesSummary() {
+        if (rulesSummary == null) return;
+        rulesSummary.setText("GTT BUY • NSE CASH • CNC • Quantity " + AppPrefs.quantity(this)
+                + " • Trigger at entry low • Limit up to 1% above entry high • No sell, target or stop-loss");
     }
 
     private void setBusy(Button button, boolean busy, String busyText, String normalText) {
