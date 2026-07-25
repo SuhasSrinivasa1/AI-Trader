@@ -62,24 +62,27 @@ public final class MultyfiNotificationService extends NotificationListenerServic
                 return;
             }
 
+            final int quantity = AppPrefs.quantity(this);
+            final String summary = signal.summary(quantity);
+
             if (!AppPrefs.isArmed(this)) {
-                AppPrefs.log(this, "CAPTURED — DISARMED", signal.summary());
+                AppPrefs.log(this, "CAPTURED — DISARMED", summary);
                 return;
             }
 
             long age = System.currentTimeMillis() - signal.notificationTimeMillis;
             if (age > AppPrefs.MAX_SIGNAL_AGE_MS || age < -60_000L) {
-                AppPrefs.log(this, "REJECTED — STALE", signal.summary() + " • age " + age + " ms");
+                AppPrefs.log(this, "REJECTED — STALE", summary + " • age " + age + " ms");
                 return;
             }
 
             if (!AppPrefs.parserTestPassed(this)) {
-                rejectAndDisarm("Parser acceptance test is not valid.", signal);
+                rejectAndDisarm("Parser acceptance test is not valid.", summary);
                 return;
             }
 
             if (!AppPrefs.isAuthVerifiedToday(this)) {
-                rejectAndDisarm("Groww account was not verified today.", signal);
+                rejectAndDisarm("Groww account was not verified today.", summary);
                 return;
             }
 
@@ -87,50 +90,50 @@ public final class MultyfiNotificationService extends NotificationListenerServic
                     || AppPrefs.expectedIp(this).isEmpty()
                     || !AppPrefs.isIpRecentlyVerified(this)
                     || !NetworkUtil.isVpnActive(this)) {
-                rejectAndDisarm("Turbo VPN/static-IP readiness is not valid.", signal);
+                rejectAndDisarm("Turbo VPN/static-IP readiness is not valid.", summary);
                 return;
             }
 
             if (!NetworkUtil.isNetworkAvailable(this)) {
-                AppPrefs.log(this, "REJECTED — OFFLINE", signal.summary());
+                AppPrefs.log(this, "REJECTED — OFFLINE", summary);
                 return;
             }
 
             if (AppPrefs.isProcessed(this, signal.eventId)) {
-                AppPrefs.log(this, "DUPLICATE BLOCKED", signal.summary());
+                AppPrefs.log(this, "DUPLICATE BLOCKED", summary);
                 return;
             }
 
             if (AppPrefs.dailyBuyCount(this) >= AppPrefs.MAX_BUYS_PER_DAY) {
-                rejectAndDisarm("Maximum three automatic buys reached for today.", signal);
+                rejectAndDisarm("Maximum three automatic buys reached for today.", summary);
                 return;
             }
 
-            if (signal.maximumOrderValue() > AppPrefs.MAX_ORDER_VALUE) {
-                AppPrefs.log(this, "REJECTED — VALUE LIMIT", signal.summary()
-                        + " • maximum value ₹" + String.format(java.util.Locale.US, "%.2f", signal.maximumOrderValue()));
+            if (signal.maximumOrderValue(quantity) > AppPrefs.MAX_ORDER_VALUE) {
+                AppPrefs.log(this, "REJECTED — VALUE LIMIT", summary
+                        + " • maximum value ₹" + String.format(java.util.Locale.US, "%.2f", signal.maximumOrderValue(quantity)));
                 return;
             }
 
             String token = validAccessToken();
             if (token.isEmpty()) {
-                AppPrefs.log(this, "REJECTED — AUTH", signal.summary()
+                AppPrefs.log(this, "REJECTED — AUTH", summary
                         + " • Groww token unavailable. Daily broker approval may be required.");
                 return;
             }
 
-            AppPrefs.log(this, "SUBMITTING", signal.summary());
-            GrowwClient.ApiResult result = GrowwClient.createGtt(token, signal);
+            AppPrefs.log(this, "SUBMITTING", summary);
+            GrowwClient.ApiResult result = GrowwClient.createGtt(token, signal, quantity);
             if (result.success) {
                 AppPrefs.markProcessed(this, signal.eventId);
                 AppPrefs.incrementDailyBuyCount(this);
-                AppPrefs.log(this, "GTT ACCEPTED", signal.summary() + "\n" + result.message);
+                AppPrefs.log(this, "GTT ACCEPTED", summary + "\n" + result.message);
             } else if ("GA007".equals(result.errorCode)) {
                 AppPrefs.markProcessed(this, signal.eventId);
-                AppPrefs.log(this, "DUPLICATE CONFIRMED", signal.summary()
+                AppPrefs.log(this, "DUPLICATE CONFIRMED", summary
                         + " • Groww rejected the repeated reference ID.");
             } else {
-                AppPrefs.log(this, "GTT FAILED", signal.summary() + "\n" + result.message
+                AppPrefs.log(this, "GTT FAILED", summary + "\n" + result.message
                         + (result.errorCode.isEmpty() ? "" : " [" + result.errorCode + "]"));
             }
         } catch (Exception e) {
@@ -163,9 +166,9 @@ public final class MultyfiNotificationService extends NotificationListenerServic
         }
     }
 
-    private void rejectAndDisarm(String reason, SignalParser.ParsedSignal signal) {
+    private void rejectAndDisarm(String reason, String summary) {
         AppPrefs.setArmed(this, false);
-        AppPrefs.log(this, "REJECTED — AUTO-DISARMED", signal.summary() + "\n" + reason);
+        AppPrefs.log(this, "REJECTED — AUTO-DISARMED", summary + "\n" + reason);
     }
 
     private static String extractText(Notification notification) {
