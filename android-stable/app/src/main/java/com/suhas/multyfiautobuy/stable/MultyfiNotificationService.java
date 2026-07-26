@@ -8,15 +8,12 @@ import android.service.notification.StatusBarNotification;
 import android.text.TextUtils;
 
 import java.util.ArrayList;
-import java.util.Calendar;
 import java.util.List;
 import java.util.Locale;
-import java.util.TimeZone;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public final class MultyfiNotificationService extends NotificationListenerService {
-    private static final TimeZone IST = TimeZone.getTimeZone("Asia/Kolkata");
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
     @Override
@@ -78,22 +75,23 @@ public final class MultyfiNotificationService extends NotificationListenerServic
             }
 
             double buffer = AppPrefs.entryBufferPercent(this);
-            SignalParser.ParsedSignal signal = SignalParser.parse(
-                    rawText, postTime, buffer);
+            SignalParser.ParsedSignal signal = SignalParser.parse(rawText, postTime, buffer);
             if (signal == null) return;
 
-            double budget = AppPrefs.tradeBudget(this);
-            int quantity = AppPrefs.quantityForBudget(this, signal.maxBuyPrice);
-            if (quantity < 1) {
-                AppPrefs.log(this, "REJECTED — BUDGET BELOW ONE SHARE",
-                        signal.symbol + " • maximum buy price ₹"
-                                + String.format(Locale.US, "%.2f", signal.maxBuyPrice)
-                                + " exceeds the configured ₹"
-                                + String.format(Locale.US, "%.2f", budget)
-                                + " trade budget.");
+            AppPrefs.TradeWindow window = AppPrefs.tradeWindow(this, postTime);
+            if (window == null) {
+                AppPrefs.log(this, "COMPLETE SIGNAL OUTSIDE BUY WINDOWS",
+                        signal.symbol + " • only weekday notifications from 09:00 through 15:30 IST create entries.");
                 return;
             }
-            String summary = signal.summary(quantity, budget);
+
+            String productType = window.forceMis ? "MIS" : signal.productType;
+            int quantity = AppPrefs.quantityForBudget(window.budget, signal.maxBuyPrice);
+            String summary = summary(signal, window, productType, quantity);
+            if (quantity < 1) {
+                AppPrefs.log(this, "REJECTED — WINDOW BUDGET BELOW ONE SHARE", summary);
+                return;
+            }
 
             if (!AppPrefs.isArmed(this)) {
                 AppPrefs.log(this, "COMPLETE SIGNAL — DISARMED", summary);
@@ -101,8 +99,7 @@ public final class MultyfiNotificationService extends NotificationListenerServic
             }
             long age = System.currentTimeMillis() - signal.notificationTimeMillis;
             if (age > AppPrefs.MAX_SIGNAL_AGE_MS || age < -60_000L) {
-                AppPrefs.log(this, "REJECTED — STALE",
-                        summary + " • age " + age + " ms");
+                AppPrefs.log(this, "REJECTED — STALE", summary + " • age " + age + " ms");
                 return;
             }
             if (!AppPrefs.parserTestPassed(this)) {
@@ -110,8 +107,7 @@ public final class MultyfiNotificationService extends NotificationListenerServic
                 return;
             }
             if (!AppPrefs.isAuthVerifiedToday(this)) {
-                rejectAndDisarm(
-                        "Groww account and DDPI were not verified today.", summary);
+                rejectAndDisarm("Groww account and DDPI were not verified today.", summary);
                 return;
             }
             if (!NetworkUtil.isNetworkAvailable(this)) {
@@ -140,13 +136,12 @@ public final class MultyfiNotificationService extends NotificationListenerServic
                 return;
             }
             if (AppPrefs.dailyBuyCount(this) >= AppPrefs.MAX_BUYS_PER_DAY) {
-                rejectAndDisarm(
-                        "Maximum four automatic entry GTTs reached for today.",
-                        summary);
+                rejectAndDisarm("Maximum four automatic entries reached for today.", summary);
                 return;
             }
-            if (signal.maximumOrderValue(quantity) > budget + 0.01d
-                    || signal.maximumOrderValue(quantity) > AppPrefs.MAX_ORDER_VALUE) {
+            double maximumOrderValue = signal.maximumOrderValue(quantity);
+            if (maximumOrderValue > window.budget + 0.01d
+                    || maximumOrderValue > AppPrefs.MAX_ORDER_VALUE) {
                 AppPrefs.log(this, "REJECTED — VALUE LIMIT", summary);
                 return;
             }
@@ -160,51 +155,40 @@ public final class MultyfiNotificationService extends NotificationListenerServic
                 return;
             }
 
-            GrowwClient.DoubleResult ltp = GrowwClient.getLtp(
-                    token, signal.symbol);
-            if (!ltp.success) {
-                AppPrefs.log(this, "ENTRY DEFERRED — LTP UNAVAILABLE",
-                        summary + " • " + ltp.message);
-                return;
-            }
-
+            // One baseline call is retained before the buy to prevent the app from later
+            // selling pre-existing/manual holdings of the same symbol.
             GrowwClient.IntResult baseline = GrowwClient.getNetPositionQuantity(
-                    token, signal.symbol, signal.productType);
+                    token, signal.symbol, productType);
             if (!baseline.success) {
-                rejectAndDisarm("Could not establish the pre-trade "
-                        + signal.productType + " position baseline: "
-                        + baseline.message, summary);
+                rejectAndDisarm("Could not establish the pre-trade " + productType
+                        + " position baseline: " + baseline.message, summary);
                 return;
             }
 
-            AppPrefs.log(this, "SUBMITTING ENTRY GTT", summary
-                    + " • LTP ₹" + String.format(Locale.US, "%.2f", ltp.value)
-                    + " • baseline " + signal.productType + " position "
-                    + baseline.value + ".");
-            GrowwClient.ApiResult result = GrowwClient.createEntryGtt(
-                    token, signal, quantity, ltp.value);
+            AppPrefs.log(this, "SUBMITTING IMMEDIATE ENTRY",
+                    summary + " • baseline " + productType + " position "
+                            + baseline.value + ".");
+            GrowwClient.ApiResult result = GrowwClient.placeImmediateEntryLimit(
+                    token, signal, quantity, productType);
             if (result.success) {
-                long lifecycleAnchor = lifecycleAnchor(signal);
                 Strategy strategy = new Strategy(signal.eventId, signal.symbol,
-                        signal.category, signal.productType, quantity,
+                        signal.category, productType, quantity,
                         signal.targetPrice, signal.stopLossPrice, baseline.value,
-                        signal.referenceId, result.id, lifecycleAnchor);
+                        signal.referenceId, "", result.id, "REGULAR_LIMIT",
+                        signal.notificationTimeMillis, window.entryCancelAt);
                 StrategyStore.upsert(this, strategy);
                 AppPrefs.markProcessed(this, signal.eventId);
                 AppPrefs.incrementDailyBuyCount(this);
-                AppPrefs.log(this, "ENTRY GTT CONFIRMED", summary + "\n"
+                AppPrefs.log(this, "IMMEDIATE ENTRY ACCEPTED", summary + "\n"
                         + result.message
-                        + " Stop-loss will be created only for actual filled quantity."
-                        + (lifecycleAnchor > System.currentTimeMillis() + 60_000L
-                        ? " Off-hours CNC call is scheduled through the next trading session."
-                        : ""));
-                StrategyMonitorService.ensureRunning(this);
+                        + " Stop-loss GTT will be created for the actual filled quantity on the immediate monitor tick.");
+                StrategyMonitorService.requestImmediateTick(this, signal.eventId);
             } else if ("GA007".equals(result.errorCode)) {
                 AppPrefs.markProcessed(this, signal.eventId);
                 AppPrefs.log(this, "DUPLICATE CONFIRMED", summary
                         + " • Groww rejected the repeated reference ID.");
             } else {
-                AppPrefs.log(this, "ENTRY GTT FAILED", summary + "\n"
+                AppPrefs.log(this, "IMMEDIATE ENTRY FAILED", summary + "\n"
                         + result.message + (result.errorCode.isEmpty()
                         ? "" : " [" + result.errorCode + "]"));
             }
@@ -243,7 +227,7 @@ public final class MultyfiNotificationService extends NotificationListenerServic
         }
         if (!prepareEntryForEarlyExit(token, strategy)) {
             AppPrefs.log(this, "EARLY EXIT SAFETY PRECHECK FAILED",
-                    signal.symbol + " • entry GTT/order remainder was not confirmed cancelled or terminal. No sell was queued to avoid a later duplicate buy.");
+                    signal.symbol + " • entry order remainder was not confirmed cancelled or terminal. No sell was queued to avoid a later duplicate buy.");
             return;
         }
 
@@ -257,6 +241,35 @@ public final class MultyfiNotificationService extends NotificationListenerServic
     }
 
     private boolean prepareEntryForEarlyExit(String token, Strategy strategy) {
+        if (strategy.entryOrderId != null && !strategy.entryOrderId.isEmpty()) {
+            GrowwClient.OrderStatus order = GrowwClient.getOrderByReference(
+                    token, strategy.entryReferenceId);
+            if (!order.success) return false;
+            if (isOpenRegularOrderStatus(order.status)) {
+                String id = order.orderId.isEmpty() ? strategy.entryOrderId : order.orderId;
+                RegularOrderSafety.Result cancelled =
+                        RegularOrderSafety.cancelOpenCashOrder(token, id);
+                if (!cancelled.success) return false;
+                for (int i = 0; i < 8; i++) {
+                    order = GrowwClient.getOrderByReference(token,
+                            strategy.entryReferenceId);
+                    if (order.success && isTerminalRegularOrderStatus(order.status)) {
+                        strategy.entryOrderId = "";
+                        StrategyStore.upsert(this, strategy);
+                        return true;
+                    }
+                    sleep(250L);
+                }
+                return false;
+            }
+            if (isTerminalRegularOrderStatus(order.status)) {
+                strategy.entryOrderId = "";
+                StrategyStore.upsert(this, strategy);
+                return true;
+            }
+            return false;
+        }
+
         if (strategy.entrySmartOrderId == null || strategy.entrySmartOrderId.isEmpty()) {
             return true;
         }
@@ -318,28 +331,6 @@ public final class MultyfiNotificationService extends NotificationListenerServic
         return false;
     }
 
-    private long lifecycleAnchor(SignalParser.ParsedSignal signal) {
-        if (signal.isIntraday()) return signal.notificationTimeMillis;
-        Calendar calendar = Calendar.getInstance(IST, Locale.US);
-        calendar.setTimeInMillis(signal.notificationTimeMillis);
-        int day = calendar.get(Calendar.DAY_OF_WEEK);
-        int minute = calendar.get(Calendar.HOUR_OF_DAY) * 60
-                + calendar.get(Calendar.MINUTE);
-        boolean weekend = day == Calendar.SATURDAY || day == Calendar.SUNDAY;
-        if (!weekend && minute < 15 * 60 + 25) {
-            return signal.notificationTimeMillis;
-        }
-        do {
-            calendar.add(Calendar.DAY_OF_MONTH, 1);
-            day = calendar.get(Calendar.DAY_OF_WEEK);
-        } while (day == Calendar.SATURDAY || day == Calendar.SUNDAY);
-        calendar.set(Calendar.HOUR_OF_DAY, 9);
-        calendar.set(Calendar.MINUTE, 0);
-        calendar.set(Calendar.SECOND, 0);
-        calendar.set(Calendar.MILLISECOND, 0);
-        return calendar.getTimeInMillis();
-    }
-
     private boolean ensureStaticPublicIp() {
         String expected = AppPrefs.expectedIp(this);
         if (!AppPrefs.isStaticConfirmed(this) || expected.isEmpty()) return false;
@@ -363,8 +354,21 @@ public final class MultyfiNotificationService extends NotificationListenerServic
 
     private void rejectAndDisarm(String reason, String summary) {
         AppPrefs.setArmed(this, false);
-        AppPrefs.log(this, "REJECTED — AUTO-DISARMED",
-                summary + "\n" + reason);
+        AppPrefs.log(this, "REJECTED — AUTO-DISARMED", summary + "\n" + reason);
+    }
+
+    private static String summary(SignalParser.ParsedSignal signal,
+                                  AppPrefs.TradeWindow window,
+                                  String productType, int quantity) {
+        return signal.symbol + " | " + window.label + " | "
+                + signal.category + "/" + productType
+                + " | entry ₹" + money(signal.entryLow) + "–₹" + money(signal.entryHigh)
+                + " | immediate LIMIT cap ₹" + money(signal.maxBuyPrice)
+                + " | target ₹" + money(signal.targetPrice)
+                + " | SL ₹" + money(signal.stopLossPrice)
+                + " | budget ₹" + money(window.budget)
+                + " | qty " + quantity
+                + " | planned ₹" + money(signal.maximumOrderValue(quantity));
     }
 
     private static boolean isActiveSmartStatus(String status) {
@@ -416,8 +420,7 @@ public final class MultyfiNotificationService extends NotificationListenerServic
         add(parts, extras.getCharSequence(Notification.EXTRA_TEXT));
         add(parts, extras.getCharSequence(Notification.EXTRA_BIG_TEXT));
         add(parts, extras.getCharSequence(Notification.EXTRA_SUB_TEXT));
-        CharSequence[] lines = extras.getCharSequenceArray(
-                Notification.EXTRA_TEXT_LINES);
+        CharSequence[] lines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES);
         if (lines != null) {
             for (CharSequence line : lines) add(parts, line);
         }
@@ -434,5 +437,11 @@ public final class MultyfiNotificationService extends NotificationListenerServic
         if (text == null) return "";
         String value = text.replace('\n', ' ').replace('\r', ' ').trim();
         return value.length() <= 300 ? value : value.substring(0, 300) + "…";
+    }
+
+    private static String money(double value) {
+        return Math.rint(value) == value
+                ? String.format(Locale.US, "%.0f", value)
+                : String.format(Locale.US, "%.2f", value);
     }
 }
