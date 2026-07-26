@@ -23,6 +23,9 @@ final class Strategy {
     final int baselinePositionQuantity;
     final String entryReferenceId;
     String entrySmartOrderId;
+    String entryOrderId;
+    String entryMode;
+    long entryCancelAt;
     int observedFilledQuantity;
     int protectedQuantity;
     final List<StopLeg> stopLegs;
@@ -42,6 +45,17 @@ final class Strategy {
              int requestedQuantity, double targetPrice, double stopLossPrice,
              int baselinePositionQuantity, String entryReferenceId,
              String entrySmartOrderId, long createdAt) {
+        this(eventId, symbol, category, productType, requestedQuantity,
+                targetPrice, stopLossPrice, baselinePositionQuantity,
+                entryReferenceId, entrySmartOrderId, "", "GTT",
+                createdAt, createdAt);
+    }
+
+    Strategy(String eventId, String symbol, String category, String productType,
+             int requestedQuantity, double targetPrice, double stopLossPrice,
+             int baselinePositionQuantity, String entryReferenceId,
+             String entrySmartOrderId, String entryOrderId, String entryMode,
+             long createdAt, long entryCancelAt) {
         this.eventId = eventId;
         this.symbol = symbol;
         this.category = category == null ? "EQUITY" : category;
@@ -51,7 +65,10 @@ final class Strategy {
         this.stopLossPrice = stopLossPrice;
         this.baselinePositionQuantity = baselinePositionQuantity;
         this.entryReferenceId = entryReferenceId;
-        this.entrySmartOrderId = entrySmartOrderId;
+        this.entrySmartOrderId = entrySmartOrderId == null ? "" : entrySmartOrderId;
+        this.entryOrderId = entryOrderId == null ? "" : entryOrderId;
+        this.entryMode = entryMode == null ? "REGULAR_LIMIT" : entryMode;
+        this.entryCancelAt = entryCancelAt;
         this.observedFilledQuantity = 0;
         this.protectedQuantity = 0;
         this.stopLegs = new ArrayList<>();
@@ -63,7 +80,8 @@ final class Strategy {
         this.earlyExitRequestedAt = 0L;
         this.pendingExitLabel = "";
         this.state = ENTRY_ACTIVE;
-        this.lastMessage = "Entry GTT active.";
+        this.lastMessage = "REGULAR_LIMIT".equalsIgnoreCase(this.entryMode)
+                ? "Immediate entry LIMIT submitted." : "Entry GTT active.";
         this.createdAt = createdAt;
         this.updatedAt = createdAt;
     }
@@ -73,6 +91,11 @@ final class Strategy {
     }
 
     boolean isIntraday() { return "MIS".equalsIgnoreCase(productType); }
+
+    boolean hasPendingEntryHandle() {
+        return (entrySmartOrderId != null && !entrySmartOrderId.isEmpty())
+                || (entryOrderId != null && !entryOrderId.isEmpty());
+    }
 
     int remainingStrategyQuantity(int currentPositionQuantity) {
         return Math.max(0, currentPositionQuantity - baselinePositionQuantity);
@@ -98,6 +121,9 @@ final class Strategy {
         json.put("baseline_position_quantity", baselinePositionQuantity);
         json.put("entry_reference_id", entryReferenceId);
         json.put("entry_smart_order_id", entrySmartOrderId);
+        json.put("entry_order_id", entryOrderId);
+        json.put("entry_mode", entryMode);
+        json.put("entry_cancel_at", entryCancelAt);
         json.put("observed_filled_quantity", observedFilledQuantity);
         json.put("protected_quantity", protectedQuantity);
         JSONArray legs = new JSONArray();
@@ -118,6 +144,7 @@ final class Strategy {
     }
 
     static Strategy fromJson(JSONObject json) throws Exception {
+        long createdAt = json.optLong("created_at", System.currentTimeMillis());
         Strategy strategy = new Strategy(
                 json.getString("event_id"),
                 json.getString("symbol"),
@@ -129,7 +156,11 @@ final class Strategy {
                 json.optInt("baseline_position_quantity", 0),
                 json.getString("entry_reference_id"),
                 json.optString("entry_smart_order_id", ""),
-                json.optLong("created_at", System.currentTimeMillis()));
+                json.optString("entry_order_id", ""),
+                json.optString("entry_mode", json.optString("entry_smart_order_id", "").isEmpty()
+                        ? "REGULAR_LIMIT" : "GTT"),
+                createdAt,
+                json.optLong("entry_cancel_at", createdAt));
         strategy.observedFilledQuantity = json.optInt("observed_filled_quantity", 0);
         strategy.protectedQuantity = json.optInt("protected_quantity", 0);
         strategy.stopLegs.clear();
