@@ -22,8 +22,10 @@ import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.util.Calendar;
 import java.util.Collections;
 import java.util.Locale;
+import java.util.TimeZone;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -42,7 +44,9 @@ public final class MainActivity extends Activity {
     private EditText apiKeyInput;
     private EditText totpSecretInput;
     private EditText accessTokenInput;
-    private EditText budgetInput;
+    private EditText window1BudgetInput;
+    private EditText window2BudgetInput;
+    private EditText window3BudgetInput;
     private EditText bufferInput;
     private EditText expectedIpInput;
     private CheckBox staticIpConfirm;
@@ -91,15 +95,21 @@ public final class MainActivity extends Activity {
         apiKeyInput = findViewById(R.id.apiKeyInput);
         totpSecretInput = findViewById(R.id.totpSecretInput);
         accessTokenInput = findViewById(R.id.accessTokenInput);
-        budgetInput = findViewById(R.id.budgetInput);
+        window1BudgetInput = findViewById(R.id.window1BudgetInput);
+        window2BudgetInput = findViewById(R.id.window2BudgetInput);
+        window3BudgetInput = findViewById(R.id.window3BudgetInput);
         bufferInput = findViewById(R.id.bufferInput);
         expectedIpInput = findViewById(R.id.expectedIpInput);
         staticIpConfirm = findViewById(R.id.staticIpConfirm);
     }
 
     private void loadSavedState() {
-        budgetInput.setText(String.format(Locale.US, "%.0f",
-                AppPrefs.tradeBudget(this)));
+        window1BudgetInput.setText(String.format(Locale.US, "%.0f",
+                AppPrefs.window1Budget(this)));
+        window2BudgetInput.setText(String.format(Locale.US, "%.0f",
+                AppPrefs.window2Budget(this)));
+        window3BudgetInput.setText(String.format(Locale.US, "%.0f",
+                AppPrefs.window3Budget(this)));
         bufferInput.setText(String.format(Locale.US, "%.2f",
                 AppPrefs.entryBufferPercent(this)));
         expectedIpInput.setText(AppPrefs.expectedIp(this));
@@ -163,12 +173,16 @@ public final class MainActivity extends Activity {
                 } else {
                     AppPrefs.setArmed(this, true);
                     AppPrefs.log(this, "ARMED",
-                            "S24 Ultra automation enabled: target notional ₹"
-                                    + money(AppPrefs.tradeBudget(this))
-                                    + ", buffer "
+                            "S24 Ultra automation enabled: 09:00–09:30 ₹"
+                                    + money(AppPrefs.window1Budget(this))
+                                    + " MIS; 09:30–10:00 ₹"
+                                    + money(AppPrefs.window2Budget(this))
+                                    + "; 10:00–15:30 ₹"
+                                    + money(AppPrefs.window3Budget(this))
+                                    + "; buffer "
                                     + String.format(Locale.US, "%.2f",
                                     AppPrefs.entryBufferPercent(this))
-                                    + "%, strict Multyfi early exits enabled.");
+                                    + "%; immediate LIMIT entries and strict early exits enabled.");
                     StrategyMonitorService.ensureRunning(this);
                 }
             } else {
@@ -182,10 +196,14 @@ public final class MainActivity extends Activity {
 
     private void saveConfiguration() {
         try {
-            double budget = readBudgetInput();
+            double first = readBudget(window1BudgetInput, AppPrefs.window1Budget(this));
+            double second = readBudget(window2BudgetInput, AppPrefs.window2Budget(this));
+            double third = readBudget(window3BudgetInput, AppPrefs.window3Budget(this));
             double buffer = readBufferInput();
-            if (!AppPrefs.isValidTradeBudget(budget)) {
-                toast("Trade budget must be between ₹1,000 and ₹5,00,000.");
+            if (!AppPrefs.isValidTradeBudget(first)
+                    || !AppPrefs.isValidTradeBudget(second)
+                    || !AppPrefs.isValidTradeBudget(third)) {
+                toast("Each window amount must be between ₹1,000 and ₹5,00,000.");
                 return;
             }
             if (!AppPrefs.isValidEntryBuffer(buffer)) {
@@ -201,7 +219,7 @@ public final class MainActivity extends Activity {
                 SecureStore.put(this, SecureStore.ACCESS_TOKEN, accessToken);
                 SecureStore.put(this, SecureStore.ACCESS_TOKEN_DATE, AppPrefs.istDate());
             }
-            AppPrefs.setTradeBudget(this, budget);
+            AppPrefs.setWindowBudgets(this, first, second, third);
             AppPrefs.setEntryBufferPercent(this, buffer);
             AppPrefs.setExpectedIp(this, text(expectedIpInput));
             AppPrefs.setStaticConfirmed(this, staticIpConfirm.isChecked());
@@ -213,7 +231,9 @@ public final class MainActivity extends Activity {
             accessTokenInput.setText("");
             loadSavedState();
             AppPrefs.log(this, "CONFIG SAVED",
-                    "Target trade budget ₹" + money(budget)
+                    "09:00–09:30 ₹" + money(first)
+                            + " • 09:30–10:00 ₹" + money(second)
+                            + " • 10:00–15:30 ₹" + money(third)
                             + " • entry buffer "
                             + String.format(Locale.US, "%.2f", buffer)
                             + "% • Surfshark Dedicated IP "
@@ -221,8 +241,7 @@ public final class MainActivity extends Activity {
                             ? "not entered" : AppPrefs.expectedIp(this))
                             + " • authentication "
                             + (hasToken || hasTotp ? "configured" : "not configured") + ".");
-            toast("Configuration saved. Target notional ₹" + money(budget)
-                    + ", buffer " + String.format(Locale.US, "%.2f", buffer) + "%.");
+            toast("Configuration saved for all three windows.");
             StrategyMonitorService.ensureRunning(this);
             refreshStatus();
         } catch (Exception e) {
@@ -361,41 +380,36 @@ public final class MainActivity extends Activity {
     }
 
     private void runParserTest() {
-        long validTradingTime = 1_785_124_200_000L;
-        String[] samples = {
-                "Equity Recommendation\nStock Name: TCS\nEntry Range: 3200-3220\nTarget: 3300\nStop Loss: 3150",
-                "Swing Call\nStock: INFY\nBuy Range: 1600-1610\nTarget Price: 1680\nSL: 1570",
-                "Multibagger Recommendation\nSymbol: ABCAPITAL\nEntry: 310-315\nTarget: 340\nStoploss: 298",
-                "Today's Free Equity Recommendation\nStock Name: SGFIN\nEntry Range: 681-684\nTarget: 720\nStop Loss: 676",
-                "Equity Intraday\nStock Name: SBIN\nBuy Price: 810\nTarget: 825\nStop Loss: 802"
-        };
-        boolean passed = true;
-        StringBuilder parsed = new StringBuilder();
-        for (String sample : samples) {
-            SignalParser.ParsedSignal signal = SignalParser.parse(sample,
-                    validTradingTime, AppPrefs.entryBufferPercent(this));
-            if (signal == null) { passed = false; break; }
-            int quantity = AppPrefs.quantityForBudget(this, signal.maxBuyPrice);
-            if (quantity < 1) { passed = false; break; }
-            if (parsed.length() > 0) parsed.append(", ");
-            parsed.append(signal.category).append("/").append(signal.productType);
-        }
+        long firstTime = atIst(2026, 7, 24, 9, 10);
+        long secondTime = atIst(2026, 7, 24, 9, 40);
+        long thirdTime = atIst(2026, 7, 24, 10, 30);
+        String sample = "Equity Recommendation\nStock Name: TCS\nEntry Range: 3200-3220\nTarget: 3300\nStop Loss: 3150";
+        SignalParser.ParsedSignal signal = SignalParser.parse(sample, firstTime,
+                AppPrefs.entryBufferPercent(this));
+        boolean passed = signal != null;
+        AppPrefs.TradeWindow first = AppPrefs.tradeWindow(this, firstTime);
+        AppPrefs.TradeWindow second = AppPrefs.tradeWindow(this, secondTime);
+        AppPrefs.TradeWindow third = AppPrefs.tradeWindow(this, thirdTime);
+        passed = passed && first != null && first.forceMis
+                && second != null && !second.forceMis
+                && third != null && !third.forceMis
+                && AppPrefs.quantityForBudget(first.budget, signal.maxBuyPrice) >= 1;
+
         Strategy dummy = new Strategy("test-event", "TCS", "EQUITY", "CNC",
-                3, 3300d, 3150d, 0, "TESTREF", "TESTGTT", validTradingTime);
+                3, 3300d, 3150d, 0, "TESTREF", "TESTGTT", firstTime);
         SignalParser.EarlyExitSignal exit = SignalParser.parseEarlyExit(
-                "Exiting early\nStock Name: TCS", validTradingTime,
+                "Exiting early\nStock Name: TCS", firstTime,
                 Collections.singletonList(dummy));
         passed = passed && exit != null && "TCS".equals(exit.symbol);
 
         AppPrefs.setParserTestPassed(this, passed);
         if (passed) {
-            String message = "Parsed all entry categories plus strict symbol-matched early exit: "
-                    + parsed + " • no order submitted.";
-            AppPrefs.log(this, "ENTRY + EARLY-EXIT PARSER PASSED", message);
+            String message = "Parsed Multyfi entry, three sizing windows, forced 09:00–09:30 MIS, and strict symbol-matched early exit • no order submitted.";
+            AppPrefs.log(this, "WINDOW + EXIT PARSER PASSED", message);
             toast(message);
         } else {
             AppPrefs.log(this, "PARSER TEST FAILED",
-                    "One or more entry/early-exit sample formats were not parsed.");
+                    "Entry, window routing or early-exit parsing failed.");
             toast("Parser test failed.");
         }
         refreshStatus();
@@ -431,12 +445,13 @@ public final class MainActivity extends Activity {
         systemStatus.setText(ready ? "READY" : "SETUP REQUIRED");
         systemStatus.setTextColor(getColor(ready ? R.color.success : R.color.warning));
         statusDetail.setText(ready
-                ? "S24 Ultra is ready. Target notional ₹"
-                + money(AppPrefs.tradeBudget(this)) + ", buffer "
-                + String.format(Locale.US, "%.2f", AppPrefs.entryBufferPercent(this))
-                + "% • strict early exit active • strategies " + activeStrategies + "."
-                : issue + (parserReady ? "" : " Run the entry and early-exit parser test.")
-                + (batteryReady ? "" : " Exclude the app from battery optimisation.")
+                ? "S24 Ultra is ready. 09:00–09:30 ₹"
+                + money(AppPrefs.window1Budget(this)) + " MIS • 09:30–10:00 ₹"
+                + money(AppPrefs.window2Budget(this)) + " • 10:00–15:30 ₹"
+                + money(AppPrefs.window3Budget(this)) + " • strategies "
+                + activeStrategies + "."
+                : issue + (parserReady ? "" : " Run the window and early-exit parser test.")
+                + (batteryReady ? "" : " Set battery use to Unrestricted.")
                 + (activeStrategies > 0 ? " Existing active strategies: " + activeStrategies + "." : ""));
 
         if (AppPrefs.isArmed(this) && !ready) {
@@ -464,7 +479,7 @@ public final class MainActivity extends Activity {
         if (!isBatteryOptimisationExcluded()) {
             return "Set Multyfi AutoBuy battery use to Unrestricted.";
         }
-        if (!AppPrefs.parserTestPassed(this)) return "Entry and early-exit parser test has not passed.";
+        if (!AppPrefs.parserTestPassed(this)) return "Window and early-exit parser test has not passed.";
         boolean hasToken = SecureStore.has(this, SecureStore.ACCESS_TOKEN);
         boolean hasTotp = SecureStore.has(this, SecureStore.API_KEY)
                 && SecureStore.has(this, SecureStore.TOTP_SECRET);
@@ -481,7 +496,7 @@ public final class MainActivity extends Activity {
         if (Build.VERSION.SDK_INT >= 33
                 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
                 != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 150);
+            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 160);
         }
     }
 
@@ -496,9 +511,9 @@ public final class MainActivity extends Activity {
         return manager != null && manager.isIgnoringBatteryOptimizations(getPackageName());
     }
 
-    private double readBudgetInput() {
-        String value = text(budgetInput).replace(",", "");
-        if (value.isEmpty()) return AppPrefs.tradeBudget(this);
+    private double readBudget(EditText field, double fallback) {
+        String value = text(field).replace(",", "");
+        if (value.isEmpty()) return fallback;
         try { return Double.parseDouble(value); }
         catch (NumberFormatException e) { return -1d; }
     }
@@ -512,15 +527,17 @@ public final class MainActivity extends Activity {
 
     private void updateRulesSummary() {
         if (rulesSummary == null) return;
-        rulesSummary.setText("COMPLETE MULTYFI CALLS • Equity, swing, multibagger, free-equity and intraday"
-                + " • Target notional ₹" + money(AppPrefs.tradeBudget(this))
-                + " • Quantity = floor(budget ÷ maximum permitted buy price)"
+        rulesSummary.setText("THREE CONFIGURABLE WINDOWS"
+                + " • 09:00–09:30 ₹" + money(AppPrefs.window1Budget(this)) + " and forced MIS"
+                + " • 09:30–10:00 ₹" + money(AppPrefs.window2Budget(this))
+                + " • 10:00–15:30 ₹" + money(AppPrefs.window3Budget(this))
+                + " • Quantity = floor(window amount ÷ maximum permitted buy price)"
+                + " • Immediate marketable LIMIT BUY at the price cap; no near-LTP entry GTT"
                 + " • Entry buffer "
                 + String.format(Locale.US, "%.2f", AppPrefs.entryBufferPercent(this)) + "%"
                 + " • Actual-fill stop-loss GTT"
                 + " • Target: cancel/verify SL, then market sell"
-                + " • Symbol-matched 'exiting early' alert: cancel entry/SL, verify position, market exit immediately"
-                + " • No early exit without one unique active symbol"
+                + " • Symbol-matched early exit: cancel entry/SL, verify position, market exit"
                 + " • Surfshark Dedicated IP + DDPI required");
     }
 
@@ -545,6 +562,13 @@ public final class MainActivity extends Activity {
         return Math.rint(value) == value
                 ? String.format(Locale.US, "%.0f", value)
                 : String.format(Locale.US, "%.2f", value);
+    }
+
+    private static long atIst(int year, int month, int day, int hour, int minute) {
+        Calendar c = Calendar.getInstance(TimeZone.getTimeZone("Asia/Kolkata"), Locale.US);
+        c.set(year, month - 1, day, hour, minute, 0);
+        c.set(Calendar.MILLISECOND, 0);
+        return c.getTimeInMillis();
     }
 
     private void toast(String message) {
