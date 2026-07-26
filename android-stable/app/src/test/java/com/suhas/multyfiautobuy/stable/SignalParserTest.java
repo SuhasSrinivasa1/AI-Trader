@@ -49,7 +49,17 @@ public class SignalParserTest {
     }
 
     @Test
-    public void classifiesExplicitIntradayAsMis() {
+    public void acceptsCompleteCncCallsOutsideMarketAndOnWeekend() {
+        String sample = "Multibagger Recommendation\nSymbol: ABCAPITAL\n"
+                + "Entry: 310-315\nTarget: 340\nStoploss: 298";
+        assertNotNull(SignalParser.parse(sample,
+                atIst(2026, 7, 24, 20, 30), 1.5d));
+        assertNotNull(SignalParser.parse(sample,
+                atIst(2026, 7, 25, 10, 0), 1.5d));
+    }
+
+    @Test
+    public void classifiesExplicitIntradayAsMisAndRestrictsItsWindow() {
         String sample = "Equity Intraday\nStock Name: SBIN\nBuy Price: 810\n"
                 + "Target: 825\nStop Loss: 802";
         SignalParser.ParsedSignal signal = SignalParser.parse(sample,
@@ -58,43 +68,38 @@ public class SignalParserTest {
         assertEquals("INTRADAY", signal.category);
         assertEquals("MIS", signal.productType);
         assertTrue(signal.isIntraday());
+        assertNotNull(SignalParser.parse(sample,
+                atIst(2026, 7, 24, 8, 45), 1.5d));
+        assertNotNull(SignalParser.parse(sample,
+                atIst(2026, 7, 24, 14, 45), 1.5d));
+        assertNull(SignalParser.parse(sample,
+                atIst(2026, 7, 24, 8, 44), 1.5d));
+        assertNull(SignalParser.parse(sample,
+                atIst(2026, 7, 24, 14, 46), 1.5d));
+        assertNull(SignalParser.parse(sample,
+                atIst(2026, 7, 25, 10, 0), 1.5d));
     }
 
     @Test
     public void rejectsIncompleteAndInconsistentSignals() {
+        long time = atIst(2026, 7, 24, 10, 0);
         assertNull(SignalParser.parse(
-                "Stock Name: TCS\nEntry Range: 100-110\nTarget: 120", 1L));
+                "Stock Name: TCS\nEntry Range: 100-110\nTarget: 120", time));
         assertNull(SignalParser.parse(
-                "Stock Name: TCS\nEntry Range: 100-110\nStop Loss: 95", 1L));
+                "Stock Name: TCS\nEntry Range: 100-110\nStop Loss: 95", time));
         assertNull(SignalParser.parse(
-                "Stock Name: TCS\nEntry Range: 100-110\nTarget: 108\nStop Loss: 95", 1L));
+                "Stock Name: TCS\nEntry Range: 100-110\nTarget: 108\nStop Loss: 95", time));
         assertNull(SignalParser.parse(
-                "Stock Name: TCS\nEntry Range: 100-110\nTarget: 120\nStop Loss: 105", 1L));
+                "Stock Name: TCS\nEntry Range: 100-110\nTarget: 120\nStop Loss: 105", time));
     }
 
     @Test
     public void rejectsSellActionAndDerivatives() {
-        String fields = "\nStock Name: TCS\nEntry Range: 100-110\nTarget: 120\nStop Loss: 95";
-        assertNull(SignalParser.parse("SELL NOW" + fields, 1L));
-        assertNull(SignalParser.parse("Futures Buy" + fields, 1L));
-    }
-
-    @Test
-    public void acceptsConfiguredWeekdayWindows() {
-        assertTrue(SignalParser.isAllowedSignalTime(
-                atIst(2026, 7, 24, 8, 45)));
-        assertTrue(SignalParser.isAllowedSignalTime(
-                atIst(2026, 7, 24, 15, 25)));
-        assertTrue(!SignalParser.isAllowedSignalTime(
-                atIst(2026, 7, 24, 8, 44)));
-        assertTrue(!SignalParser.isAllowedSignalTime(
-                atIst(2026, 7, 24, 15, 26)));
-        assertTrue(!SignalParser.isAllowedSignalTime(
-                atIst(2026, 7, 25, 10, 0)));
-        assertTrue(SignalParser.isAllowedIntradayEntryTime(
-                atIst(2026, 7, 24, 14, 45)));
-        assertTrue(!SignalParser.isAllowedIntradayEntryTime(
-                atIst(2026, 7, 24, 14, 46)));
+        long time = atIst(2026, 7, 24, 10, 0);
+        String fields = "\nStock Name: TCS\nEntry Range: 100-110\n"
+                + "Target: 120\nStop Loss: 95";
+        assertNull(SignalParser.parse("SELL NOW" + fields, time));
+        assertNull(SignalParser.parse("Futures Buy" + fields, time));
     }
 
     @Test
