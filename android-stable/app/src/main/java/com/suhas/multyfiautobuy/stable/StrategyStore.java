@@ -37,6 +37,21 @@ final class StrategyStore {
         return active(context).size();
     }
 
+    static synchronized boolean hasActiveSymbol(Context context, String symbol) {
+        return findActiveBySymbol(context, symbol) != null;
+    }
+
+    static synchronized Strategy findActiveBySymbol(Context context, String symbol) {
+        if (symbol == null) return null;
+        Strategy match = null;
+        for (Strategy strategy : active(context)) {
+            if (!strategy.symbol.equalsIgnoreCase(symbol.trim())) continue;
+            if (match != null && !match.eventId.equals(strategy.eventId)) return null;
+            match = strategy;
+        }
+        return match;
+    }
+
     static synchronized void upsert(Context context, Strategy strategy) {
         List<Strategy> values = all(context);
         boolean replaced = false;
@@ -52,7 +67,9 @@ final class StrategyStore {
     }
 
     static synchronized Strategy find(Context context, String eventId) {
-        for (Strategy strategy : all(context)) if (strategy.eventId.equals(eventId)) return strategy;
+        for (Strategy strategy : all(context)) {
+            if (strategy.eventId.equals(eventId)) return strategy;
+        }
         return null;
     }
 
