@@ -118,11 +118,16 @@ jobs:
             sleep 10
             adb shell dumpsys activity activities > "$OUT/activity-api36.txt" 2>&1
             if ! grep -Eq '(topResumedActivity|ResumedActivity|mResumedActivity).*com.suhas.multyfiautobuy.stable/.MainActivity' "$OUT/activity-api36.txt"; then code=1; fi
+            timeout 20 adb shell uiautomator dump /sdcard/multyfi-ui.xml >> "$OUT/acceptance-api36.log" 2>&1 || code=1
+            adb pull /sdcard/multyfi-ui.xml "$OUT/ui-api36.xml" >> "$OUT/acceptance-api36.log" 2>&1 || code=1
+            if ! grep -q 'Multyfi AutoBuy' "$OUT/ui-api36.xml"; then code=1; fi
+            if ! grep -q 'TRADE SIZING' "$OUT/ui-api36.xml"; then code=1; fi
+            if ! grep -q 'SURFSHARK DEDICATED IP' "$OUT/ui-api36.xml"; then code=1; fi
             adb logcat -d -v threadtime > "$OUT/logcat-api36.txt" 2>&1
             if grep -E 'FATAL EXCEPTION|Process: com.suhas.multyfiautobuy.stable|AndroidRuntime.*com.suhas.multyfiautobuy.stable' "$OUT/logcat-api36.txt" >> "$OUT/acceptance-api36.log"; then code=1; fi
             adb exec-out screencap -p > "$OUT/startup-api36.png" 2>> "$OUT/acceptance-api36.log"
           else
-            touch "$OUT/activity-api36.txt" "$OUT/logcat-api36.txt" "$OUT/startup-api36.png"
+            touch "$OUT/activity-api36.txt" "$OUT/ui-api36.xml" "$OUT/logcat-api36.txt" "$OUT/startup-api36.png"
           fi
           echo "$code" > "$OUT/acceptance-api36-exit-code.txt"
           timeout 15 adb emu kill >> "$OUT/acceptance-api36.log" 2>&1 || true
@@ -137,6 +142,7 @@ jobs:
             android-stable/app/build/outputs/apk/debug/acceptance-api36.log
             android-stable/app/build/outputs/apk/debug/acceptance-api36-exit-code.txt
             android-stable/app/build/outputs/apk/debug/activity-api36.txt
+            android-stable/app/build/outputs/apk/debug/ui-api36.xml
             android-stable/app/build/outputs/apk/debug/logcat-api36.txt
             android-stable/app/build/outputs/apk/debug/emulator-api36.log
             android-stable/app/build/outputs/apk/debug/startup-api36.png
@@ -149,7 +155,7 @@ jobs:
           name: Multyfi-AutoBuy-S24-Android16-v1.5.0
           path: |
             android-stable/app/build/outputs/apk/debug/Multyfi-AutoBuy-S24-Android16-v1.5.0.apk
-            android-stable/app/build/outputs/apk/debug/startup-api36.png
+            android-stable/app/build/outputs/apk/debug/ui-api36.xml
             android-stable/app/build/reports/tests/testDebugUnitTest/
             android-stable/app/build/reports/lint-results-debug.html
           if-no-files-found: error
