@@ -34,7 +34,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Multyfi-AutoBuy-S24-build-diagnostics
+          name: Multyfi-AutoBuy-S24-v1.6-build-diagnostics
           path: |
             android-build.log
             android-build-exit-code.txt
@@ -42,7 +42,7 @@ jobs:
       - name: Stop if compilation failed
         run: test "$(cat android-build-exit-code.txt)" = "0"
 
-      - name: Verify S24 autonomous source contract
+      - name: Verify v1.6 autonomous source contract
         shell: bash
         run: |
           CLIENT=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/GrowwClient.java
@@ -54,26 +54,34 @@ jobs:
           SAFETY=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/RegularOrderSafety.java
           GRADLE=android-stable/app/build.gradle
           grep -q 'targetSdk 36' "$GRADLE"
-          grep -q 'DEFAULT_TRADE_BUDGET = 10_000d' "$PREFS"
-          grep -q 'quantityForBudget' "$PREFS"
-          grep -q 'EARLY_EXIT_PATTERN' "$PARSER"
-          grep -q 'parseEarlyExit' "$PARSER"
-          grep -q 'placeEarlyExitMarketSell' "$CLIENT"
-          grep -q 'createEntryGtt' "$CLIENT"
+          grep -q "versionName '1.6.0'" "$GRADLE"
+          grep -q 'DEFAULT_WINDOW_1_BUDGET = 10_000d' "$PREFS"
+          grep -q 'DEFAULT_WINDOW_2_BUDGET = 10_000d' "$PREFS"
+          grep -q 'DEFAULT_WINDOW_3_BUDGET = 5_000d' "$PREFS"
+          grep -q '09:00–09:30' "$PREFS"
+          grep -q 'forceMis' "$PREFS"
+          grep -q 'placeImmediateEntryLimit' "$CLIENT"
+          grep -q 'order_type", "LIMIT"' "$CLIENT"
           grep -q 'createStopLossGtt' "$CLIENT"
+          grep -q 'placeEarlyExitMarketSell' "$CLIENT"
           grep -q 'ddpi_enabled' "$CLIENT"
+          grep -q 'SUBMITTING IMMEDIATE ENTRY' "$LISTENER"
+          grep -q 'window.forceMis ? "MIS"' "$LISTENER"
+          grep -q 'requestImmediateTick' "$LISTENER"
+          grep -q 'entryOrderId' "$MONITOR"
+          grep -q 'configured window cutoff' "$MONITOR"
           grep -q 'MULTYFI EARLY EXIT SUBMITTED' "$MONITOR"
-          grep -q 'stop-loss cancellation was not confirmed' "$MONITOR"
-          grep -q 'MULTYFI EARLY EXIT QUEUED' "$LISTENER"
-          grep -q 'cancelOpenCashOrder' "$LISTENER"
+          grep -q 'cancelOpenCashOrder' "$MONITOR"
           grep -q '/v1/order/cancel' "$SAFETY"
+          grep -q 'window1BudgetInput' "$MAIN"
           grep -q 'Surfshark Dedicated IP' "$MAIN"
+          grep -q 'EARLY_EXIT_PATTERN' "$PARSER"
           ! grep -q 'child_legs' "$CLIENT"
 
       - name: Verify APK signature
         run: $ANDROID_HOME/build-tools/35.0.0/apksigner verify --verbose --print-certs android-stable/app/build/outputs/apk/debug/app-debug.apk
       - name: Rename APK
-        run: cp android-stable/app/build/outputs/apk/debug/app-debug.apk android-stable/app/build/outputs/apk/debug/Multyfi-AutoBuy-S24-Android16-v1.5.0.apk
+        run: cp android-stable/app/build/outputs/apk/debug/app-debug.apk android-stable/app/build/outputs/apk/debug/Multyfi-AutoBuy-S24-Android16-v1.6.0.apk
 
       - name: Enable KVM access
         run: |
@@ -111,7 +119,7 @@ jobs:
           fi
           if [ "$booted" != "1" ]; then echo 'Android 16 emulator did not complete boot.' >> "$OUT/acceptance-api36.log"; code=1; fi
           if [ "$booted" = "1" ]; then
-            timeout 60 adb install -r "$OUT/Multyfi-AutoBuy-S24-Android16-v1.5.0.apk" >> "$OUT/acceptance-api36.log" 2>&1 || code=1
+            timeout 60 adb install -r "$OUT/Multyfi-AutoBuy-S24-Android16-v1.6.0.apk" >> "$OUT/acceptance-api36.log" 2>&1 || code=1
             adb shell pm grant com.suhas.multyfiautobuy.stable android.permission.POST_NOTIFICATIONS >> "$OUT/acceptance-api36.log" 2>&1 || code=1
             adb logcat -c >> "$OUT/acceptance-api36.log" 2>&1
             timeout 30 adb shell am start -W -n com.suhas.multyfiautobuy.stable/.MainActivity >> "$OUT/acceptance-api36.log" 2>&1 || code=1
@@ -121,9 +129,10 @@ jobs:
             timeout 20 adb shell uiautomator dump /sdcard/multyfi-ui.xml >> "$OUT/acceptance-api36.log" 2>&1 || code=1
             adb pull /sdcard/multyfi-ui.xml "$OUT/ui-api36.xml" >> "$OUT/acceptance-api36.log" 2>&1 || code=1
             if ! grep -q 'PRIVATE S24 TRADING BRIDGE' "$OUT/ui-api36.xml"; then code=1; fi
-            if ! grep -q 'TRADE SIZING' "$OUT/ui-api36.xml"; then code=1; fi
-            if ! grep -q 'Target notional ₹10000' "$OUT/ui-api36.xml"; then code=1; fi
-            if ! grep -q 'Surfshark Dedicated IP + DDPI required' "$OUT/ui-api36.xml"; then code=1; fi
+            if ! grep -q 'THREE TIME-WINDOW AMOUNTS' "$OUT/ui-api36.xml"; then code=1; fi
+            if ! grep -q '09:00–09:30 IST' "$OUT/ui-api36.xml"; then code=1; fi
+            if ! grep -q 'default 10000' "$OUT/ui-api36.xml"; then code=1; fi
+            if ! grep -q 'default 5000' "$OUT/ui-api36.xml"; then code=1; fi
             adb logcat -d -v threadtime > "$OUT/logcat-api36.txt" 2>&1
             if grep -E 'FATAL EXCEPTION|Process: com.suhas.multyfiautobuy.stable|AndroidRuntime.*com.suhas.multyfiautobuy.stable' "$OUT/logcat-api36.txt" >> "$OUT/acceptance-api36.log"; then code=1; fi
             adb exec-out screencap -p > "$OUT/startup-api36.png" 2>> "$OUT/acceptance-api36.log"
@@ -138,7 +147,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Multyfi-AutoBuy-S24-Android16-acceptance
+          name: Multyfi-AutoBuy-S24-v1.6-Android16-acceptance
           path: |
             android-stable/app/build/outputs/apk/debug/acceptance-api36.log
             android-stable/app/build/outputs/apk/debug/acceptance-api36-exit-code.txt
@@ -153,10 +162,11 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Multyfi-AutoBuy-S24-Android16-v1.5.0
+          name: Multyfi-AutoBuy-S24-Android16-v1.6.0
           path: |
-            android-stable/app/build/outputs/apk/debug/Multyfi-AutoBuy-S24-Android16-v1.5.0.apk
+            android-stable/app/build/outputs/apk/debug/Multyfi-AutoBuy-S24-Android16-v1.6.0.apk
             android-stable/app/build/outputs/apk/debug/ui-api36.xml
+            android-stable/app/build/outputs/apk/debug/startup-api36.png
             android-stable/app/build/reports/tests/testDebugUnitTest/
             android-stable/app/build/reports/lint-results-debug.html
           if-no-files-found: error
