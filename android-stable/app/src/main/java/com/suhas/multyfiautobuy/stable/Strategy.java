@@ -29,6 +29,10 @@ final class Strategy {
     String targetOrderReferenceId;
     String targetOrderId;
     int targetFilledQuantity;
+    boolean earlyExitRequested;
+    String earlyExitReason;
+    long earlyExitRequestedAt;
+    String pendingExitLabel;
     String state;
     String lastMessage;
     final long createdAt;
@@ -54,6 +58,10 @@ final class Strategy {
         this.targetOrderReferenceId = "";
         this.targetOrderId = "";
         this.targetFilledQuantity = 0;
+        this.earlyExitRequested = false;
+        this.earlyExitReason = "";
+        this.earlyExitRequestedAt = 0L;
+        this.pendingExitLabel = "";
         this.state = ENTRY_ACTIVE;
         this.lastMessage = "Entry GTT active.";
         this.createdAt = createdAt;
@@ -68,6 +76,14 @@ final class Strategy {
 
     int remainingStrategyQuantity(int currentPositionQuantity) {
         return Math.max(0, currentPositionQuantity - baselinePositionQuantity);
+    }
+
+    void requestEarlyExit(String reason, long requestedAt) {
+        earlyExitRequested = true;
+        earlyExitReason = reason == null ? "Multyfi requested an early exit." : reason;
+        earlyExitRequestedAt = requestedAt;
+        lastMessage = "Multyfi early exit queued for immediate broker processing.";
+        updatedAt = System.currentTimeMillis();
     }
 
     JSONObject toJson() throws Exception {
@@ -90,6 +106,10 @@ final class Strategy {
         json.put("target_order_reference_id", targetOrderReferenceId);
         json.put("target_order_id", targetOrderId);
         json.put("target_filled_quantity", targetFilledQuantity);
+        json.put("early_exit_requested", earlyExitRequested);
+        json.put("early_exit_reason", earlyExitReason);
+        json.put("early_exit_requested_at", earlyExitRequestedAt);
+        json.put("pending_exit_label", pendingExitLabel);
         json.put("state", state);
         json.put("last_message", lastMessage);
         json.put("created_at", createdAt);
@@ -122,6 +142,10 @@ final class Strategy {
         strategy.targetOrderReferenceId = json.optString("target_order_reference_id", "");
         strategy.targetOrderId = json.optString("target_order_id", "");
         strategy.targetFilledQuantity = json.optInt("target_filled_quantity", 0);
+        strategy.earlyExitRequested = json.optBoolean("early_exit_requested", false);
+        strategy.earlyExitReason = json.optString("early_exit_reason", "");
+        strategy.earlyExitRequestedAt = json.optLong("early_exit_requested_at", 0L);
+        strategy.pendingExitLabel = json.optString("pending_exit_label", "");
         strategy.state = json.optString("state", ENTRY_ACTIVE);
         strategy.lastMessage = json.optString("last_message", "");
         strategy.updatedAt = json.optLong("updated_at", strategy.createdAt);
