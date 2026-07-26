@@ -12,20 +12,24 @@ import java.util.TimeZone;
 
 final class AppPrefs {
     static final String MULTYFI_PACKAGE = "com.multyfi.invest";
-    static final int DEFAULT_QUANTITY = 10;
-    static final int MIN_QUANTITY = 1;
-    static final int MAX_QUANTITY = 10_000;
+
+    static final double DEFAULT_TRADE_BUDGET = 10_000d;
+    static final double MIN_TRADE_BUDGET = 1_000d;
+    static final double MAX_TRADE_BUDGET = 500_000d;
+    static final int MAX_COMPUTED_QUANTITY = 10_000;
+
     static final double DEFAULT_ENTRY_BUFFER_PERCENT = 1.5d;
     static final double MIN_ENTRY_BUFFER_PERCENT = 0d;
     static final double MAX_ENTRY_BUFFER_PERCENT = 2d;
     static final int MAX_BUYS_PER_DAY = 4;
     static final double MAX_ORDER_VALUE = 500_000d;
     static final long MAX_SIGNAL_AGE_MS = 180_000L;
+    static final long MAX_EARLY_EXIT_AGE_MS = 300_000L;
     static final long IP_VERIFICATION_MAX_AGE_MS = 2L * 60L * 1000L;
 
     private static final String FILE = "stable_prefs";
     private static final String K_ARMED = "armed";
-    private static final String K_QUANTITY = "order_quantity";
+    private static final String K_TRADE_BUDGET = "trade_budget";
     private static final String K_ENTRY_BUFFER = "entry_buffer_percent";
     private static final String K_STATIC_CONFIRMED = "static_confirmed";
     private static final String K_EXPECTED_IP = "expected_ip";
@@ -52,20 +56,30 @@ final class AppPrefs {
         prefs(context).edit().putBoolean(K_ARMED, value).apply();
     }
 
-    static int quantity(Context context) {
-        int value = prefs(context).getInt(K_QUANTITY, DEFAULT_QUANTITY);
-        return isValidQuantity(value) ? value : DEFAULT_QUANTITY;
+    static double tradeBudget(Context context) {
+        long bits = prefs(context).getLong(K_TRADE_BUDGET,
+                Double.doubleToRawLongBits(DEFAULT_TRADE_BUDGET));
+        double value = Double.longBitsToDouble(bits);
+        return isValidTradeBudget(value) ? value : DEFAULT_TRADE_BUDGET;
     }
 
-    static boolean isValidQuantity(int value) {
-        return value >= MIN_QUANTITY && value <= MAX_QUANTITY;
+    static boolean isValidTradeBudget(double value) {
+        return !Double.isNaN(value) && !Double.isInfinite(value)
+                && value >= MIN_TRADE_BUDGET && value <= MAX_TRADE_BUDGET;
     }
 
-    static void setQuantity(Context context, int value) {
-        if (!isValidQuantity(value)) {
-            throw new IllegalArgumentException("Quantity must be between " + MIN_QUANTITY + " and " + MAX_QUANTITY + ".");
+    static void setTradeBudget(Context context, double value) {
+        if (!isValidTradeBudget(value)) {
+            throw new IllegalArgumentException("Trade budget must be between ₹1,000 and ₹5,00,000.");
         }
-        prefs(context).edit().putInt(K_QUANTITY, value).apply();
+        prefs(context).edit().putLong(K_TRADE_BUDGET,
+                Double.doubleToRawLongBits(value)).apply();
+    }
+
+    static int quantityForBudget(Context context, double maximumBuyPrice) {
+        if (maximumBuyPrice <= 0d) return 0;
+        int quantity = (int) Math.floor(tradeBudget(context) / maximumBuyPrice);
+        return Math.max(0, Math.min(MAX_COMPUTED_QUANTITY, quantity));
     }
 
     static double entryBufferPercent(Context context) {
@@ -188,7 +202,7 @@ final class AppPrefs {
         String existing = prefs(context).getString(K_LOG, "");
         String row = nowIst() + "  •  " + status + "\n" + clean(message) + "\n\n";
         String combined = row + existing;
-        if (combined.length() > 18_000) combined = combined.substring(0, 18_000);
+        if (combined.length() > 20_000) combined = combined.substring(0, 20_000);
         prefs(context).edit().putString(K_LOG, combined).apply();
     }
 
@@ -222,6 +236,6 @@ final class AppPrefs {
     private static String clean(String message) {
         if (message == null) return "";
         String value = message.replace('\r', ' ').trim();
-        return value.length() <= 900 ? value : value.substring(0, 900) + "…";
+        return value.length() <= 1_100 ? value : value.substring(0, 1_100) + "…";
     }
 }
