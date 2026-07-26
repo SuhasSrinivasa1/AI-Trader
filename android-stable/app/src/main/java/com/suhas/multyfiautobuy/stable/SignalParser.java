@@ -29,17 +29,18 @@ final class SignalParser {
     private static final Pattern FREE_PATTERN = Pattern.compile("(?i)\\bfree\\s+(?:equity\\s+)?recommendation\\b");
 
     private static final TimeZone IST = TimeZone.getTimeZone("Asia/Kolkata");
-    private static final int WINDOW_START_MINUTE = 8 * 60 + 45;
-    private static final int WINDOW_END_MINUTE = 15 * 60 + 25;
+    private static final int INTRADAY_ENTRY_START_MINUTE = 8 * 60 + 45;
     private static final int INTRADAY_ENTRY_END_MINUTE = 14 * 60 + 45;
 
     private SignalParser() { }
 
     static ParsedSignal parse(String rawText, long notificationTimeMillis) {
-        return parse(rawText, notificationTimeMillis, AppPrefs.DEFAULT_ENTRY_BUFFER_PERCENT);
+        return parse(rawText, notificationTimeMillis,
+                AppPrefs.DEFAULT_ENTRY_BUFFER_PERCENT);
     }
 
-    static ParsedSignal parse(String rawText, long notificationTimeMillis, double bufferPercent) {
+    static ParsedSignal parse(String rawText, long notificationTimeMillis,
+                              double bufferPercent) {
         if (rawText == null || rawText.trim().isEmpty()) return null;
         if (!AppPrefs.isValidEntryBuffer(bufferPercent)) return null;
         if (REJECT_ACTION_PATTERN.matcher(rawText).find()) return null;
@@ -59,56 +60,57 @@ final class SignalParser {
 
         String category = category(rawText);
         String productType = "INTRADAY".equals(category) ? "MIS" : "CNC";
-        if (!isAllowedSignalTime(notificationTimeMillis)) return null;
-        if ("MIS".equals(productType) && !isAllowedIntradayEntryTime(notificationTimeMillis)) return null;
+
+        // Complete CNC recommendations may arrive pre-market, post-market or on weekends.
+        // They are allowed to create a GTT for a future trading session. Explicit intraday
+        // calls remain restricted to a safe same-day window.
+        if ("MIS".equals(productType)
+                && !isAllowedIntradayEntryTime(notificationTimeMillis)) return null;
 
         double recommendedTrigger = floorToTick(low, 0.05d);
         double maxBuy = floorToTick(high * (1d + bufferPercent / 100d), 0.05d);
         double targetPrice = floorToTick(target, 0.05d);
         double stopLossPrice = floorToTick(stopLoss, 0.05d);
 
-        // Fail closed when the recommendation is internally inconsistent.
         if (targetPrice <= maxBuy || stopLossPrice >= low) return null;
 
-        String digest = sha256(symbol + "|" + low + "|" + high + "|" + targetPrice
-                + "|" + stopLossPrice + "|" + productType + "|" + bufferPercent
-                + "|" + AppPrefs.istDate());
+        String digest = sha256(symbol + "|" + low + "|" + high + "|"
+                + targetPrice + "|" + stopLossPrice + "|" + productType
+                + "|" + bufferPercent + "|" + AppPrefs.istDate());
         String eventId = digest.substring(0, Math.min(24, digest.length()));
         String referenceId = "MF" + AppPrefs.compactIstDate()
                 + digest.substring(0, 8).toUpperCase(Locale.US);
-        return new ParsedSignal(eventId, referenceId, symbol, category, productType,
-                low, high, recommendedTrigger, maxBuy, bufferPercent,
-                targetPrice, stopLossPrice, notificationTimeMillis, rawText);
-    }
-
-    static boolean isAllowedSignalTime(long epochMillis) {
-        Calendar calendar = Calendar.getInstance(IST, Locale.US);
-        calendar.setTimeInMillis(epochMillis);
-        int day = calendar.get(Calendar.DAY_OF_WEEK);
-        if (day == Calendar.SATURDAY || day == Calendar.SUNDAY) return false;
-        int minute = calendar.get(Calendar.HOUR_OF_DAY) * 60 + calendar.get(Calendar.MINUTE);
-        return minute >= WINDOW_START_MINUTE && minute <= WINDOW_END_MINUTE;
+        return new ParsedSignal(eventId, referenceId, symbol, category,
+                productType, low, high, recommendedTrigger, maxBuy,
+                bufferPercent, targetPrice, stopLossPrice,
+                notificationTimeMillis, rawText);
     }
 
     static boolean isAllowedIntradayEntryTime(long epochMillis) {
         Calendar calendar = Calendar.getInstance(IST, Locale.US);
         calendar.setTimeInMillis(epochMillis);
-        int minute = calendar.get(Calendar.HOUR_OF_DAY) * 60 + calendar.get(Calendar.MINUTE);
-        return minute <= INTRADAY_ENTRY_END_MINUTE;
+        int day = calendar.get(Calendar.DAY_OF_WEEK);
+        if (day == Calendar.SATURDAY || day == Calendar.SUNDAY) return false;
+        int minute = calendar.get(Calendar.HOUR_OF_DAY) * 60
+                + calendar.get(Calendar.MINUTE);
+        return minute >= INTRADAY_ENTRY_START_MINUTE
+                && minute <= INTRADAY_ENTRY_END_MINUTE;
     }
 
     static double floorToTick(double price, double tick) {
         BigDecimal p = BigDecimal.valueOf(price);
         BigDecimal t = BigDecimal.valueOf(tick);
         return p.divide(t, 0, RoundingMode.FLOOR)
-                .multiply(t).setScale(2, RoundingMode.UNNECESSARY).doubleValue();
+                .multiply(t).setScale(2, RoundingMode.UNNECESSARY)
+                .doubleValue();
     }
 
     static double ceilToTick(double price, double tick) {
         BigDecimal p = BigDecimal.valueOf(price);
         BigDecimal t = BigDecimal.valueOf(tick);
         return p.divide(t, 0, RoundingMode.CEILING)
-                .multiply(t).setScale(2, RoundingMode.UNNECESSARY).doubleValue();
+                .multiply(t).setScale(2, RoundingMode.UNNECESSARY)
+                .doubleValue();
     }
 
     private static String category(String rawText) {
@@ -124,7 +126,8 @@ final class SignalParser {
         if (range.find()) {
             double first = parsePrice(range.group(1));
             double second = parsePrice(range.group(2));
-            return first > 0d && second > 0d ? new double[]{first, second} : null;
+            return first > 0d && second > 0d
+                    ? new double[]{first, second} : null;
         }
         Matcher single = ENTRY_SINGLE_PATTERN.matcher(rawText);
         if (single.find()) {
@@ -149,10 +152,13 @@ final class SignalParser {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] bytes = digest.digest(text.getBytes(StandardCharsets.UTF_8));
             StringBuilder builder = new StringBuilder();
-            for (byte b : bytes) builder.append(String.format(Locale.US, "%02x", b));
+            for (byte b : bytes) {
+                builder.append(String.format(Locale.US, "%02x", b));
+            }
             return builder.toString();
         } catch (Exception e) {
-            return Integer.toHexString(text.hashCode()) + "00000000000000000000000000000000";
+            return Integer.toHexString(text.hashCode())
+                    + "00000000000000000000000000000000";
         }
     }
 
@@ -172,11 +178,12 @@ final class SignalParser {
         final long notificationTimeMillis;
         final String rawText;
 
-        ParsedSignal(String eventId, String referenceId, String symbol, String category,
-                     String productType, double entryLow, double entryHigh,
-                     double triggerPrice, double maxBuyPrice, double bufferPercent,
-                     double targetPrice, double stopLossPrice,
-                     long notificationTimeMillis, String rawText) {
+        ParsedSignal(String eventId, String referenceId, String symbol,
+                     String category, String productType, double entryLow,
+                     double entryHigh, double triggerPrice, double maxBuyPrice,
+                     double bufferPercent, double targetPrice,
+                     double stopLossPrice, long notificationTimeMillis,
+                     String rawText) {
             this.eventId = eventId;
             this.referenceId = referenceId;
             this.symbol = symbol;
@@ -195,13 +202,16 @@ final class SignalParser {
 
         boolean isIntraday() { return "MIS".equals(productType); }
 
-        double maximumOrderValue(int quantity) { return maxBuyPrice * quantity; }
+        double maximumOrderValue(int quantity) {
+            return maxBuyPrice * quantity;
+        }
 
         String summary(int quantity) {
             return symbol + " | " + category + "/" + productType
                     + " | entry ₹" + money(entryLow) + "–₹" + money(entryHigh)
                     + " | buy cap ₹" + money(maxBuyPrice)
-                    + " (buffer " + String.format(Locale.US, "%.2f", bufferPercent) + "%)"
+                    + " (buffer "
+                    + String.format(Locale.US, "%.2f", bufferPercent) + "%)"
                     + " | target ₹" + money(targetPrice)
                     + " | SL ₹" + money(stopLossPrice)
                     + " | qty " + quantity;
