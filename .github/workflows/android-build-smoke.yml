@@ -113,7 +113,7 @@ jobs:
             adb logcat -c >> "$OUT/acceptance-api29.log" 2>&1
             timeout 30 adb shell am start -W -n com.suhas.multyfiautobuy.stable/.MainActivity >> "$OUT/acceptance-api29.log" 2>&1 || code=1
             sleep 5
-            timeout 20 adb shell am start-foreground-service -n com.suhas.multyfiautobuy.stable/.StrategyMonitorService >> "$OUT/acceptance-api29.log" 2>&1 || code=1
+            timeout 20 adb shell run-as com.suhas.multyfiautobuy.stable am start-foreground-service -n com.suhas.multyfiautobuy.stable/.StrategyMonitorService >> "$OUT/acceptance-api29.log" 2>&1 || code=1
             sleep 5
             adb shell dumpsys activity activities > "$OUT/activity-api29.txt" 2>&1
             if ! grep -q 'com.suhas.multyfiautobuy.stable/.MainActivity' "$OUT/activity-api29.txt"; then code=1; fi
