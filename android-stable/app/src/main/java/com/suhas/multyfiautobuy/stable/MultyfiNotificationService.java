@@ -39,7 +39,6 @@ public final class MultyfiNotificationService extends NotificationListenerServic
         if (sbn == null || sbn.getNotification() == null) return;
         if (!AppPrefs.MULTYFI_PACKAGE.equals(sbn.getPackageName())) return;
         final long postTime = sbn.getPostTime();
-        if (!SignalParser.isAllowedSignalTime(postTime)) return;
         final String rawText = extractText(sbn.getNotification());
         executor.execute(() -> process(rawText, postTime));
     }
@@ -61,7 +60,8 @@ public final class MultyfiNotificationService extends NotificationListenerServic
             }
 
             double buffer = AppPrefs.entryBufferPercent(this);
-            SignalParser.ParsedSignal signal = SignalParser.parse(rawText, postTime, buffer);
+            SignalParser.ParsedSignal signal = SignalParser.parse(
+                    rawText, postTime, buffer);
             if (signal == null) return;
             int quantity = AppPrefs.quantity(this);
             String summary = signal.summary(quantity);
@@ -72,7 +72,8 @@ public final class MultyfiNotificationService extends NotificationListenerServic
             }
             long age = System.currentTimeMillis() - signal.notificationTimeMillis;
             if (age > AppPrefs.MAX_SIGNAL_AGE_MS || age < -60_000L) {
-                AppPrefs.log(this, "REJECTED — STALE", summary + " • age " + age + " ms");
+                AppPrefs.log(this, "REJECTED — STALE",
+                        summary + " • age " + age + " ms");
                 return;
             }
             if (!AppPrefs.parserTestPassed(this)) {
@@ -80,7 +81,8 @@ public final class MultyfiNotificationService extends NotificationListenerServic
                 return;
             }
             if (!AppPrefs.isAuthVerifiedToday(this)) {
-                rejectAndDisarm("Groww account and DDPI were not verified today.", summary);
+                rejectAndDisarm(
+                        "Groww account and DDPI were not verified today.", summary);
                 return;
             }
             if (!NetworkUtil.isNetworkAvailable(this)) {
@@ -88,7 +90,8 @@ public final class MultyfiNotificationService extends NotificationListenerServic
                 return;
             }
             if (!ensureStaticPublicIp()) {
-                rejectAndDisarm("Current public IP does not match the Groww-whitelisted IP.",
+                rejectAndDisarm(
+                        "Current public IP does not match the Groww-whitelisted IP.",
                         summary);
                 return;
             }
@@ -98,7 +101,8 @@ public final class MultyfiNotificationService extends NotificationListenerServic
                 return;
             }
             if (AppPrefs.dailyBuyCount(this) >= AppPrefs.MAX_BUYS_PER_DAY) {
-                rejectAndDisarm("Maximum four automatic entry GTTs reached for today.",
+                rejectAndDisarm(
+                        "Maximum four automatic entry GTTs reached for today.",
                         summary);
                 return;
             }
@@ -113,12 +117,14 @@ public final class MultyfiNotificationService extends NotificationListenerServic
             String token = TokenManager.validToken(this);
             if (token.isEmpty()) {
                 AppPrefs.clearAuthVerified(this);
-                rejectAndDisarm("Groww token unavailable. The broker's daily approval may be required.",
+                rejectAndDisarm(
+                        "Groww token unavailable. The broker's daily approval may be required.",
                         summary);
                 return;
             }
 
-            GrowwClient.DoubleResult ltp = GrowwClient.getLtp(token, signal.symbol);
+            GrowwClient.DoubleResult ltp = GrowwClient.getLtp(
+                    token, signal.symbol);
             if (!ltp.success) {
                 AppPrefs.log(this, "ENTRY DEFERRED — LTP UNAVAILABLE",
                         summary + " • " + ltp.message);
@@ -129,25 +135,29 @@ public final class MultyfiNotificationService extends NotificationListenerServic
                     token, signal.symbol, signal.productType);
             if (!baseline.success) {
                 rejectAndDisarm("Could not establish the pre-trade "
-                        + signal.productType + " position baseline: " + baseline.message,
-                        summary);
+                        + signal.productType + " position baseline: "
+                        + baseline.message, summary);
                 return;
             }
 
             AppPrefs.log(this, "SUBMITTING ENTRY GTT", summary
-                    + " • LTP ₹" + String.format(java.util.Locale.US, "%.2f", ltp.value)
-                    + " • baseline " + signal.productType + " position " + baseline.value + ".");
+                    + " • LTP ₹"
+                    + String.format(java.util.Locale.US, "%.2f", ltp.value)
+                    + " • baseline " + signal.productType + " position "
+                    + baseline.value + ".");
             GrowwClient.ApiResult result = GrowwClient.createEntryGtt(
                     token, signal, quantity, ltp.value);
             if (result.success) {
                 Strategy strategy = new Strategy(signal.eventId, signal.symbol,
                         signal.category, signal.productType, quantity,
                         signal.targetPrice, signal.stopLossPrice, baseline.value,
-                        signal.referenceId, result.id, System.currentTimeMillis());
+                        signal.referenceId, result.id,
+                        System.currentTimeMillis());
                 StrategyStore.upsert(this, strategy);
                 AppPrefs.markProcessed(this, signal.eventId);
                 AppPrefs.incrementDailyBuyCount(this);
-                AppPrefs.log(this, "ENTRY GTT CONFIRMED", summary + "\n" + result.message
+                AppPrefs.log(this, "ENTRY GTT CONFIRMED", summary + "\n"
+                        + result.message
                         + " Stop-loss will be created only for actual filled quantity.");
                 StrategyMonitorService.ensureRunning(this);
             } else if ("GA007".equals(result.errorCode)) {
@@ -155,8 +165,8 @@ public final class MultyfiNotificationService extends NotificationListenerServic
                 AppPrefs.log(this, "DUPLICATE CONFIRMED", summary
                         + " • Groww rejected the repeated reference ID.");
             } else {
-                AppPrefs.log(this, "ENTRY GTT FAILED", summary + "\n" + result.message
-                        + (result.errorCode.isEmpty()
+                AppPrefs.log(this, "ENTRY GTT FAILED", summary + "\n"
+                        + result.message + (result.errorCode.isEmpty()
                         ? "" : " [" + result.errorCode + "]"));
             }
         } catch (Exception e) {
@@ -189,7 +199,8 @@ public final class MultyfiNotificationService extends NotificationListenerServic
 
     private void rejectAndDisarm(String reason, String summary) {
         AppPrefs.setArmed(this, false);
-        AppPrefs.log(this, "REJECTED — AUTO-DISARMED", summary + "\n" + reason);
+        AppPrefs.log(this, "REJECTED — AUTO-DISARMED",
+                summary + "\n" + reason);
     }
 
     private static String extractText(Notification notification) {
@@ -200,8 +211,11 @@ public final class MultyfiNotificationService extends NotificationListenerServic
         add(parts, extras.getCharSequence(Notification.EXTRA_TEXT));
         add(parts, extras.getCharSequence(Notification.EXTRA_BIG_TEXT));
         add(parts, extras.getCharSequence(Notification.EXTRA_SUB_TEXT));
-        CharSequence[] lines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES);
-        if (lines != null) for (CharSequence line : lines) add(parts, line);
+        CharSequence[] lines = extras.getCharSequenceArray(
+                Notification.EXTRA_TEXT_LINES);
+        if (lines != null) {
+            for (CharSequence line : lines) add(parts, line);
+        }
         return TextUtils.join("\n", parts);
     }
 
