@@ -48,10 +48,11 @@
         <service
             android:name=".StrategyMonitorService"
             android:exported="false"
-            android:foregroundServiceType="specialUse">
+            android:foregroundServiceType="specialUse"
+            android:stopWithTask="false">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Continuous monitoring of broker entry fills, protective stop-loss GTTs and target exits" />
+                android:value="Continuous public-IP and broker readiness checks, entry-fill monitoring, protective stop-loss GTTs and autonomous exits" />
         </service>
 
         <receiver
