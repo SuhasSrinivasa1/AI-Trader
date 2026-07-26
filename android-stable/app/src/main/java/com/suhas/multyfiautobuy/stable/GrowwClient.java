@@ -70,6 +70,55 @@ final class GrowwClient {
         }
     }
 
+    static ApiResult placeImmediateEntryLimit(String accessToken,
+                                              SignalParser.ParsedSignal signal,
+                                              int quantity,
+                                              String productType) {
+        if (signal == null || quantity <= 0) {
+            return ApiResult.failure("", "A valid signal and positive quantity are required.", 0);
+        }
+        try {
+            JSONObject body = new JSONObject();
+            body.put("trading_symbol", signal.symbol);
+            body.put("quantity", quantity);
+            body.put("price", price(signal.maxBuyPrice));
+            body.put("trigger_price", 0);
+            body.put("validity", "DAY");
+            body.put("exchange", "NSE");
+            body.put("segment", "CASH");
+            body.put("product", productType);
+            body.put("order_type", "LIMIT");
+            body.put("transaction_type", "BUY");
+            body.put("order_reference_id", signal.referenceId);
+            HttpResult http = request("POST", API_BASE + "/order/create", accessToken, body);
+            if (!http.isSuccess()) return apiFailure(http);
+            JSONObject payload = new JSONObject(http.body).optJSONObject("payload");
+            if (payload == null) {
+                return ApiResult.failure("ENTRY_NO_PAYLOAD",
+                        "Groww accepted the entry request but returned no payload.", http.code);
+            }
+            String id = payload.optString("groww_order_id", "");
+            String status = payload.optString("order_status", "");
+            String reference = payload.optString("order_reference_id", signal.referenceId);
+            if (id.isEmpty()) {
+                return ApiResult.failure("ENTRY_NO_ORDER_ID",
+                        "Groww accepted the entry request but returned no order ID.", http.code);
+            }
+            if (isRejectedRegularStatus(status)) {
+                return ApiResult.failure("ENTRY_REJECTED",
+                        "Groww rejected the entry order: " + status + " "
+                                + payload.optString("remark", ""), http.code);
+            }
+            return ApiResult.success(id, reference,
+                    "Immediate " + productType + " LIMIT BUY accepted: " + id
+                            + " • status " + (status.isEmpty() ? "submitted" : status)
+                            + " • cap ₹" + price(signal.maxBuyPrice) + ".",
+                    http.code);
+        } catch (Exception e) {
+            return ApiResult.failure("", "Immediate entry error: " + safeMessage(e), 0);
+        }
+    }
+
     static ApiResult createEntryGtt(String accessToken, SignalParser.ParsedSignal signal,
                                     int quantity, double currentLtp) {
         if (signal == null || currentLtp <= 0d || quantity <= 0) {
@@ -335,6 +384,13 @@ final class GrowwClient {
                 || "COMPLETED".equalsIgnoreCase(status);
     }
 
+    private static boolean isRejectedRegularStatus(String status) {
+        return "REJECTED".equalsIgnoreCase(status)
+                || "FAILED".equalsIgnoreCase(status)
+                || "CANCELLED".equalsIgnoreCase(status)
+                || "CANCELED".equalsIgnoreCase(status);
+    }
+
     private static String reference(String prefix, String eventId, int suffix) {
         String clean = eventId == null ? "00000000000000"
                 : eventId.replaceAll("[^A-Za-z0-9]", "");
@@ -346,10 +402,15 @@ final class GrowwClient {
         String code = "";
         String message = http.message();
         try {
-            JSONObject error = new JSONObject(http.body).optJSONObject("error");
+            JSONObject root = new JSONObject(http.body);
+            JSONObject error = root.optJSONObject("error");
             if (error != null) {
                 code = error.optString("code", "");
                 String apiMessage = error.optString("message", "");
+                if (!apiMessage.isEmpty()) message = apiMessage;
+            } else {
+                code = root.optString("error_code", root.optString("code", ""));
+                String apiMessage = root.optString("message", "");
                 if (!apiMessage.isEmpty()) message = apiMessage;
             }
         } catch (Exception ignored) { }
