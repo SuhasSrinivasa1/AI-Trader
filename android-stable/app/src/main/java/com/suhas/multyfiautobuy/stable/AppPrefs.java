@@ -15,16 +15,21 @@ final class AppPrefs {
     static final int DEFAULT_QUANTITY = 10;
     static final int MIN_QUANTITY = 1;
     static final int MAX_QUANTITY = 10_000;
-    static final int MAX_BUYS_PER_DAY = 3;
+    static final double DEFAULT_ENTRY_BUFFER_PERCENT = 1.5d;
+    static final double MIN_ENTRY_BUFFER_PERCENT = 0d;
+    static final double MAX_ENTRY_BUFFER_PERCENT = 2d;
+    static final int MAX_BUYS_PER_DAY = 4;
     static final double MAX_ORDER_VALUE = 500_000d;
     static final long MAX_SIGNAL_AGE_MS = 180_000L;
-    static final long IP_VERIFICATION_MAX_AGE_MS = 24L * 60L * 60L * 1000L;
+    static final long IP_VERIFICATION_MAX_AGE_MS = 2L * 60L * 1000L;
 
     private static final String FILE = "stable_prefs";
     private static final String K_ARMED = "armed";
     private static final String K_QUANTITY = "order_quantity";
+    private static final String K_ENTRY_BUFFER = "entry_buffer_percent";
     private static final String K_STATIC_CONFIRMED = "static_confirmed";
     private static final String K_EXPECTED_IP = "expected_ip";
+    private static final String K_LAST_PUBLIC_IP = "last_public_ip";
     private static final String K_IP_VERIFIED_AT = "ip_verified_at";
     private static final String K_AUTH_VERIFIED_DATE = "auth_verified_date";
     private static final String K_UCC = "ucc";
@@ -63,6 +68,26 @@ final class AppPrefs {
         prefs(context).edit().putInt(K_QUANTITY, value).apply();
     }
 
+    static double entryBufferPercent(Context context) {
+        long bits = prefs(context).getLong(K_ENTRY_BUFFER,
+                Double.doubleToRawLongBits(DEFAULT_ENTRY_BUFFER_PERCENT));
+        double value = Double.longBitsToDouble(bits);
+        return isValidEntryBuffer(value) ? value : DEFAULT_ENTRY_BUFFER_PERCENT;
+    }
+
+    static boolean isValidEntryBuffer(double value) {
+        return !Double.isNaN(value) && !Double.isInfinite(value)
+                && value >= MIN_ENTRY_BUFFER_PERCENT && value <= MAX_ENTRY_BUFFER_PERCENT;
+    }
+
+    static void setEntryBufferPercent(Context context, double value) {
+        if (!isValidEntryBuffer(value)) {
+            throw new IllegalArgumentException("Entry buffer must be between 0% and 2%.");
+        }
+        prefs(context).edit().putLong(K_ENTRY_BUFFER,
+                Double.doubleToRawLongBits(value)).apply();
+    }
+
     static boolean isStaticConfirmed(Context context) {
         return prefs(context).getBoolean(K_STATIC_CONFIRMED, false);
     }
@@ -76,7 +101,19 @@ final class AppPrefs {
     }
 
     static void setExpectedIp(Context context, String value) {
-        prefs(context).edit().putString(K_EXPECTED_IP, value == null ? "" : value.trim()).apply();
+        prefs(context).edit().putString(K_EXPECTED_IP,
+                value == null ? "" : value.trim()).apply();
+    }
+
+    static String lastPublicIp(Context context) {
+        return prefs(context).getString(K_LAST_PUBLIC_IP, "").trim();
+    }
+
+    static void setIpVerification(Context context, String actualIp, boolean matched) {
+        prefs(context).edit()
+                .putString(K_LAST_PUBLIC_IP, actualIp == null ? "" : actualIp.trim())
+                .putLong(K_IP_VERIFIED_AT, matched ? System.currentTimeMillis() : 0L)
+                .apply();
     }
 
     static long ipVerifiedAt(Context context) {
@@ -89,7 +126,9 @@ final class AppPrefs {
 
     static boolean isIpRecentlyVerified(Context context) {
         long at = ipVerifiedAt(context);
-        return at > 0L && System.currentTimeMillis() - at <= IP_VERIFICATION_MAX_AGE_MS;
+        return at > 0L && System.currentTimeMillis() - at <= IP_VERIFICATION_MAX_AGE_MS
+                && !expectedIp(context).isEmpty()
+                && expectedIp(context).equals(lastPublicIp(context));
     }
 
     static String authVerifiedDate(Context context) {
@@ -101,6 +140,10 @@ final class AppPrefs {
                 .putString(K_AUTH_VERIFIED_DATE, istDate())
                 .putString(K_UCC, ucc == null ? "" : ucc)
                 .apply();
+    }
+
+    static void clearAuthVerified(Context context) {
+        prefs(context).edit().putString(K_AUTH_VERIFIED_DATE, "").apply();
     }
 
     static String ucc(Context context) {
@@ -120,7 +163,8 @@ final class AppPrefs {
     }
 
     static synchronized boolean isProcessed(Context context, String eventId) {
-        Set<String> values = prefs(context).getStringSet(K_PROCESSED_PREFIX + istDate(), new HashSet<>());
+        Set<String> values = prefs(context).getStringSet(
+                K_PROCESSED_PREFIX + istDate(), new HashSet<>());
         return values.contains(eventId);
     }
 
@@ -144,7 +188,7 @@ final class AppPrefs {
         String existing = prefs(context).getString(K_LOG, "");
         String row = nowIst() + "  •  " + status + "\n" + clean(message) + "\n\n";
         String combined = row + existing;
-        if (combined.length() > 14_000) combined = combined.substring(0, 14_000);
+        if (combined.length() > 18_000) combined = combined.substring(0, 18_000);
         prefs(context).edit().putString(K_LOG, combined).apply();
     }
 
@@ -178,6 +222,6 @@ final class AppPrefs {
     private static String clean(String message) {
         if (message == null) return "";
         String value = message.replace('\r', ' ').trim();
-        return value.length() <= 700 ? value : value.substring(0, 700) + "…";
+        return value.length() <= 900 ? value : value.substring(0, 900) + "…";
     }
 }
