@@ -10,8 +10,8 @@ android {
         applicationId 'com.suhas.multyfiautobuy.stable'
         minSdk 28
         targetSdk 36
-        versionCode 160
-        versionName '1.6.0'
+        versionCode 200
+        versionName '2.0.0'
         testInstrumentationRunner 'android.test.InstrumentationTestRunner'
     }
 
