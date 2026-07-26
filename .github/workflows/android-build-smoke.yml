@@ -61,7 +61,7 @@ jobs:
           grep -q '09:00–09:30' "$PREFS"
           grep -q 'forceMis' "$PREFS"
           grep -q 'placeImmediateEntryLimit' "$CLIENT"
-          grep -q 'order_type", "LIMIT"' "$CLIENT"
+          grep -q 'body.put("order_type", "LIMIT")' "$CLIENT"
           grep -q 'createStopLossGtt' "$CLIENT"
           grep -q 'placeEarlyExitMarketSell' "$CLIENT"
           grep -q 'ddpi_enabled' "$CLIENT"
