@@ -51,6 +51,7 @@ jobs:
           PARSER=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/SignalParser.java
           PREFS=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/AppPrefs.java
           MAIN=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/MainActivity.java
+          LAYOUT=android-stable/app/src/main/res/layout/activity_main.xml
           SAFETY=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/RegularOrderSafety.java
           GRADLE=android-stable/app/build.gradle
           grep -q 'targetSdk 36' "$GRADLE"
@@ -74,6 +75,10 @@ jobs:
           grep -q 'cancelOpenCashOrder' "$MONITOR"
           grep -q '/v1/order/cancel' "$SAFETY"
           grep -q 'window1BudgetInput' "$MAIN"
+          grep -q 'window2BudgetInput' "$MAIN"
+          grep -q 'window3BudgetInput' "$MAIN"
+          grep -q 'default 10000' "$LAYOUT"
+          grep -q 'default 5000' "$LAYOUT"
           grep -q 'Surfshark Dedicated IP' "$MAIN"
           grep -q 'EARLY_EXIT_PATTERN' "$PARSER"
           ! grep -q 'child_legs' "$CLIENT"
@@ -131,8 +136,7 @@ jobs:
             if ! grep -q 'PRIVATE S24 TRADING BRIDGE' "$OUT/ui-api36.xml"; then code=1; fi
             if ! grep -q 'THREE TIME-WINDOW AMOUNTS' "$OUT/ui-api36.xml"; then code=1; fi
             if ! grep -q '09:00–09:30 IST' "$OUT/ui-api36.xml"; then code=1; fi
-            if [ "$(grep -o 'text=&quot;10000&quot;' "$OUT/ui-api36.xml" | wc -l)" -lt 2 ]; then code=1; fi
-            if ! grep -q 'text=&quot;5000&quot;' "$OUT/ui-api36.xml"; then code=1; fi
+            if ! grep -q 'text="10000"' "$OUT/ui-api36.xml"; then code=1; fi
             adb logcat -d -v threadtime > "$OUT/logcat-api36.txt" 2>&1
             if grep -E 'FATAL EXCEPTION|Process: com.suhas.multyfiautobuy.stable|AndroidRuntime.*com.suhas.multyfiautobuy.stable' "$OUT/logcat-api36.txt" >> "$OUT/acceptance-api36.log"; then code=1; fi
             adb exec-out screencap -p > "$OUT/startup-api36.png" 2>> "$OUT/acceptance-api36.log"
