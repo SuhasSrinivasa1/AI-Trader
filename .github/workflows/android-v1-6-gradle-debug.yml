@@ -1,0 +1,48 @@
+name: Debug Multyfi v1.6 Gradle
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'android-stable/**'
+      - '.github/workflows/android-v1-6-gradle-debug.yml'
+
+jobs:
+  gradle-debug:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - run: yes | sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Apply corrected patch and capture Gradle output
+        shell: bash
+        run: |
+          set +e
+          python3 android-stable/apply_v1_6_patch_wrapper.py > v1.6-patch.log 2>&1
+          patch_code=$?
+          if [ "$patch_code" = "0" ]; then
+            gradle --no-daemon --console=plain -p android-stable :app:testDebugUnitTest :app:lintDebug :app:assembleDebug > v1.6-gradle.log 2>&1
+            gradle_code=$?
+          else
+            gradle_code=99
+            : > v1.6-gradle.log
+          fi
+          echo "$patch_code" > v1.6-patch-exit-code.txt
+          echo "$gradle_code" > v1.6-gradle-exit-code.txt
+          exit 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Multyfi-v1.6-gradle-debug
+          path: |
+            v1.6-patch.log
+            v1.6-gradle.log
+            v1.6-patch-exit-code.txt
+            v1.6-gradle-exit-code.txt
+          if-no-files-found: error

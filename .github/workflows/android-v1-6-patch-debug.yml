@@ -1,0 +1,29 @@
+name: Debug Multyfi v1.6 patch
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'android-stable/**'
+      - '.github/workflows/android-v1-6-patch-debug.yml'
+
+jobs:
+  patch-debug:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run patch and capture traceback
+        shell: bash
+        run: |
+          set +e
+          python3 android-stable/apply_v1_6_patch.py > v1.6-patch.log 2>&1
+          echo $? > v1.6-patch-exit-code.txt
+          cat v1.6-patch.log
+          exit 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Multyfi-v1.6-patch-debug
+          path: |
+            v1.6-patch.log
+            v1.6-patch-exit-code.txt
+          if-no-files-found: error
