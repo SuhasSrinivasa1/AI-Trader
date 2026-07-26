@@ -1,0 +1,466 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="18dp"
+        android:paddingTop="22dp"
+        android:paddingEnd="18dp"
+        android:paddingBottom="36dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:letterSpacing="0.12"
+            android:text="PRIVATE S24 TRADING BRIDGE"
+            android:textColor="@color/accent"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="5dp"
+            android:text="Multyfi AutoBuy"
+            android:textColor="@color/text_primary"
+            android:textSize="30sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="3dp"
+            android:text="Galaxy S24 Ultra • Android 16 • Three-window immediate execution"
+            android:textColor="@color/text_secondary"
+            android:textSize="14sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="SYSTEM STATUS"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/systemStatus"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="SETUP REQUIRED"
+                        android:textColor="@color/warning"
+                        android:textSize="24sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <Switch
+                    android:id="@+id/armedSwitch"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="false"
+                    android:contentDescription="Live automatic entries" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/statusDetail"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="Complete setup before arming automatic entries."
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/notificationStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="● Notification access: not granted"
+                android:textColor="@color/danger"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/authStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="● Groww + DDPI: not verified"
+                android:textColor="@color/danger"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/ipStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="● Surfshark Dedicated IP: not verified"
+                android:textColor="@color/danger"
+                android:textSize="14sp" />
+
+            <Button
+                android:id="@+id/openNotificationAccess"
+                style="@style/SecondaryButton"
+                android:text="Open notification access" />
+
+            <Button
+                android:id="@+id/openBatterySettings"
+                style="@style/SecondaryButton"
+                android:text="Open battery optimisation settings" />
+
+            <Button
+                android:id="@+id/openVpnSettings"
+                style="@style/SecondaryButton"
+                android:text="Open VPN / Always-on VPN settings" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical">
+
+            <TextView style="@style/SectionTitle" android:text="AUTONOMOUS EXECUTION POLICY" />
+
+            <TextView
+                android:id="@+id/rulesSummary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:lineSpacingMultiplier="1.15"
+                android:textColor="@color/text_primary"
+                android:textSize="14sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="The app reads Multyfi notification title, text, expanded text and text lines directly. No screenshot or manual expansion is required. Network, broker and exchange latency cannot be eliminated."
+                android:textColor="@color/warning"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical">
+
+            <TextView style="@style/SectionTitle" android:text="THREE TIME-WINDOW AMOUNTS" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="09:00–09:30 IST • Always MIS intraday • immediate LIMIT BUY"
+                android:textColor="@color/accent"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <EditText
+                android:id="@+id/window1BudgetInput"
+                android:layout_width="match_parent"
+                android:layout_height="54dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_field"
+                android:digits="0123456789."
+                android:hint="Amount in ₹ — default 10000"
+                android:inputType="numberDecimal"
+                android:maxLength="9"
+                android:singleLine="true"
+                android:textColor="@color/text_primary"
+                android:textColorHint="@color/text_secondary"
+                android:textSize="14sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="09:30–10:00 IST • Uses Multyfi product category • immediate LIMIT BUY"
+                android:textColor="@color/accent"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <EditText
+                android:id="@+id/window2BudgetInput"
+                android:layout_width="match_parent"
+                android:layout_height="54dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_field"
+                android:digits="0123456789."
+                android:hint="Amount in ₹ — default 10000"
+                android:inputType="numberDecimal"
+                android:maxLength="9"
+                android:singleLine="true"
+                android:textColor="@color/text_primary"
+                android:textColorHint="@color/text_secondary"
+                android:textSize="14sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="10:00–15:30 IST • Uses Multyfi product category • immediate LIMIT BUY"
+                android:textColor="@color/accent"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <EditText
+                android:id="@+id/window3BudgetInput"
+                android:layout_width="match_parent"
+                android:layout_height="54dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_field"
+                android:digits="0123456789."
+                android:hint="Amount in ₹ — default 5000"
+                android:inputType="numberDecimal"
+                android:maxLength="9"
+                android:singleLine="true"
+                android:textColor="@color/text_primary"
+                android:textColorHint="@color/text_secondary"
+                android:textSize="14sp" />
+
+            <EditText
+                android:id="@+id/bufferInput"
+                android:layout_width="match_parent"
+                android:layout_height="54dp"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/bg_field"
+                android:digits="0123456789."
+                android:hint="Entry buffer % — default 1.5, maximum 2.0"
+                android:inputType="numberDecimal"
+                android:maxLength="4"
+                android:singleLine="true"
+                android:textColor="@color/text_primary"
+                android:textColorHint="@color/text_secondary"
+                android:textSize="14sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="For every window: quantity = floor(saved amount ÷ maximum permitted buy price). Each amount is configurable from ₹1,000 to ₹5,00,000."
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical">
+
+            <TextView style="@style/SectionTitle" android:text="SURFSHARK DEDICATED IP" />
+
+            <TextView
+                android:id="@+id/currentIpStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Surfshark public IP: not checked"
+                android:textColor="@color/text_primary"
+                android:textIsSelectable="true"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/detectCopyIp"
+                style="@style/PrimaryButton"
+                android:text="Detect and copy Surfshark Dedicated IP" />
+
+            <EditText
+                android:id="@+id/expectedIpInput"
+                android:layout_width="match_parent"
+                android:layout_height="54dp"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_field"
+                android:hint="Dedicated IP whitelisted in Groww"
+                android:inputType="text"
+                android:singleLine="true"
+                android:textColor="@color/text_primary"
+                android:textColorHint="@color/text_secondary"
+                android:textSize="14sp" />
+
+            <CheckBox
+                android:id="@+id/staticIpConfirm"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="This exact Surfshark Dedicated IP is configured in Groww Trading APIs"
+                android:textColor="@color/text_primary"
+                android:textSize="13sp" />
+
+            <Button
+                android:id="@+id/verifyIp"
+                style="@style/SecondaryButton"
+                android:text="Verify Surfshark IP against Groww" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Enable Surfshark Always-on VPN and Block connections without VPN. The app auto-disarms new entries if the VPN or Dedicated IP changes."
+                android:textColor="@color/warning"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical">
+
+            <TextView style="@style/SectionTitle" android:text="SECURE GROWW SETUP" />
+
+            <EditText
+                android:id="@+id/apiKeyInput"
+                android:layout_width="match_parent"
+                android:layout_height="54dp"
+                android:background="@drawable/bg_field"
+                android:hint="Groww API key"
+                android:inputType="textPassword"
+                android:singleLine="true"
+                android:textColor="@color/text_primary"
+                android:textColorHint="@color/text_secondary"
+                android:textSize="14sp" />
+
+            <EditText
+                android:id="@+id/totpSecretInput"
+                android:layout_width="match_parent"
+                android:layout_height="54dp"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_field"
+                android:hint="Groww TOTP secret (Base32)"
+                android:inputType="textPassword"
+                android:singleLine="true"
+                android:textColor="@color/text_primary"
+                android:textColorHint="@color/text_secondary"
+                android:textSize="14sp" />
+
+            <EditText
+                android:id="@+id/accessTokenInput"
+                android:layout_width="match_parent"
+                android:layout_height="54dp"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_field"
+                android:hint="Today’s access token (optional)"
+                android:inputType="textPassword"
+                android:singleLine="true"
+                android:textColor="@color/text_primary"
+                android:textColorHint="@color/text_secondary"
+                android:textSize="14sp" />
+
+            <Button
+                android:id="@+id/saveCredentials"
+                style="@style/PrimaryButton"
+                android:text="Save all settings securely" />
+
+            <Button
+                android:id="@+id/authenticateToday"
+                style="@style/SecondaryButton"
+                android:text="Authenticate today" />
+
+            <Button
+                android:id="@+id/verifyGroww"
+                style="@style/SecondaryButton"
+                android:text="Verify Groww account and DDPI" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical">
+
+            <TextView style="@style/SectionTitle" android:text="DEVICE ACCEPTANCE TEST" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Tests notification parsing, three time windows, forced 09:00–09:30 MIS routing and strict symbol-matched early exit locally. No order is submitted."
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+
+            <Button
+                android:id="@+id/parserTest"
+                style="@style/SecondaryButton"
+                android:text="Run window and early-exit parser test" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    style="@style/SectionTitle"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:text="LOCAL AUDIT LOG" />
+
+                <Button
+                    android:id="@+id/clearLog"
+                    android:layout_width="86dp"
+                    android:layout_height="42dp"
+                    android:background="@drawable/bg_button_secondary"
+                    android:text="Clear"
+                    android:textAllCaps="false"
+                    android:textColor="@color/text_primary"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/auditLog"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:fontFamily="monospace"
+                android:text="No events yet."
+                android:textColor="@color/text_primary"
+                android:textIsSelectable="true"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:gravity="center"
+            android:text="S24 Android 16 Release v1.6.0 • Private sideload • Auto-Buy OFF by default"
+            android:textColor="@color/text_secondary"
+            android:textSize="11sp" />
+    </LinearLayout>
+</ScrollView>
