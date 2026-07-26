@@ -19,7 +19,14 @@ import java.util.concurrent.TimeUnit;
 
 public final class StrategyMonitorService extends Service {
     private static final String CHANNEL_ID = "staged_trade_monitor";
-    private static final int NOTIFICATION_ID = 1401;
+    private static final int NOTIFICATION_ID = 1501;
+    private static final String ACTION_IMMEDIATE_TICK = "multyfi.action.IMMEDIATE_TICK";
+    private static final String EXTRA_EVENT_ID = "event_id";
+
+    private static final String EXIT_TARGET = "TARGET";
+    private static final String EXIT_INTRADAY_TIME = "INTRADAY_TIME";
+    private static final String EXIT_MULTYFI_EARLY = "MULTYFI_EARLY";
+
     private static final TimeZone IST = TimeZone.getTimeZone("Asia/Kolkata");
     private static final int MARKET_START = 9 * 60 + 15;
     private static final int MARKET_END = 15 * 60 + 30;
@@ -35,7 +42,24 @@ public final class StrategyMonitorService extends Service {
 
     static void ensureRunning(Context context) {
         if (!AppPrefs.isArmed(context) && StrategyStore.activeCount(context) <= 0) return;
+        start(context, null);
+    }
+
+    static void requestImmediateTick(Context context, String eventId) {
         Intent intent = new Intent(context, StrategyMonitorService.class);
+        intent.setAction(ACTION_IMMEDIATE_TICK);
+        intent.putExtra(EXTRA_EVENT_ID, eventId == null ? "" : eventId);
+        try {
+            context.startForegroundService(intent);
+        } catch (Exception e) {
+            AppPrefs.log(context, "EARLY EXIT MONITOR START FAILED",
+                    e.getClass().getSimpleName() + ": " + e.getMessage());
+        }
+    }
+
+    private static void start(Context context, Intent supplied) {
+        Intent intent = supplied == null
+                ? new Intent(context, StrategyMonitorService.class) : supplied;
         try {
             context.startForegroundService(intent);
         } catch (Exception e) {
@@ -49,14 +73,18 @@ public final class StrategyMonitorService extends Service {
         super.onCreate();
         createChannel();
         startForeground(NOTIFICATION_ID,
-                buildNotification("Starting Android 10 home-phone monitor…"));
+                buildNotification("Starting S24 Ultra autonomous monitor…"));
         executor = Executors.newSingleThreadScheduledExecutor();
-        executor.scheduleWithFixedDelay(this::safeTick, 1, 5, TimeUnit.SECONDS);
+        executor.scheduleWithFixedDelay(this::safeTick, 1, 3, TimeUnit.SECONDS);
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         updateNotification();
+        if (intent != null && ACTION_IMMEDIATE_TICK.equals(intent.getAction())
+                && executor != null) {
+            executor.execute(this::safeTick);
+        }
         return START_STICKY;
     }
 
@@ -78,11 +106,17 @@ public final class StrategyMonitorService extends Service {
             }
 
             boolean networkReady = NetworkUtil.isNetworkAvailable(this);
-            boolean staticIpReady = networkReady && refreshPublicIpIfDue();
+            boolean vpnReady = networkReady && NetworkUtil.isVpnActive(this);
+            boolean staticIpReady = vpnReady && refreshPublicIpIfDue();
+            if (!vpnReady && AppPrefs.isArmed(this)) {
+                AppPrefs.setArmed(this, false);
+                AppPrefs.log(this, "SURFSHARK VPN LOST — AUTO-DISARMED",
+                        "New entries are disabled because Android no longer reports an active VPN. Existing broker-side stop-loss GTTs remain active.");
+            }
             preflightAuthenticationIfDue(networkReady);
             updateNotification();
 
-            if (active.isEmpty() || !isMarketSession() || !networkReady) return;
+            if (active.isEmpty() || !networkReady) return;
             String token = TokenManager.validToken(this);
             if (token.isEmpty()) {
                 AppPrefs.clearAuthVerified(this);
@@ -125,9 +159,8 @@ public final class StrategyMonitorService extends Service {
             if (!match && AppPrefs.isArmed(this)) {
                 AppPrefs.setArmed(this, false);
                 AppPrefs.log(this, "PUBLIC IP CHANGED — AUTO-DISARMED",
-                        "Expected Groww-whitelisted IP " + expected + " but detected "
-                                + actual + " over " + NetworkUtil.connectionLabel(this)
-                                + ". Existing broker-side stop-loss GTTs remain active.");
+                        "Expected Groww-whitelisted Surfshark Dedicated IP "
+                                + expected + " but detected " + actual + ". Existing broker-side stop-loss GTTs remain active.");
             }
             return match;
         } catch (Exception e) {
@@ -148,7 +181,7 @@ public final class StrategyMonitorService extends Service {
             if (isAfterNine() && AppPrefs.isArmed(this)) {
                 AppPrefs.setArmed(this, false);
                 AppPrefs.log(this, "DAILY APPROVAL REQUIRED — AUTO-DISARMED",
-                        "Groww token could not be generated automatically. Open Groww's Cloud API Keys page and complete any required approval.");
+                        "Groww token could not be generated automatically. Complete any broker-required approval.");
             }
             return;
         }
@@ -174,7 +207,7 @@ public final class StrategyMonitorService extends Service {
         int remaining = strategy.remainingStrategyQuantity(position.value);
 
         if (Strategy.TARGET_SELL_PENDING.equals(strategy.state)) {
-            processTargetPending(token, strategy, remaining, staticIpReady);
+            processExitPending(token, strategy, remaining, staticIpReady);
             return;
         }
 
@@ -188,12 +221,17 @@ public final class StrategyMonitorService extends Service {
                     strategy.symbol + " • " + strategy.lastMessage);
         }
 
+        if (strategy.earlyExitRequested) {
+            processEarlyExit(token, strategy, remaining, staticIpReady);
+            return;
+        }
+
         if (strategy.observedFilledQuantity > strategy.protectedQuantity) {
             if (!staticIpReady) {
                 AppPrefs.setArmed(this, false);
-                strategy.lastMessage = "CRITICAL: Newly filled shares require stop-loss protection, but the current public IP is not Groww-whitelisted.";
+                strategy.lastMessage = "CRITICAL: Newly filled shares require stop-loss protection, but Surfshark/IP readiness is invalid.";
                 save(strategy);
-                AppPrefs.log(this, "UNPROTECTED FILL — IP MISMATCH",
+                AppPrefs.log(this, "UNPROTECTED FILL — NETWORK GATE FAILED",
                         strategy.symbol + " • " + strategy.lastMessage);
                 return;
             }
@@ -202,7 +240,7 @@ public final class StrategyMonitorService extends Service {
 
         if (remaining <= 0 && strategy.observedFilledQuantity > 0) {
             closeStrategy(strategy,
-                    "Position is no longer held; stop-loss, target, timed or manual exit completed.");
+                    "Position is no longer held; stop-loss, target, timed, early or manual exit completed.");
             return;
         }
 
@@ -210,7 +248,7 @@ public final class StrategyMonitorService extends Service {
                 && strategy.observedFilledQuantity < strategy.requestedQuantity
                 && !strategy.entrySmartOrderId.isEmpty()) {
             if (staticIpReady) cancelEntryRemainder(token, strategy);
-            else strategy.lastMessage = "Entry cutoff reached, but GTT cancellation is blocked by public-IP mismatch.";
+            else strategy.lastMessage = "Entry cutoff reached, but GTT cancellation is blocked by Surfshark/IP mismatch.";
         }
 
         if (strategy.observedFilledQuantity <= 0) {
@@ -236,8 +274,9 @@ public final class StrategyMonitorService extends Service {
             return;
         }
 
+        if (!isMarketSession()) return;
         if (strategy.isIntraday() && isIntradayForceExitTime()) {
-            executeExit(token, strategy, staticIpReady, true);
+            executeExit(token, strategy, staticIpReady, EXIT_INTRADAY_TIME);
             return;
         }
 
@@ -247,13 +286,51 @@ public final class StrategyMonitorService extends Service {
             return;
         }
         if (ltp.value >= strategy.targetPrice) {
-            executeExit(token, strategy, staticIpReady, false);
+            executeExit(token, strategy, staticIpReady, EXIT_TARGET);
         } else {
             strategy.lastMessage = "Protected " + strategy.protectedQuantity + " "
                     + strategy.productType + " shares • LTP ₹" + money(ltp.value)
                     + " • target ₹" + money(strategy.targetPrice) + ".";
             save(strategy);
         }
+    }
+
+    private void processEarlyExit(String token, Strategy strategy, int remaining,
+                                  boolean staticIpReady) {
+        if (!isMarketSession()) {
+            strategy.lastMessage = "Multyfi early exit is queued for the next market session; broker-side protection remains active.";
+            save(strategy);
+            return;
+        }
+        if (!staticIpReady) {
+            strategy.lastMessage = "Multyfi early exit requested, but Surfshark Dedicated IP is not verified. Protection remains active; no sell submitted.";
+            save(strategy);
+            return;
+        }
+
+        if (!cancelEntryAndVerify(token, strategy)) {
+            strategy.lastMessage = "Early exit requested, but the entry GTT/remainder could not be confirmed cancelled. No sell submitted to avoid a later duplicate buy.";
+            save(strategy);
+            return;
+        }
+
+        GrowwClient.IntResult refreshed = GrowwClient.getNetPositionQuantity(
+                token, strategy.symbol, strategy.productType);
+        if (!refreshed.success) {
+            strategy.lastMessage = "Entry GTT cancelled, but position could not be verified for early exit.";
+            save(strategy);
+            return;
+        }
+        remaining = strategy.remainingStrategyQuantity(refreshed.value);
+        int filled = detectFilledQuantity(token, strategy, remaining);
+        strategy.observedFilledQuantity = Math.max(strategy.observedFilledQuantity,
+                Math.min(strategy.requestedQuantity, filled));
+        if (remaining <= 0) {
+            closeStrategy(strategy,
+                    "Multyfi early exit cancelled the unfilled entry; no position existed.");
+            return;
+        }
+        executeExit(token, strategy, true, EXIT_MULTYFI_EARLY);
     }
 
     private int detectFilledQuantity(String token, Strategy strategy,
@@ -306,31 +383,42 @@ public final class StrategyMonitorService extends Service {
     }
 
     private void cancelEntryRemainder(String token, Strategy strategy) {
-        GrowwClient.SmartStatus entry = GrowwClient.getGtt(token,
-                strategy.entrySmartOrderId);
-        if (entry.success && isActiveStatus(entry.status)) {
-            GrowwClient.ApiResult cancelled = GrowwClient.cancelGtt(
-                    token, strategy.entrySmartOrderId);
-            if (cancelled.success) {
-                GrowwClient.SmartStatus verified = GrowwClient.getGtt(token,
-                        strategy.entrySmartOrderId);
-                if (verified.success
-                        && "CANCELLED".equalsIgnoreCase(verified.status)) {
-                    strategy.lastMessage = "Unfilled entry remainder cancelled and verified at the daily cutoff.";
-                    strategy.entrySmartOrderId = "";
-                    AppPrefs.log(this, "ENTRY REMAINDER CANCELLED",
-                            strategy.symbol + " • " + strategy.lastMessage);
-                }
-            }
+        if (cancelEntryAndVerify(token, strategy)) {
+            strategy.lastMessage = "Unfilled entry remainder cancelled and verified at the daily cutoff.";
+            AppPrefs.log(this, "ENTRY REMAINDER CANCELLED",
+                    strategy.symbol + " • " + strategy.lastMessage);
         }
         save(strategy);
     }
 
+    private boolean cancelEntryAndVerify(String token, Strategy strategy) {
+        if (strategy.entrySmartOrderId == null || strategy.entrySmartOrderId.isEmpty()) return true;
+        GrowwClient.SmartStatus entry = GrowwClient.getGtt(token,
+                strategy.entrySmartOrderId);
+        if (!entry.success) return false;
+        if (isTriggeredStatus(entry.status) || "CANCELLED".equalsIgnoreCase(entry.status)) {
+            strategy.entrySmartOrderId = "";
+            save(strategy);
+            return true;
+        }
+        if (!isActiveStatus(entry.status)) return false;
+        GrowwClient.ApiResult cancelled = GrowwClient.cancelGtt(
+                token, strategy.entrySmartOrderId);
+        if (!cancelled.success) return false;
+        GrowwClient.SmartStatus verified = GrowwClient.getGtt(token,
+                strategy.entrySmartOrderId);
+        if (!verified.success || !"CANCELLED".equalsIgnoreCase(verified.status)) return false;
+        strategy.entrySmartOrderId = "";
+        save(strategy);
+        return true;
+    }
+
     private void executeExit(String token, Strategy strategy,
-                             boolean staticIpReady, boolean timedIntradayExit) {
+                             boolean staticIpReady, String exitType) {
+        String label = exitLabel(exitType);
         if (!staticIpReady) {
-            strategy.lastMessage = (timedIntradayExit ? "Intraday time exit" : "Target reached")
-                    + ", but the public IP is not Groww-whitelisted. Stop-loss remains active; no sell submitted.";
+            strategy.lastMessage = label
+                    + " requested, but Surfshark Dedicated IP is not verified. Stop-loss remains active; no sell submitted.";
             save(strategy);
             return;
         }
@@ -339,19 +427,19 @@ public final class StrategyMonitorService extends Service {
             GrowwClient.SmartStatus before = GrowwClient.getGtt(token,
                     leg.smartOrderId);
             if (!before.success) {
-                strategy.lastMessage = "Exit requested, but stop-loss state could not be verified. No sell submitted.";
+                strategy.lastMessage = label + " requested, but stop-loss state could not be verified. No sell submitted.";
                 save(strategy);
                 return;
             }
             leg.status = before.status;
             if (isTriggeredStatus(before.status)) {
-                strategy.lastMessage = "Exit requested while stop-loss was already triggered. Waiting; no duplicate sell.";
+                strategy.lastMessage = label + " requested while stop-loss was already triggered. Waiting; no duplicate sell.";
                 save(strategy);
                 return;
             }
             if ("CANCELLED".equalsIgnoreCase(before.status)) continue;
             if (!isActiveStatus(before.status)) {
-                strategy.lastMessage = "Exit requested, but stop-loss state is "
+                strategy.lastMessage = label + " requested, but stop-loss state is "
                         + before.status + ". No sell submitted.";
                 save(strategy);
                 return;
@@ -359,7 +447,7 @@ public final class StrategyMonitorService extends Service {
             GrowwClient.ApiResult cancel = GrowwClient.cancelGtt(token,
                     leg.smartOrderId);
             if (!cancel.success) {
-                strategy.lastMessage = "Exit requested, but stop-loss cancellation failed. No sell submitted.";
+                strategy.lastMessage = label + " requested, but stop-loss cancellation failed. No sell submitted.";
                 save(strategy);
                 return;
             }
@@ -367,7 +455,7 @@ public final class StrategyMonitorService extends Service {
                     leg.smartOrderId);
             if (!verified.success
                     || !"CANCELLED".equalsIgnoreCase(verified.status)) {
-                strategy.lastMessage = "Exit requested, but stop-loss cancellation was not confirmed. No sell submitted.";
+                strategy.lastMessage = label + " requested, but stop-loss cancellation was not confirmed. No sell submitted.";
                 save(strategy);
                 return;
             }
@@ -384,19 +472,25 @@ public final class StrategyMonitorService extends Service {
         int remaining = strategy.remainingStrategyQuantity(position.value);
         if (remaining <= 0) {
             closeStrategy(strategy,
-                    "Position was already closed before exit submission.");
+                    "Position was already closed before " + label.toLowerCase(Locale.US) + " submission.");
             return;
         }
 
-        int sellQuantity = Math.min(remaining, strategy.observedFilledQuantity);
-        GrowwClient.ApiResult sell = timedIntradayExit
-                ? GrowwClient.placeTimedMarketSell(token, strategy, sellQuantity)
-                : GrowwClient.placeTargetMarketSell(token, strategy, sellQuantity);
+        int sellQuantity = Math.min(remaining,
+                Math.max(strategy.observedFilledQuantity, remaining));
+        GrowwClient.ApiResult sell;
+        if (EXIT_INTRADAY_TIME.equals(exitType)) {
+            sell = GrowwClient.placeTimedMarketSell(token, strategy, sellQuantity);
+        } else if (EXIT_MULTYFI_EARLY.equals(exitType)) {
+            sell = GrowwClient.placeEarlyExitMarketSell(token, strategy, sellQuantity);
+        } else {
+            sell = GrowwClient.placeTargetMarketSell(token, strategy, sellQuantity);
+        }
         if (!sell.success) {
             strategy.protectedQuantity = 0;
             strategy.stopLegs.clear();
             strategy.state = Strategy.PROTECTED;
-            strategy.lastMessage = "Exit sell failed after stop-loss cancellation. Re-creating protection. "
+            strategy.lastMessage = label + " sell failed after stop-loss cancellation. Re-creating protection. "
                     + sell.message;
             save(strategy);
             AppPrefs.log(this, "EXIT SELL FAILED",
@@ -406,21 +500,25 @@ public final class StrategyMonitorService extends Service {
         }
         strategy.targetOrderId = sell.id;
         strategy.targetOrderReferenceId = sell.secondaryId;
+        strategy.pendingExitLabel = label;
+        strategy.earlyExitRequested = false;
         strategy.state = Strategy.TARGET_SELL_PENDING;
-        strategy.lastMessage = (timedIntradayExit
-                ? "Intraday time exit" : "Target reached")
-                + ". Stop-loss cancellation confirmed and "
+        strategy.lastMessage = label
+                + ": stop-loss cancellation confirmed and "
                 + strategy.productType + " MARKET sell submitted.";
         save(strategy);
-        AppPrefs.log(this, timedIntradayExit
+        AppPrefs.log(this, EXIT_MULTYFI_EARLY.equals(exitType)
+                        ? "MULTYFI EARLY EXIT SUBMITTED"
+                        : EXIT_INTRADAY_TIME.equals(exitType)
                         ? "INTRADAY EXIT SUBMITTED" : "TARGET SELL SUBMITTED",
                 strategy.symbol + " • " + sell.message);
     }
 
-    private void processTargetPending(String token, Strategy strategy,
-                                      int remaining, boolean staticIpReady) {
+    private void processExitPending(String token, Strategy strategy,
+                                    int remaining, boolean staticIpReady) {
         if (remaining <= 0) {
-            closeStrategy(strategy, "Exit sell completed.");
+            closeStrategy(strategy, strategy.pendingExitLabel.isEmpty()
+                    ? "Exit sell completed." : strategy.pendingExitLabel + " completed.");
             return;
         }
         GrowwClient.OrderStatus status = GrowwClient.getOrderByReference(
@@ -432,12 +530,16 @@ public final class StrategyMonitorService extends Service {
         }
         strategy.targetFilledQuantity = status.filledQuantity;
         if (isRejectedOrCancelled(status.status)) {
+            boolean retryEarly = strategy.pendingExitLabel.toLowerCase(Locale.US)
+                    .contains("early");
             strategy.observedFilledQuantity = remaining;
             strategy.protectedQuantity = 0;
             strategy.stopLegs.clear();
             strategy.targetOrderId = "";
             strategy.targetOrderReferenceId = "";
+            strategy.pendingExitLabel = "";
             strategy.state = Strategy.PROTECTED;
+            strategy.earlyExitRequested = retryEarly;
             strategy.lastMessage = "Exit sell did not complete. Re-establishing stop-loss for "
                     + remaining + " shares.";
             save(strategy);
@@ -452,6 +554,7 @@ public final class StrategyMonitorService extends Service {
 
     private void closeStrategy(Strategy strategy, String reason) {
         strategy.state = Strategy.CLOSED;
+        strategy.earlyExitRequested = false;
         strategy.lastMessage = reason;
         strategy.updatedAt = System.currentTimeMillis();
         StrategyStore.upsert(this, strategy);
@@ -523,12 +626,18 @@ public final class StrategyMonitorService extends Service {
                 || "FAILED".equalsIgnoreCase(status);
     }
 
+    private static String exitLabel(String type) {
+        if (EXIT_MULTYFI_EARLY.equals(type)) return "Multyfi early exit";
+        if (EXIT_INTRADAY_TIME.equals(type)) return "Intraday time exit";
+        return "Target exit";
+    }
+
     private void createChannel() {
         NotificationManager manager = getSystemService(NotificationManager.class);
         if (manager == null) return;
         NotificationChannel channel = new NotificationChannel(CHANNEL_ID,
                 "Autonomous trade protection", NotificationManager.IMPORTANCE_LOW);
-        channel.setDescription("Verifies public IP and Groww readiness, monitors entry fills, stop-loss GTTs and target/intraday exits.");
+        channel.setDescription("Monitors Multyfi entries, early exits, Groww fills, stop-loss GTTs, targets, authentication and Surfshark Dedicated IP.");
         manager.createNotificationChannel(channel);
     }
 
@@ -538,7 +647,7 @@ public final class StrategyMonitorService extends Service {
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         return new Notification.Builder(this, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_launcher)
-                .setContentTitle("Multyfi AutoBuy home-phone monitor")
+                .setContentTitle("Multyfi AutoBuy S24 monitor")
                 .setContentText(text)
                 .setContentIntent(pending)
                 .setOngoing(true)
@@ -551,6 +660,7 @@ public final class StrategyMonitorService extends Service {
         String ip = AppPrefs.lastPublicIp(this);
         String text = (AppPrefs.isArmed(this) ? "Entries armed" : "New entries off")
                 + " • " + active + " active strateg" + (active == 1 ? "y" : "ies")
+                + " • Surfshark " + (NetworkUtil.isVpnActive(this) ? "on" : "off")
                 + " • IP " + (ip.isEmpty() ? "unchecked" : ip);
         NotificationManager manager = getSystemService(NotificationManager.class);
         if (manager != null) manager.notify(NOTIFICATION_ID,
