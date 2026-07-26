@@ -18,7 +18,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:letterSpacing="0.12"
-            android:text="DHRUVA MARKET INTELLIGENCE"
+            android:text="PRIVATE HOME TRADING BRIDGE"
             android:textColor="@color/accent"
             android:textSize="12sp"
             android:textStyle="bold" />
@@ -36,7 +36,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="3dp"
-            android:text="@string/subtitle"
+            android:text="LG G7 / Android 10 • Complete signal → adaptive GTT → protected exit"
             android:textColor="@color/text_secondary"
             android:textSize="14sp" />
 
@@ -72,7 +72,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="@string/status_not_ready"
+                        android:text="SETUP REQUIRED"
                         android:textColor="@color/warning"
                         android:textSize="24sp"
                         android:textStyle="bold" />
@@ -83,7 +83,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:checked="false"
-                    android:contentDescription="Live automatic buying" />
+                    android:contentDescription="Live automatic entries" />
             </LinearLayout>
 
             <TextView
@@ -91,7 +91,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:text="Complete setup before arming live automatic buying."
+                android:text="Complete setup before arming automatic entries."
                 android:textColor="@color/text_secondary"
                 android:textSize="13sp" />
 
@@ -109,7 +109,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="● Groww authentication: not verified"
+                android:text="● Groww + DDPI: not verified"
                 android:textColor="@color/danger"
                 android:textSize="14sp" />
 
@@ -118,14 +118,19 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="● VPN / static IP: not verified"
+                android:text="● Public/static IP: not verified"
                 android:textColor="@color/danger"
                 android:textSize="14sp" />
 
             <Button
                 android:id="@+id/openNotificationAccess"
                 style="@style/SecondaryButton"
-                android:text="@string/open_notification_access" />
+                android:text="Open notification access" />
+
+            <Button
+                android:id="@+id/openBatterySettings"
+                style="@style/SecondaryButton"
+                android:text="Open battery optimisation settings" />
         </LinearLayout>
 
         <LinearLayout
@@ -135,13 +140,12 @@
             android:background="@drawable/bg_card"
             android:orientation="vertical">
 
-            <TextView style="@style/SectionTitle" android:text="@string/locked_rules" />
+            <TextView style="@style/SectionTitle" android:text="AUTONOMOUS EXECUTION POLICY" />
 
             <TextView
                 android:id="@+id/rulesSummary"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="@string/rules_summary"
                 android:textColor="@color/text_primary"
                 android:textSize="14sp"
                 android:lineSpacingMultiplier="1.15" />
@@ -150,7 +154,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:text="@string/daily_approval_note"
+                android:text="Groww currently documents daily approval for API-key/TOTP access. This app attempts pre-market authentication automatically but cannot bypass a broker approval requirement."
                 android:textColor="@color/warning"
                 android:textSize="12sp" />
         </LinearLayout>
@@ -170,9 +174,24 @@
                 android:layout_height="54dp"
                 android:background="@drawable/bg_field"
                 android:digits="0123456789"
-                android:hint="@string/quantity_hint"
+                android:hint="Order quantity — default 10"
                 android:inputType="number"
                 android:maxLength="5"
+                android:singleLine="true"
+                android:textColor="@color/text_primary"
+                android:textColorHint="@color/text_secondary"
+                android:textSize="14sp" />
+
+            <EditText
+                android:id="@+id/bufferInput"
+                android:layout_width="match_parent"
+                android:layout_height="54dp"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_field"
+                android:digits="0123456789."
+                android:hint="Entry buffer % — default 1.5, maximum 2.0"
+                android:inputType="numberDecimal"
+                android:maxLength="4"
                 android:singleLine="true"
                 android:textColor="@color/text_primary"
                 android:textColorHint="@color/text_secondary"
@@ -182,8 +201,68 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="Default 10 shares. Allowed range: 1–10,000. The ₹5,00,000 order-value limit still applies."
+                android:text="Quantity 1–10,000. Entry buffer 0–2%. Maximum order value ₹5,00,000."
                 android:textColor="@color/text_secondary"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical">
+
+            <TextView style="@style/SectionTitle" android:text="PUBLIC / STATIC IP" />
+
+            <TextView
+                android:id="@+id/currentIpStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Current public IP: not checked"
+                android:textColor="@color/text_primary"
+                android:textIsSelectable="true"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/detectCopyIp"
+                style="@style/PrimaryButton"
+                android:text="Detect and copy current public IP" />
+
+            <EditText
+                android:id="@+id/expectedIpInput"
+                android:layout_width="match_parent"
+                android:layout_height="54dp"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_field"
+                android:hint="Public IP whitelisted in Groww"
+                android:inputType="text"
+                android:singleLine="true"
+                android:textColor="@color/text_primary"
+                android:textColorHint="@color/text_secondary"
+                android:textSize="14sp" />
+
+            <CheckBox
+                android:id="@+id/staticIpConfirm"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="This exact public IP is configured in Groww Trading APIs"
+                android:textColor="@color/text_primary"
+                android:textSize="13sp" />
+
+            <Button
+                android:id="@+id/verifyIp"
+                style="@style/SecondaryButton"
+                android:text="Verify current IP against Groww whitelist" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Home Wi-Fi is not automatically static. Use an ISP static IP or dedicated VPN IP. The app auto-disarms new entries if this public IP changes."
+                android:textColor="@color/warning"
                 android:textSize="12sp" />
         </LinearLayout>
 
@@ -201,7 +280,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="54dp"
                 android:background="@drawable/bg_field"
-                android:hint="@string/api_key_hint"
+                android:hint="Groww API key"
                 android:inputType="textPassword"
                 android:singleLine="true"
                 android:textColor="@color/text_primary"
@@ -214,7 +293,7 @@
                 android:layout_height="54dp"
                 android:layout_marginTop="10dp"
                 android:background="@drawable/bg_field"
-                android:hint="@string/totp_secret_hint"
+                android:hint="Groww TOTP secret (Base32)"
                 android:inputType="textPassword"
                 android:singleLine="true"
                 android:textColor="@color/text_primary"
@@ -227,54 +306,27 @@
                 android:layout_height="54dp"
                 android:layout_marginTop="10dp"
                 android:background="@drawable/bg_field"
-                android:hint="@string/access_token_hint"
+                android:hint="Today’s access token (optional)"
                 android:inputType="textPassword"
                 android:singleLine="true"
                 android:textColor="@color/text_primary"
                 android:textColorHint="@color/text_secondary"
                 android:textSize="14sp" />
 
-            <EditText
-                android:id="@+id/expectedIpInput"
-                android:layout_width="match_parent"
-                android:layout_height="54dp"
-                android:layout_marginTop="10dp"
-                android:background="@drawable/bg_field"
-                android:hint="@string/expected_ip_hint"
-                android:inputType="text"
-                android:singleLine="true"
-                android:textColor="@color/text_primary"
-                android:textColorHint="@color/text_secondary"
-                android:textSize="14sp" />
-
-            <CheckBox
-                android:id="@+id/staticIpConfirm"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:text="@string/static_ip_confirm"
-                android:textColor="@color/text_primary"
-                android:textSize="13sp" />
-
             <Button
                 android:id="@+id/saveCredentials"
                 style="@style/PrimaryButton"
-                android:text="@string/save_credentials" />
+                android:text="Save configuration securely" />
 
             <Button
                 android:id="@+id/authenticateToday"
                 style="@style/SecondaryButton"
-                android:text="@string/authenticate_today" />
+                android:text="Authenticate today" />
 
             <Button
                 android:id="@+id/verifyGroww"
                 style="@style/SecondaryButton"
-                android:text="@string/verify_groww" />
-
-            <Button
-                android:id="@+id/verifyIp"
-                style="@style/SecondaryButton"
-                android:text="@string/verify_ip" />
+                android:text="Verify Groww account and DDPI" />
         </LinearLayout>
 
         <LinearLayout
@@ -289,14 +341,14 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Parses the SGFIN sample locally. It never submits an order."
+                android:text="Tests equity, swing, multibagger, free-equity and intraday parsing locally. No order is submitted."
                 android:textColor="@color/text_secondary"
                 android:textSize="13sp" />
 
             <Button
                 android:id="@+id/parserTest"
                 style="@style/SecondaryButton"
-                android:text="@string/run_parser_test" />
+                android:text="Run multi-category parser test" />
         </LinearLayout>
 
         <LinearLayout
@@ -316,14 +368,14 @@
                     style="@style/SectionTitle"
                     android:layout_width="0dp"
                     android:layout_weight="1"
-                    android:text="@string/audit_log" />
+                    android:text="LOCAL AUDIT LOG" />
 
                 <Button
                     android:id="@+id/clearLog"
                     android:layout_width="86dp"
                     android:layout_height="42dp"
                     android:background="@drawable/bg_button_secondary"
-                    android:text="@string/clear_log"
+                    android:text="Clear"
                     android:textAllCaps="false"
                     android:textColor="@color/text_primary"
                     android:textSize="12sp" />
@@ -345,7 +397,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="18dp"
             android:gravity="center"
-            android:text="Stable Acceptance v1.1.0 • Groww credentials never leave this device except to Groww’s official API."
+            android:text="LG G7 Android 10 Home-Phone Candidate v1.4.0 • Private APK"
             android:textColor="@color/text_secondary"
             android:textSize="11sp" />
     </LinearLayout>
