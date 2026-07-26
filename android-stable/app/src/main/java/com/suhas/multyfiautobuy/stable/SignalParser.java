@@ -5,6 +5,7 @@ import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Calendar;
+import java.util.List;
 import java.util.Locale;
 import java.util.TimeZone;
 import java.util.regex.Matcher;
@@ -12,7 +13,7 @@ import java.util.regex.Pattern;
 
 final class SignalParser {
     private static final Pattern STOCK_PATTERN = Pattern.compile(
-            "(?i)(?:stock\\s*name|stock|symbol|scrip)\\s*[:\\-]\\s*([A-Z][A-Z0-9&._\\-]{0,24})");
+            "(?i)(?:stock\\s*name|stock|symbol|scrip|trading\\s*symbol)\\s*[:\\-]\\s*([A-Z][A-Z0-9&._\\-]{0,24})");
     private static final Pattern ENTRY_RANGE_PATTERN = Pattern.compile(
             "(?i)(?:entry|buy)\\s*(?:range|price|zone|at)?\\s*[:\\-]\\s*(?:₹|rs\\.?|inr)?\\s*([0-9,]+(?:\\.[0-9]+)?)\\s*(?:-|–|—|to)\\s*(?:₹|rs\\.?|inr)?\\s*([0-9,]+(?:\\.[0-9]+)?)");
     private static final Pattern ENTRY_SINGLE_PATTERN = Pattern.compile(
@@ -23,6 +24,8 @@ final class SignalParser {
             "(?i)(?:stop\\s*loss|stoploss|s\\.?l\\.?)\\s*[:\\-]\\s*(?:₹|rs\\.?|inr)?\\s*([0-9,]+(?:\\.[0-9]+)?)");
     private static final Pattern REJECT_ACTION_PATTERN = Pattern.compile(
             "(?im)^\\s*(?:sell(?!\\s*(?:price|point))|exit(?!\\s*(?:price|point))|book\\s+profit|target\\s+hit|stop\\s+loss\\s+hit)\\b|\\bfutures?\\b|\\boptions?\\b|commodity|\\bmcx\\b|f\\s*&\\s*o");
+    private static final Pattern EARLY_EXIT_PATTERN = Pattern.compile(
+            "(?i)\\b(?:exit(?:ing)?\\s+early|early\\s+exit|exit\\s+now|exit\\s+immediately|immediate\\s+exit|exit\\s+earlier\\s+than\\s+planned|earlier\\s+than\\s+planned|close\\s+(?:the\\s+)?position|square\\s*off\\s+now|exit\\s+at\\s+market)\\b");
     private static final Pattern INTRADAY_PATTERN = Pattern.compile("(?i)\\b(?:intraday|intra\\s*day|mis)\\b");
     private static final Pattern SWING_PATTERN = Pattern.compile("(?i)\\bswing\\b");
     private static final Pattern MULTIBAGGER_PATTERN = Pattern.compile("(?i)\\bmulti[- ]?bagger\\b");
@@ -43,6 +46,7 @@ final class SignalParser {
                               double bufferPercent) {
         if (rawText == null || rawText.trim().isEmpty()) return null;
         if (!AppPrefs.isValidEntryBuffer(bufferPercent)) return null;
+        if (EARLY_EXIT_PATTERN.matcher(rawText).find()) return null;
         if (REJECT_ACTION_PATTERN.matcher(rawText).find()) return null;
 
         Matcher stockMatcher = STOCK_PATTERN.matcher(rawText);
@@ -60,10 +64,6 @@ final class SignalParser {
 
         String category = category(rawText);
         String productType = "INTRADAY".equals(category) ? "MIS" : "CNC";
-
-        // Complete CNC recommendations may arrive pre-market, post-market or on weekends.
-        // They are allowed to create a GTT for a future trading session. Explicit intraday
-        // calls remain restricted to a safe same-day window.
         if ("MIS".equals(productType)
                 && !isAllowedIntradayEntryTime(notificationTimeMillis)) return null;
 
@@ -71,7 +71,6 @@ final class SignalParser {
         double maxBuy = floorToTick(high * (1d + bufferPercent / 100d), 0.05d);
         double targetPrice = floorToTick(target, 0.05d);
         double stopLossPrice = floorToTick(stopLoss, 0.05d);
-
         if (targetPrice <= maxBuy || stopLossPrice >= low) return null;
 
         String digest = sha256(symbol + "|" + low + "|" + high + "|"
@@ -84,6 +83,34 @@ final class SignalParser {
                 productType, low, high, recommendedTrigger, maxBuy,
                 bufferPercent, targetPrice, stopLossPrice,
                 notificationTimeMillis, rawText);
+    }
+
+    static EarlyExitSignal parseEarlyExit(String rawText, long notificationTimeMillis,
+                                          List<Strategy> activeStrategies) {
+        if (rawText == null || rawText.trim().isEmpty()
+                || activeStrategies == null || activeStrategies.isEmpty()) return null;
+        Matcher phraseMatcher = EARLY_EXIT_PATTERN.matcher(rawText);
+        if (!phraseMatcher.find()) return null;
+
+        String labelled = labelledSymbol(rawText);
+        Strategy matched = null;
+        for (Strategy strategy : activeStrategies) {
+            boolean symbolMatches = !labelled.isEmpty()
+                    ? strategy.symbol.equalsIgnoreCase(labelled)
+                    : containsSymbolToken(rawText, strategy.symbol);
+            if (!symbolMatches) continue;
+            if (matched != null && !matched.eventId.equals(strategy.eventId)) {
+                return null; // Ambiguous: never sell two strategies from an unclear alert.
+            }
+            matched = strategy;
+        }
+        if (matched == null) return null;
+        return new EarlyExitSignal(matched.eventId, matched.symbol,
+                phraseMatcher.group(), notificationTimeMillis, rawText);
+    }
+
+    static boolean containsEarlyExitPhrase(String rawText) {
+        return rawText != null && EARLY_EXIT_PATTERN.matcher(rawText).find();
     }
 
     static boolean isAllowedIntradayEntryTime(long epochMillis) {
@@ -121,6 +148,18 @@ final class SignalParser {
         return "EQUITY";
     }
 
+    private static String labelledSymbol(String rawText) {
+        Matcher matcher = STOCK_PATTERN.matcher(rawText);
+        return matcher.find() ? matcher.group(1).toUpperCase(Locale.US).trim() : "";
+    }
+
+    private static boolean containsSymbolToken(String rawText, String symbol) {
+        if (symbol == null || symbol.trim().isEmpty()) return false;
+        Pattern token = Pattern.compile("(?i)(?<![A-Z0-9&._-])"
+                + Pattern.quote(symbol.trim()) + "(?![A-Z0-9&._-])");
+        return token.matcher(rawText).find();
+    }
+
     private static double[] parseEntry(String rawText) {
         Matcher range = ENTRY_RANGE_PATTERN.matcher(rawText);
         if (range.find()) {
@@ -152,13 +191,28 @@ final class SignalParser {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] bytes = digest.digest(text.getBytes(StandardCharsets.UTF_8));
             StringBuilder builder = new StringBuilder();
-            for (byte b : bytes) {
-                builder.append(String.format(Locale.US, "%02x", b));
-            }
+            for (byte b : bytes) builder.append(String.format(Locale.US, "%02x", b));
             return builder.toString();
         } catch (Exception e) {
             return Integer.toHexString(text.hashCode())
                     + "00000000000000000000000000000000";
+        }
+    }
+
+    static final class EarlyExitSignal {
+        final String eventId;
+        final String symbol;
+        final String phrase;
+        final long notificationTimeMillis;
+        final String rawText;
+
+        EarlyExitSignal(String eventId, String symbol, String phrase,
+                        long notificationTimeMillis, String rawText) {
+            this.eventId = eventId;
+            this.symbol = symbol;
+            this.phrase = phrase;
+            this.notificationTimeMillis = notificationTimeMillis;
+            this.rawText = rawText;
         }
     }
 
@@ -206,15 +260,20 @@ final class SignalParser {
             return maxBuyPrice * quantity;
         }
 
-        String summary(int quantity) {
+        String summary(int quantity, double targetBudget) {
             return symbol + " | " + category + "/" + productType
                     + " | entry ₹" + money(entryLow) + "–₹" + money(entryHigh)
                     + " | buy cap ₹" + money(maxBuyPrice)
-                    + " (buffer "
-                    + String.format(Locale.US, "%.2f", bufferPercent) + "%)"
+                    + " (buffer " + String.format(Locale.US, "%.2f", bufferPercent) + "%)"
                     + " | target ₹" + money(targetPrice)
                     + " | SL ₹" + money(stopLossPrice)
-                    + " | qty " + quantity;
+                    + " | qty " + quantity
+                    + " | planned ₹" + money(maximumOrderValue(quantity))
+                    + " of ₹" + money(targetBudget) + " budget";
+        }
+
+        String summary(int quantity) {
+            return summary(quantity, maximumOrderValue(quantity));
         }
 
         private static String money(double value) {
