@@ -36,7 +36,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="3dp"
-            android:text="Galaxy S24 Ultra • Android 16 • Surfshark Dedicated IP"
+            android:text="Galaxy S24 Ultra • Android 16 • Three-window immediate execution"
             android:textColor="@color/text_secondary"
             android:textSize="14sp" />
 
@@ -159,7 +159,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:text="Brokerage and statutory charges still apply. Automation cannot guarantee profit, prevent slippage, or bypass Groww authentication and exchange restrictions."
+                android:text="The app reads Multyfi notification title, text, expanded text and text lines directly. No screenshot or manual expansion is required. Network, broker and exchange latency cannot be eliminated."
                 android:textColor="@color/warning"
                 android:textSize="12sp" />
         </LinearLayout>
@@ -171,15 +171,72 @@
             android:background="@drawable/bg_card"
             android:orientation="vertical">
 
-            <TextView style="@style/SectionTitle" android:text="TRADE SIZING" />
+            <TextView style="@style/SectionTitle" android:text="THREE TIME-WINDOW AMOUNTS" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="09:00–09:30 IST • Always MIS intraday • immediate LIMIT BUY"
+                android:textColor="@color/accent"
+                android:textSize="13sp"
+                android:textStyle="bold" />
 
             <EditText
-                android:id="@+id/budgetInput"
+                android:id="@+id/window1BudgetInput"
                 android:layout_width="match_parent"
                 android:layout_height="54dp"
+                android:layout_marginTop="8dp"
                 android:background="@drawable/bg_field"
                 android:digits="0123456789."
-                android:hint="Target trade value in ₹ — default 10000"
+                android:hint="Amount in ₹ — default 10000"
+                android:inputType="numberDecimal"
+                android:maxLength="9"
+                android:singleLine="true"
+                android:textColor="@color/text_primary"
+                android:textColorHint="@color/text_secondary"
+                android:textSize="14sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="09:30–10:00 IST • Uses Multyfi product category • immediate LIMIT BUY"
+                android:textColor="@color/accent"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <EditText
+                android:id="@+id/window2BudgetInput"
+                android:layout_width="match_parent"
+                android:layout_height="54dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_field"
+                android:digits="0123456789."
+                android:hint="Amount in ₹ — default 10000"
+                android:inputType="numberDecimal"
+                android:maxLength="9"
+                android:singleLine="true"
+                android:textColor="@color/text_primary"
+                android:textColorHint="@color/text_secondary"
+                android:textSize="14sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="10:00–15:30 IST • Uses Multyfi product category • immediate LIMIT BUY"
+                android:textColor="@color/accent"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <EditText
+                android:id="@+id/window3BudgetInput"
+                android:layout_width="match_parent"
+                android:layout_height="54dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_field"
+                android:digits="0123456789."
+                android:hint="Amount in ₹ — default 5000"
                 android:inputType="numberDecimal"
                 android:maxLength="9"
                 android:singleLine="true"
@@ -191,7 +248,7 @@
                 android:id="@+id/bufferInput"
                 android:layout_width="match_parent"
                 android:layout_height="54dp"
-                android:layout_marginTop="10dp"
+                android:layout_marginTop="12dp"
                 android:background="@drawable/bg_field"
                 android:digits="0123456789."
                 android:hint="Entry buffer % — default 1.5, maximum 2.0"
@@ -206,7 +263,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="Quantity is calculated automatically as floor(target value ÷ maximum permitted buy price), so the order does not exceed the configured budget."
+                android:text="For every window: quantity = floor(saved amount ÷ maximum permitted buy price). Each amount is configurable from ₹1,000 to ₹5,00,000."
                 android:textColor="@color/text_secondary"
                 android:textSize="12sp" />
         </LinearLayout>
@@ -321,7 +378,7 @@
             <Button
                 android:id="@+id/saveCredentials"
                 style="@style/PrimaryButton"
-                android:text="Save configuration securely" />
+                android:text="Save all settings securely" />
 
             <Button
                 android:id="@+id/authenticateToday"
@@ -346,14 +403,14 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Tests equity, swing, multibagger, free-equity, intraday and strict symbol-matched early-exit parsing locally. No order is submitted."
+                android:text="Tests notification parsing, three time windows, forced 09:00–09:30 MIS routing and strict symbol-matched early exit locally. No order is submitted."
                 android:textColor="@color/text_secondary"
                 android:textSize="13sp" />
 
             <Button
                 android:id="@+id/parserTest"
                 style="@style/SecondaryButton"
-                android:text="Run entry and early-exit parser test" />
+                android:text="Run window and early-exit parser test" />
         </LinearLayout>
 
         <LinearLayout
@@ -402,7 +459,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="18dp"
             android:gravity="center"
-            android:text="S24 Android 16 Release v1.5.0 • Private sideload • Auto-Buy OFF by default"
+            android:text="S24 Android 16 Release v1.6.0 • Private sideload • Auto-Buy OFF by default"
             android:textColor="@color/text_secondary"
             android:textSize="11sp" />
     </LinearLayout>
