@@ -72,8 +72,8 @@ final class GrowwClient {
 
     static ApiResult createEntryGtt(String accessToken, SignalParser.ParsedSignal signal,
                                     int quantity, double currentLtp) {
-        if (signal == null || currentLtp <= 0d) {
-            return ApiResult.failure("", "A valid signal and current LTP are required.", 0);
+        if (signal == null || currentLtp <= 0d || quantity <= 0) {
+            return ApiResult.failure("", "A valid signal, quantity and current LTP are required.", 0);
         }
         try {
             double trigger;
@@ -86,13 +86,12 @@ final class GrowwClient {
             } else if (currentLtp < signal.entryLow) {
                 trigger = signal.entryLow;
                 direction = "UP";
-                mode = "Price is below the recommendation; GTT triggers when it enters the range at ₹"
-                        + price(trigger) + ".";
+                mode = "Price is below the recommendation; GTT triggers at ₹" + price(trigger) + ".";
             } else {
                 trigger = Math.min(signal.maxBuyPrice,
                         SignalParser.ceilToTick(currentLtp + 0.05d, 0.05d));
                 direction = "UP";
-                mode = "Rapid-catch GTT placed one tick above LTP ₹" + price(currentLtp)
+                mode = "Rapid-catch GTT one tick above LTP ₹" + price(currentLtp)
                         + " with maximum limit ₹" + price(signal.maxBuyPrice) + ".";
             }
 
@@ -263,8 +262,15 @@ final class GrowwClient {
                 "Intraday time-exit");
     }
 
+    static ApiResult placeEarlyExitMarketSell(String accessToken, Strategy strategy,
+                                              int quantity) {
+        return placeMarketSell(accessToken, strategy, quantity, "EX",
+                "Multyfi early-exit");
+    }
+
     private static ApiResult placeMarketSell(String accessToken, Strategy strategy,
                                              int quantity, String prefix, String label) {
+        if (quantity <= 0) return ApiResult.failure("", "Sell quantity must be positive.", 0);
         try {
             String reference = reference(prefix, strategy.eventId, 0);
             JSONObject body = new JSONObject();
