@@ -8,11 +8,15 @@ import android.service.notification.StatusBarNotification;
 import android.text.TextUtils;
 
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.List;
+import java.util.Locale;
+import java.util.TimeZone;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public final class MultyfiNotificationService extends NotificationListenerService {
+    private static final TimeZone IST = TimeZone.getTimeZone("Asia/Kolkata");
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
     @Override
@@ -109,7 +113,7 @@ public final class MultyfiNotificationService extends NotificationListenerServic
             if (signal.maximumOrderValue(quantity) > AppPrefs.MAX_ORDER_VALUE) {
                 AppPrefs.log(this, "REJECTED — VALUE LIMIT", summary
                         + " • maximum value ₹"
-                        + String.format(java.util.Locale.US, "%.2f",
+                        + String.format(Locale.US, "%.2f",
                         signal.maximumOrderValue(quantity)));
                 return;
             }
@@ -141,24 +145,26 @@ public final class MultyfiNotificationService extends NotificationListenerServic
             }
 
             AppPrefs.log(this, "SUBMITTING ENTRY GTT", summary
-                    + " • LTP ₹"
-                    + String.format(java.util.Locale.US, "%.2f", ltp.value)
+                    + " • LTP ₹" + String.format(Locale.US, "%.2f", ltp.value)
                     + " • baseline " + signal.productType + " position "
                     + baseline.value + ".");
             GrowwClient.ApiResult result = GrowwClient.createEntryGtt(
                     token, signal, quantity, ltp.value);
             if (result.success) {
+                long lifecycleAnchor = lifecycleAnchor(signal);
                 Strategy strategy = new Strategy(signal.eventId, signal.symbol,
                         signal.category, signal.productType, quantity,
                         signal.targetPrice, signal.stopLossPrice, baseline.value,
-                        signal.referenceId, result.id,
-                        System.currentTimeMillis());
+                        signal.referenceId, result.id, lifecycleAnchor);
                 StrategyStore.upsert(this, strategy);
                 AppPrefs.markProcessed(this, signal.eventId);
                 AppPrefs.incrementDailyBuyCount(this);
                 AppPrefs.log(this, "ENTRY GTT CONFIRMED", summary + "\n"
                         + result.message
-                        + " Stop-loss will be created only for actual filled quantity.");
+                        + " Stop-loss will be created only for actual filled quantity."
+                        + (lifecycleAnchor > System.currentTimeMillis() + 60_000L
+                        ? " Off-hours CNC call is scheduled through the next trading session."
+                        : ""));
                 StrategyMonitorService.ensureRunning(this);
             } else if ("GA007".equals(result.errorCode)) {
                 AppPrefs.markProcessed(this, signal.eventId);
@@ -175,6 +181,28 @@ public final class MultyfiNotificationService extends NotificationListenerServic
         } finally {
             if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
         }
+    }
+
+    private long lifecycleAnchor(SignalParser.ParsedSignal signal) {
+        if (signal.isIntraday()) return signal.notificationTimeMillis;
+        Calendar calendar = Calendar.getInstance(IST, Locale.US);
+        calendar.setTimeInMillis(signal.notificationTimeMillis);
+        int day = calendar.get(Calendar.DAY_OF_WEEK);
+        int minute = calendar.get(Calendar.HOUR_OF_DAY) * 60
+                + calendar.get(Calendar.MINUTE);
+        boolean weekend = day == Calendar.SATURDAY || day == Calendar.SUNDAY;
+        if (!weekend && minute < 15 * 60 + 25) {
+            return signal.notificationTimeMillis;
+        }
+        do {
+            calendar.add(Calendar.DAY_OF_MONTH, 1);
+            day = calendar.get(Calendar.DAY_OF_WEEK);
+        } while (day == Calendar.SATURDAY || day == Calendar.SUNDAY);
+        calendar.set(Calendar.HOUR_OF_DAY, 9);
+        calendar.set(Calendar.MINUTE, 0);
+        calendar.set(Calendar.SECOND, 0);
+        calendar.set(Calendar.MILLISECOND, 0);
+        return calendar.getTimeInMillis();
     }
 
     private boolean ensureStaticPublicIp() {
