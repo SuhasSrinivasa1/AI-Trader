@@ -15,6 +15,8 @@ final class Strategy {
 
     final String eventId;
     final String symbol;
+    final String category;
+    final String productType;
     final int requestedQuantity;
     final double targetPrice;
     final double stopLossPrice;
@@ -32,11 +34,14 @@ final class Strategy {
     final long createdAt;
     long updatedAt;
 
-    Strategy(String eventId, String symbol, int requestedQuantity, double targetPrice,
-             double stopLossPrice, int baselinePositionQuantity, String entryReferenceId,
+    Strategy(String eventId, String symbol, String category, String productType,
+             int requestedQuantity, double targetPrice, double stopLossPrice,
+             int baselinePositionQuantity, String entryReferenceId,
              String entrySmartOrderId, long createdAt) {
         this.eventId = eventId;
         this.symbol = symbol;
+        this.category = category == null ? "EQUITY" : category;
+        this.productType = productType == null ? "CNC" : productType;
         this.requestedQuantity = requestedQuantity;
         this.targetPrice = targetPrice;
         this.stopLossPrice = stopLossPrice;
@@ -59,6 +64,8 @@ final class Strategy {
         return !CLOSED.equals(state) && !ERROR.equals(state);
     }
 
+    boolean isIntraday() { return "MIS".equalsIgnoreCase(productType); }
+
     int remainingStrategyQuantity(int currentPositionQuantity) {
         return Math.max(0, currentPositionQuantity - baselinePositionQuantity);
     }
@@ -67,6 +74,8 @@ final class Strategy {
         JSONObject json = new JSONObject();
         json.put("event_id", eventId);
         json.put("symbol", symbol);
+        json.put("category", category);
+        json.put("product_type", productType);
         json.put("requested_quantity", requestedQuantity);
         json.put("target_price", targetPrice);
         json.put("stop_loss_price", stopLossPrice);
@@ -92,6 +101,8 @@ final class Strategy {
         Strategy strategy = new Strategy(
                 json.getString("event_id"),
                 json.getString("symbol"),
+                json.optString("category", "EQUITY"),
+                json.optString("product_type", "CNC"),
                 json.getInt("requested_quantity"),
                 json.getDouble("target_price"),
                 json.getDouble("stop_loss_price"),
@@ -104,7 +115,9 @@ final class Strategy {
         strategy.stopLegs.clear();
         JSONArray legs = json.optJSONArray("stop_legs");
         if (legs != null) {
-            for (int i = 0; i < legs.length(); i++) strategy.stopLegs.add(StopLeg.fromJson(legs.getJSONObject(i)));
+            for (int i = 0; i < legs.length(); i++) {
+                strategy.stopLegs.add(StopLeg.fromJson(legs.getJSONObject(i)));
+            }
         }
         strategy.targetOrderReferenceId = json.optString("target_order_reference_id", "");
         strategy.targetOrderId = json.optString("target_order_id", "");
