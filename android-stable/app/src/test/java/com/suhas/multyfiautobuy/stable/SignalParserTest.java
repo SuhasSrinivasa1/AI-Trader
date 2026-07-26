@@ -9,6 +9,8 @@ import org.junit.Test;
 
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.util.Arrays;
+import java.util.Collections;
 
 public class SignalParserTest {
     @Test
@@ -26,20 +28,17 @@ public class SignalParserTest {
         assertEquals("CNC", signal.productType);
         assertEquals(681.00d, signal.entryLow, 0.001d);
         assertEquals(684.00d, signal.entryHigh, 0.001d);
-        assertEquals(681.00d, signal.triggerPrice, 0.001d);
         assertEquals(694.25d, signal.maxBuyPrice, 0.001d);
         assertEquals(720.00d, signal.targetPrice, 0.001d);
         assertEquals(676.00d, signal.stopLossPrice, 0.001d);
-        assertEquals(6_942.5d, signal.maximumOrderValue(10), 0.01d);
-        assertTrue(signal.summary(10).contains("buffer 1.50%"));
-        assertTrue(signal.referenceId.length() >= 8
-                && signal.referenceId.length() <= 20);
+        assertTrue(signal.summary(14, 10_000d).contains("planned ₹9719.50"));
+        assertTrue(signal.summary(14, 10_000d).contains("budget"));
     }
 
     @Test
     public void supportsConfiguredTwoPercentBuffer() {
         String sample = "Swing Call\nStock: TCS\nBuy Price: 3000-3010\n"
-                + "Sell Price: 3100\nSL: 2975";
+                + "Sell Price: 3200\nSL: 2975";
         SignalParser.ParsedSignal signal = SignalParser.parse(sample,
                 atIst(2026, 7, 24, 10, 0), 2.0d);
         assertNotNull(signal);
@@ -81,6 +80,37 @@ public class SignalParserTest {
     }
 
     @Test
+    public void parsesEarlyExitOnlyForOneUniqueActiveSymbol() {
+        long time = atIst(2026, 7, 24, 10, 0);
+        Strategy tcs = new Strategy("a", "TCS", "EQUITY", "CNC",
+                3, 3300, 3150, 0, "R1", "G1", time);
+        Strategy infy = new Strategy("b", "INFY", "SWING", "CNC",
+                5, 1700, 1570, 0, "R2", "G2", time);
+
+        SignalParser.EarlyExitSignal exit = SignalParser.parseEarlyExit(
+                "Exiting early\nStock Name: TCS", time,
+                Arrays.asList(tcs, infy));
+        assertNotNull(exit);
+        assertEquals("TCS", exit.symbol);
+        assertEquals("a", exit.eventId);
+
+        assertNotNull(SignalParser.parseEarlyExit(
+                "Exit earlier than planned for INFY", time,
+                Arrays.asList(tcs, infy)));
+        assertNull(SignalParser.parseEarlyExit(
+                "Exiting early", time, Arrays.asList(tcs, infy)));
+        assertNull(SignalParser.parseEarlyExit(
+                "Market update for TCS", time, Collections.singletonList(tcs)));
+    }
+
+    @Test
+    public void earlyExitNotificationIsNeverParsedAsANewBuy() {
+        long time = atIst(2026, 7, 24, 10, 0);
+        String text = "Exiting early\nStock Name: TCS\nEntry: 3000\nTarget: 3200\nStop Loss: 2950";
+        assertNull(SignalParser.parse(text, time));
+    }
+
+    @Test
     public void rejectsIncompleteAndInconsistentSignals() {
         long time = atIst(2026, 7, 24, 10, 0);
         assertNull(SignalParser.parse(
@@ -103,12 +133,12 @@ public class SignalParserTest {
     }
 
     @Test
-    public void validatesQuantityAndBufferBounds() {
-        assertTrue(AppPrefs.isValidQuantity(1));
-        assertTrue(AppPrefs.isValidQuantity(10));
-        assertTrue(AppPrefs.isValidQuantity(10_000));
-        assertTrue(!AppPrefs.isValidQuantity(0));
-        assertTrue(!AppPrefs.isValidQuantity(10_001));
+    public void validatesBudgetAndBufferBounds() {
+        assertTrue(AppPrefs.isValidTradeBudget(1_000d));
+        assertTrue(AppPrefs.isValidTradeBudget(10_000d));
+        assertTrue(AppPrefs.isValidTradeBudget(500_000d));
+        assertTrue(!AppPrefs.isValidTradeBudget(999d));
+        assertTrue(!AppPrefs.isValidTradeBudget(500_001d));
         assertTrue(AppPrefs.isValidEntryBuffer(0d));
         assertTrue(AppPrefs.isValidEntryBuffer(1.5d));
         assertTrue(AppPrefs.isValidEntryBuffer(2d));
