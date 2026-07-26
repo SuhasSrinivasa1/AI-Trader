@@ -51,6 +51,7 @@ jobs:
           PARSER=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/SignalParser.java
           PREFS=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/AppPrefs.java
           MAIN=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/MainActivity.java
+          SAFETY=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/RegularOrderSafety.java
           GRADLE=android-stable/app/build.gradle
           grep -q 'targetSdk 36' "$GRADLE"
           grep -q 'DEFAULT_TRADE_BUDGET = 10_000d' "$PREFS"
@@ -64,6 +65,8 @@ jobs:
           grep -q 'MULTYFI EARLY EXIT SUBMITTED' "$MONITOR"
           grep -q 'stop-loss cancellation was not confirmed' "$MONITOR"
           grep -q 'MULTYFI EARLY EXIT QUEUED' "$LISTENER"
+          grep -q 'cancelOpenCashOrder' "$LISTENER"
+          grep -q '/v1/order/cancel' "$SAFETY"
           grep -q 'Surfshark Dedicated IP' "$MAIN"
           ! grep -q 'child_legs' "$CLIENT"
 
@@ -79,7 +82,7 @@ jobs:
           sudo udevadm trigger --name-match=kvm
           ls -l /dev/kvm || true
 
-      - name: Android 16 install and startup acceptance
+      - name: Android 16 install and dashboard acceptance
         timeout-minutes: 14
         shell: bash
         run: |
@@ -109,11 +112,12 @@ jobs:
           if [ "$booted" != "1" ]; then echo 'Android 16 emulator did not complete boot.' >> "$OUT/acceptance-api36.log"; code=1; fi
           if [ "$booted" = "1" ]; then
             timeout 60 adb install -r "$OUT/Multyfi-AutoBuy-S24-Android16-v1.5.0.apk" >> "$OUT/acceptance-api36.log" 2>&1 || code=1
+            adb shell pm grant com.suhas.multyfiautobuy.stable android.permission.POST_NOTIFICATIONS >> "$OUT/acceptance-api36.log" 2>&1 || code=1
             adb logcat -c >> "$OUT/acceptance-api36.log" 2>&1
             timeout 30 adb shell am start -W -n com.suhas.multyfiautobuy.stable/.MainActivity >> "$OUT/acceptance-api36.log" 2>&1 || code=1
             sleep 10
             adb shell dumpsys activity activities > "$OUT/activity-api36.txt" 2>&1
-            if ! grep -q 'com.suhas.multyfiautobuy.stable/.MainActivity' "$OUT/activity-api36.txt"; then code=1; fi
+            if ! grep -q 'mResumedActivity.*com.suhas.multyfiautobuy.stable/.MainActivity' "$OUT/activity-api36.txt"; then code=1; fi
             adb logcat -d -v threadtime > "$OUT/logcat-api36.txt" 2>&1
             if grep -E 'FATAL EXCEPTION|Process: com.suhas.multyfiautobuy.stable|AndroidRuntime.*com.suhas.multyfiautobuy.stable' "$OUT/logcat-api36.txt" >> "$OUT/acceptance-api36.log"; then code=1; fi
             adb exec-out screencap -p > "$OUT/startup-api36.png" 2>> "$OUT/acceptance-api36.log"
