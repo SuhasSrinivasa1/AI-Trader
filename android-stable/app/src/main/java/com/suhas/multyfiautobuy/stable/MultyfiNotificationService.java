@@ -23,7 +23,7 @@ public final class MultyfiNotificationService extends NotificationListenerServic
     public void onListenerConnected() {
         super.onListenerConnected();
         AppPrefs.log(this, "LISTENER READY",
-                "Android connected the Multyfi complete-recommendation listener.");
+                "Android connected the Multyfi entry and early-exit listener.");
         StrategyMonitorService.ensureRunning(this);
     }
 
@@ -59,16 +59,41 @@ public final class MultyfiNotificationService extends NotificationListenerServic
             PowerManager manager = (PowerManager) getSystemService(POWER_SERVICE);
             if (manager != null) {
                 wakeLock = manager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,
-                        getPackageName() + ":multyfi-entry-gtt");
-                wakeLock.acquire(35_000L);
+                        getPackageName() + ":multyfi-notification");
+                wakeLock.acquire(45_000L);
+            }
+
+            List<Strategy> active = StrategyStore.active(this);
+            SignalParser.EarlyExitSignal earlyExit = SignalParser.parseEarlyExit(
+                    rawText, postTime, active);
+            if (earlyExit != null) {
+                queueEarlyExit(earlyExit);
+                return;
+            }
+            if (SignalParser.containsEarlyExitPhrase(rawText)) {
+                AppPrefs.log(this, "EARLY EXIT IGNORED — SYMBOL NOT UNIQUE",
+                        "An exit phrase was detected, but it did not identify exactly one active strategy. No sell was submitted.\n"
+                                + compact(rawText));
+                return;
             }
 
             double buffer = AppPrefs.entryBufferPercent(this);
             SignalParser.ParsedSignal signal = SignalParser.parse(
                     rawText, postTime, buffer);
             if (signal == null) return;
-            int quantity = AppPrefs.quantity(this);
-            String summary = signal.summary(quantity);
+
+            double budget = AppPrefs.tradeBudget(this);
+            int quantity = AppPrefs.quantityForBudget(this, signal.maxBuyPrice);
+            if (quantity < 1) {
+                AppPrefs.log(this, "REJECTED — BUDGET BELOW ONE SHARE",
+                        signal.symbol + " • maximum buy price ₹"
+                                + String.format(Locale.US, "%.2f", signal.maxBuyPrice)
+                                + " exceeds the configured ₹"
+                                + String.format(Locale.US, "%.2f", budget)
+                                + " trade budget.");
+                return;
+            }
+            String summary = signal.summary(quantity, budget);
 
             if (!AppPrefs.isArmed(this)) {
                 AppPrefs.log(this, "COMPLETE SIGNAL — DISARMED", summary);
@@ -93,9 +118,13 @@ public final class MultyfiNotificationService extends NotificationListenerServic
                 AppPrefs.log(this, "REJECTED — OFFLINE", summary);
                 return;
             }
+            if (!NetworkUtil.isVpnActive(this)) {
+                rejectAndDisarm("Surfshark Dedicated IP VPN is not active.", summary);
+                return;
+            }
             if (!ensureStaticPublicIp()) {
                 rejectAndDisarm(
-                        "Current public IP does not match the Groww-whitelisted IP.",
+                        "Current public IP does not match the Groww-whitelisted Surfshark Dedicated IP.",
                         summary);
                 return;
             }
@@ -104,17 +133,21 @@ public final class MultyfiNotificationService extends NotificationListenerServic
                 AppPrefs.log(this, "DUPLICATE BLOCKED", summary);
                 return;
             }
+            if (StrategyStore.hasActiveSymbol(this, signal.symbol)) {
+                AppPrefs.log(this, "REJECTED — SYMBOL ALREADY ACTIVE",
+                        summary + " • an existing strategy for " + signal.symbol
+                                + " is still active, preventing overlapping position accounting.");
+                return;
+            }
             if (AppPrefs.dailyBuyCount(this) >= AppPrefs.MAX_BUYS_PER_DAY) {
                 rejectAndDisarm(
                         "Maximum four automatic entry GTTs reached for today.",
                         summary);
                 return;
             }
-            if (signal.maximumOrderValue(quantity) > AppPrefs.MAX_ORDER_VALUE) {
-                AppPrefs.log(this, "REJECTED — VALUE LIMIT", summary
-                        + " • maximum value ₹"
-                        + String.format(Locale.US, "%.2f",
-                        signal.maximumOrderValue(quantity)));
+            if (signal.maximumOrderValue(quantity) > budget + 0.01d
+                    || signal.maximumOrderValue(quantity) > AppPrefs.MAX_ORDER_VALUE) {
+                AppPrefs.log(this, "REJECTED — VALUE LIMIT", summary);
                 return;
             }
 
@@ -183,6 +216,28 @@ public final class MultyfiNotificationService extends NotificationListenerServic
         }
     }
 
+    private void queueEarlyExit(SignalParser.EarlyExitSignal signal) {
+        long age = System.currentTimeMillis() - signal.notificationTimeMillis;
+        if (age > AppPrefs.MAX_EARLY_EXIT_AGE_MS || age < -60_000L) {
+            AppPrefs.log(this, "EARLY EXIT REJECTED — STALE",
+                    signal.symbol + " • age " + age + " ms");
+            return;
+        }
+        Strategy strategy = StrategyStore.find(this, signal.eventId);
+        if (strategy == null || !strategy.isActive()) {
+            AppPrefs.log(this, "EARLY EXIT IGNORED — NO ACTIVE STRATEGY",
+                    signal.symbol + " • " + signal.phrase);
+            return;
+        }
+        strategy.requestEarlyExit("Multyfi: " + signal.phrase,
+                signal.notificationTimeMillis);
+        StrategyStore.upsert(this, strategy);
+        AppPrefs.log(this, "MULTYFI EARLY EXIT QUEUED",
+                signal.symbol + " • " + signal.phrase
+                        + " • immediate broker reconciliation requested.");
+        StrategyMonitorService.requestImmediateTick(this, signal.eventId);
+    }
+
     private long lifecycleAnchor(SignalParser.ParsedSignal signal) {
         if (signal.isIntraday()) return signal.notificationTimeMillis;
         Calendar calendar = Calendar.getInstance(IST, Locale.US);
@@ -208,6 +263,7 @@ public final class MultyfiNotificationService extends NotificationListenerServic
     private boolean ensureStaticPublicIp() {
         String expected = AppPrefs.expectedIp(this);
         if (!AppPrefs.isStaticConfirmed(this) || expected.isEmpty()) return false;
+        if (!NetworkUtil.isVpnActive(this)) return false;
         if (AppPrefs.isIpRecentlyVerified(this)) return true;
         try {
             String actual = NetworkUtil.fetchPublicIp();
@@ -251,5 +307,11 @@ public final class MultyfiNotificationService extends NotificationListenerServic
         if (value == null) return;
         String text = value.toString().trim();
         if (!text.isEmpty() && !values.contains(text)) values.add(text);
+    }
+
+    private static String compact(String text) {
+        if (text == null) return "";
+        String value = text.replace('\n', ' ').replace('\r', ' ').trim();
+        return value.length() <= 300 ? value : value.substring(0, 300) + "…";
     }
 }
