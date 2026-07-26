@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 
 import java.text.SimpleDateFormat;
+import java.util.Calendar;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.Locale;
@@ -13,7 +14,9 @@ import java.util.TimeZone;
 final class AppPrefs {
     static final String MULTYFI_PACKAGE = "com.multyfi.invest";
 
-    static final double DEFAULT_TRADE_BUDGET = 10_000d;
+    static final double DEFAULT_WINDOW_1_BUDGET = 10_000d;
+    static final double DEFAULT_WINDOW_2_BUDGET = 10_000d;
+    static final double DEFAULT_WINDOW_3_BUDGET = 5_000d;
     static final double MIN_TRADE_BUDGET = 1_000d;
     static final double MAX_TRADE_BUDGET = 500_000d;
     static final int MAX_COMPUTED_QUANTITY = 10_000;
@@ -27,9 +30,17 @@ final class AppPrefs {
     static final long MAX_EARLY_EXIT_AGE_MS = 300_000L;
     static final long IP_VERIFICATION_MAX_AGE_MS = 2L * 60L * 1000L;
 
+    static final int WINDOW_1_START = 9 * 60;
+    static final int WINDOW_1_END = 9 * 60 + 30;
+    static final int WINDOW_2_END = 10 * 60;
+    static final int WINDOW_3_END = 15 * 60 + 30;
+
+    private static final TimeZone IST = TimeZone.getTimeZone("Asia/Kolkata");
     private static final String FILE = "stable_prefs";
     private static final String K_ARMED = "armed";
-    private static final String K_TRADE_BUDGET = "trade_budget";
+    private static final String K_WINDOW_1_BUDGET = "window_1_budget";
+    private static final String K_WINDOW_2_BUDGET = "window_2_budget";
+    private static final String K_WINDOW_3_BUDGET = "window_3_budget";
     private static final String K_ENTRY_BUFFER = "entry_buffer_percent";
     private static final String K_STATIC_CONFIRMED = "static_confirmed";
     private static final String K_EXPECTED_IP = "expected_ip";
@@ -56,11 +67,27 @@ final class AppPrefs {
         prefs(context).edit().putBoolean(K_ARMED, value).apply();
     }
 
+    static double window1Budget(Context context) {
+        return readBudget(context, K_WINDOW_1_BUDGET, DEFAULT_WINDOW_1_BUDGET);
+    }
+
+    static double window2Budget(Context context) {
+        return readBudget(context, K_WINDOW_2_BUDGET, DEFAULT_WINDOW_2_BUDGET);
+    }
+
+    static double window3Budget(Context context) {
+        return readBudget(context, K_WINDOW_3_BUDGET, DEFAULT_WINDOW_3_BUDGET);
+    }
+
+    // Compatibility helper used by older local tests and migration paths.
     static double tradeBudget(Context context) {
-        long bits = prefs(context).getLong(K_TRADE_BUDGET,
-                Double.doubleToRawLongBits(DEFAULT_TRADE_BUDGET));
+        return window1Budget(context);
+    }
+
+    private static double readBudget(Context context, String key, double fallback) {
+        long bits = prefs(context).getLong(key, Double.doubleToRawLongBits(fallback));
         double value = Double.longBitsToDouble(bits);
-        return isValidTradeBudget(value) ? value : DEFAULT_TRADE_BUDGET;
+        return isValidTradeBudget(value) ? value : fallback;
     }
 
     static boolean isValidTradeBudget(double value) {
@@ -68,18 +95,59 @@ final class AppPrefs {
                 && value >= MIN_TRADE_BUDGET && value <= MAX_TRADE_BUDGET;
     }
 
-    static void setTradeBudget(Context context, double value) {
-        if (!isValidTradeBudget(value)) {
-            throw new IllegalArgumentException("Trade budget must be between ₹1,000 and ₹5,00,000.");
+    static void setWindowBudgets(Context context, double first, double second, double third) {
+        if (!isValidTradeBudget(first) || !isValidTradeBudget(second)
+                || !isValidTradeBudget(third)) {
+            throw new IllegalArgumentException("Each window amount must be between ₹1,000 and ₹5,00,000.");
         }
-        prefs(context).edit().putLong(K_TRADE_BUDGET,
-                Double.doubleToRawLongBits(value)).apply();
+        prefs(context).edit()
+                .putLong(K_WINDOW_1_BUDGET, Double.doubleToRawLongBits(first))
+                .putLong(K_WINDOW_2_BUDGET, Double.doubleToRawLongBits(second))
+                .putLong(K_WINDOW_3_BUDGET, Double.doubleToRawLongBits(third))
+                .apply();
+    }
+
+    static void setTradeBudget(Context context, double value) {
+        setWindowBudgets(context, value, window2Budget(context), window3Budget(context));
+    }
+
+    static int quantityForBudget(double budget, double maximumBuyPrice) {
+        if (!isValidTradeBudget(budget) || maximumBuyPrice <= 0d) return 0;
+        int quantity = (int) Math.floor(budget / maximumBuyPrice);
+        return Math.max(0, Math.min(MAX_COMPUTED_QUANTITY, quantity));
     }
 
     static int quantityForBudget(Context context, double maximumBuyPrice) {
-        if (maximumBuyPrice <= 0d) return 0;
-        int quantity = (int) Math.floor(tradeBudget(context) / maximumBuyPrice);
-        return Math.max(0, Math.min(MAX_COMPUTED_QUANTITY, quantity));
+        return quantityForBudget(tradeBudget(context), maximumBuyPrice);
+    }
+
+    static TradeWindow tradeWindow(Context context, long epochMillis) {
+        Calendar calendar = Calendar.getInstance(IST, Locale.US);
+        calendar.setTimeInMillis(epochMillis);
+        int day = calendar.get(Calendar.DAY_OF_WEEK);
+        if (day == Calendar.SATURDAY || day == Calendar.SUNDAY) return null;
+        int minute = calendar.get(Calendar.HOUR_OF_DAY) * 60 + calendar.get(Calendar.MINUTE);
+        if (minute < WINDOW_1_START || minute > WINDOW_3_END) return null;
+
+        if (minute < WINDOW_1_END) {
+            return new TradeWindow(1, "09:00–09:30", window1Budget(context), true,
+                    cutoffMillis(calendar, 10, 0));
+        }
+        if (minute < WINDOW_2_END) {
+            return new TradeWindow(2, "09:30–10:00", window2Budget(context), false,
+                    cutoffMillis(calendar, 10, 30));
+        }
+        return new TradeWindow(3, "10:00–15:30", window3Budget(context), false,
+                cutoffMillis(calendar, 15, 25));
+    }
+
+    private static long cutoffMillis(Calendar source, int hour, int minute) {
+        Calendar cutoff = (Calendar) source.clone();
+        cutoff.set(Calendar.HOUR_OF_DAY, hour);
+        cutoff.set(Calendar.MINUTE, minute);
+        cutoff.set(Calendar.SECOND, 0);
+        cutoff.set(Calendar.MILLISECOND, 0);
+        return cutoff.getTimeInMillis();
     }
 
     static double entryBufferPercent(Context context) {
@@ -217,19 +285,19 @@ final class AppPrefs {
 
     static String istDate() {
         SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd", Locale.US);
-        format.setTimeZone(TimeZone.getTimeZone("Asia/Kolkata"));
+        format.setTimeZone(IST);
         return format.format(new Date());
     }
 
     static String compactIstDate() {
         SimpleDateFormat format = new SimpleDateFormat("yyMMdd", Locale.US);
-        format.setTimeZone(TimeZone.getTimeZone("Asia/Kolkata"));
+        format.setTimeZone(IST);
         return format.format(new Date());
     }
 
     private static String nowIst() {
         SimpleDateFormat format = new SimpleDateFormat("dd MMM, HH:mm:ss", Locale.US);
-        format.setTimeZone(TimeZone.getTimeZone("Asia/Kolkata"));
+        format.setTimeZone(IST);
         return format.format(new Date()) + " IST";
     }
 
@@ -237,5 +305,22 @@ final class AppPrefs {
         if (message == null) return "";
         String value = message.replace('\r', ' ').trim();
         return value.length() <= 1_100 ? value : value.substring(0, 1_100) + "…";
+    }
+
+    static final class TradeWindow {
+        final int index;
+        final String label;
+        final double budget;
+        final boolean forceMis;
+        final long entryCancelAt;
+
+        TradeWindow(int index, String label, double budget,
+                    boolean forceMis, long entryCancelAt) {
+            this.index = index;
+            this.label = label;
+            this.budget = budget;
+            this.forceMis = forceMis;
+            this.entryCancelAt = entryCancelAt;
+        }
     }
 }
