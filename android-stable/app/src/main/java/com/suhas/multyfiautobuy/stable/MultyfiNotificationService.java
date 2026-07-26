@@ -229,13 +229,93 @@ public final class MultyfiNotificationService extends NotificationListenerServic
                     signal.symbol + " • " + signal.phrase);
             return;
         }
+        if (!NetworkUtil.isNetworkAvailable(this) || !NetworkUtil.isVpnActive(this)
+                || !ensureStaticPublicIp()) {
+            AppPrefs.log(this, "EARLY EXIT BLOCKED — SURFSHARK/IP NOT READY",
+                    signal.symbol + " • the existing broker-side stop-loss remains active.");
+            return;
+        }
+        String token = TokenManager.validToken(this);
+        if (token.isEmpty()) {
+            AppPrefs.log(this, "EARLY EXIT BLOCKED — GROWW AUTH UNAVAILABLE",
+                    signal.symbol + " • the existing broker-side stop-loss remains active.");
+            return;
+        }
+        if (!prepareEntryForEarlyExit(token, strategy)) {
+            AppPrefs.log(this, "EARLY EXIT SAFETY PRECHECK FAILED",
+                    signal.symbol + " • entry GTT/order remainder was not confirmed cancelled or terminal. No sell was queued to avoid a later duplicate buy.");
+            return;
+        }
+
         strategy.requestEarlyExit("Multyfi: " + signal.phrase,
                 signal.notificationTimeMillis);
         StrategyStore.upsert(this, strategy);
         AppPrefs.log(this, "MULTYFI EARLY EXIT QUEUED",
                 signal.symbol + " • " + signal.phrase
-                        + " • immediate broker reconciliation requested.");
+                        + " • entry remainder safe; immediate broker reconciliation requested.");
         StrategyMonitorService.requestImmediateTick(this, signal.eventId);
+    }
+
+    private boolean prepareEntryForEarlyExit(String token, Strategy strategy) {
+        if (strategy.entrySmartOrderId == null || strategy.entrySmartOrderId.isEmpty()) {
+            return true;
+        }
+        GrowwClient.SmartStatus smart = GrowwClient.getGtt(token,
+                strategy.entrySmartOrderId);
+        if (!smart.success) return false;
+
+        if (isActiveSmartStatus(smart.status)) {
+            GrowwClient.ApiResult cancel = GrowwClient.cancelGtt(token,
+                    strategy.entrySmartOrderId);
+            if (!cancel.success) return false;
+            for (int i = 0; i < 5; i++) {
+                GrowwClient.SmartStatus verified = GrowwClient.getGtt(token,
+                        strategy.entrySmartOrderId);
+                if (verified.success
+                        && "CANCELLED".equalsIgnoreCase(verified.status)) {
+                    strategy.entrySmartOrderId = "";
+                    StrategyStore.upsert(this, strategy);
+                    return true;
+                }
+                sleep(250L);
+            }
+            return false;
+        }
+
+        if ("CANCELLED".equalsIgnoreCase(smart.status)) {
+            strategy.entrySmartOrderId = "";
+            StrategyStore.upsert(this, strategy);
+            return true;
+        }
+
+        if (isTriggeredSmartStatus(smart.status)) {
+            GrowwClient.OrderStatus order = GrowwClient.getOrderByReference(
+                    token, strategy.entryReferenceId);
+            if (!order.success) return false;
+            if (isOpenRegularOrderStatus(order.status)) {
+                if (order.orderId == null || order.orderId.isEmpty()) return false;
+                RegularOrderSafety.Result cancelled =
+                        RegularOrderSafety.cancelOpenCashOrder(token, order.orderId);
+                if (!cancelled.success) return false;
+                for (int i = 0; i < 8; i++) {
+                    order = GrowwClient.getOrderByReference(token,
+                            strategy.entryReferenceId);
+                    if (order.success && isTerminalRegularOrderStatus(order.status)) {
+                        strategy.entrySmartOrderId = "";
+                        StrategyStore.upsert(this, strategy);
+                        return true;
+                    }
+                    sleep(300L);
+                }
+                return false;
+            }
+            if (isTerminalRegularOrderStatus(order.status)) {
+                strategy.entrySmartOrderId = "";
+                StrategyStore.upsert(this, strategy);
+                return true;
+            }
+        }
+        return false;
     }
 
     private long lifecycleAnchor(SignalParser.ParsedSignal signal) {
@@ -285,6 +365,47 @@ public final class MultyfiNotificationService extends NotificationListenerServic
         AppPrefs.setArmed(this, false);
         AppPrefs.log(this, "REJECTED — AUTO-DISARMED",
                 summary + "\n" + reason);
+    }
+
+    private static boolean isActiveSmartStatus(String status) {
+        return "ACTIVE".equalsIgnoreCase(status)
+                || "OPEN".equalsIgnoreCase(status)
+                || "PENDING".equalsIgnoreCase(status);
+    }
+
+    private static boolean isTriggeredSmartStatus(String status) {
+        return "TRIGGERED".equalsIgnoreCase(status)
+                || "COMPLETED".equalsIgnoreCase(status)
+                || "COMPLETE".equalsIgnoreCase(status)
+                || "EXECUTED".equalsIgnoreCase(status);
+    }
+
+    private static boolean isOpenRegularOrderStatus(String status) {
+        return "NEW".equalsIgnoreCase(status)
+                || "ACKED".equalsIgnoreCase(status)
+                || "TRIGGER_PENDING".equalsIgnoreCase(status)
+                || "APPROVED".equalsIgnoreCase(status)
+                || "OPEN".equalsIgnoreCase(status)
+                || "PENDING".equalsIgnoreCase(status)
+                || "PARTIALLY_FILLED".equalsIgnoreCase(status)
+                || "PARTIAL".equalsIgnoreCase(status)
+                || "CANCELLATION_REQUESTED".equalsIgnoreCase(status);
+    }
+
+    private static boolean isTerminalRegularOrderStatus(String status) {
+        return "EXECUTED".equalsIgnoreCase(status)
+                || "DELIVERY_AWAITED".equalsIgnoreCase(status)
+                || "CANCELLED".equalsIgnoreCase(status)
+                || "CANCELED".equalsIgnoreCase(status)
+                || "COMPLETED".equalsIgnoreCase(status)
+                || "COMPLETE".equalsIgnoreCase(status)
+                || "REJECTED".equalsIgnoreCase(status)
+                || "FAILED".equalsIgnoreCase(status);
+    }
+
+    private static void sleep(long millis) {
+        try { Thread.sleep(millis); }
+        catch (InterruptedException e) { Thread.currentThread().interrupt(); }
     }
 
     private static String extractText(Notification notification) {
