@@ -4,14 +4,14 @@ plugins {
 
 android {
     namespace 'com.suhas.multyfiautobuy.stable'
-    compileSdk 35
+    compileSdk 36
 
     defaultConfig {
         applicationId 'com.suhas.multyfiautobuy.stable'
         minSdk 28
-        targetSdk 35
-        versionCode 140
-        versionName '1.4.0'
+        targetSdk 36
+        versionCode 150
+        versionName '1.5.0'
         testInstrumentationRunner 'android.test.InstrumentationTestRunner'
     }
 
