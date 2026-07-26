@@ -131,8 +131,8 @@ jobs:
             if ! grep -q 'PRIVATE S24 TRADING BRIDGE' "$OUT/ui-api36.xml"; then code=1; fi
             if ! grep -q 'THREE TIME-WINDOW AMOUNTS' "$OUT/ui-api36.xml"; then code=1; fi
             if ! grep -q '09:00–09:30 IST' "$OUT/ui-api36.xml"; then code=1; fi
-            if ! grep -q 'default 10000' "$OUT/ui-api36.xml"; then code=1; fi
-            if ! grep -q 'default 5000' "$OUT/ui-api36.xml"; then code=1; fi
+            if [ "$(grep -o 'text=&quot;10000&quot;' "$OUT/ui-api36.xml" | wc -l)" -lt 2 ]; then code=1; fi
+            if ! grep -q 'text=&quot;5000&quot;' "$OUT/ui-api36.xml"; then code=1; fi
             adb logcat -d -v threadtime > "$OUT/logcat-api36.txt" 2>&1
             if grep -E 'FATAL EXCEPTION|Process: com.suhas.multyfiautobuy.stable|AndroidRuntime.*com.suhas.multyfiautobuy.stable' "$OUT/logcat-api36.txt" >> "$OUT/acceptance-api36.log"; then code=1; fi
             adb exec-out screencap -p > "$OUT/startup-api36.png" 2>> "$OUT/acceptance-api36.log"
