@@ -1,4 +1,4 @@
-name: Build Multyfi AutoBuy Staged
+name: Build Multyfi AutoBuy LG Android 10
 
 on:
   pull_request:
@@ -18,7 +18,7 @@ jobs:
           java-version: '17'
       - uses: android-actions/setup-android@v3
       - name: Install Android SDK
-        run: yes | sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools" "emulator" "system-images;android-35;google_apis;x86_64"
+        run: yes | sdkmanager "platforms;android-35" "platforms;android-29" "build-tools;35.0.0" "platform-tools" "emulator" "system-images;android-29;google_apis;x86_64"
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
@@ -34,7 +34,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Multyfi-AutoBuy-Staged-build-diagnostics
+          name: Multyfi-AutoBuy-LG-build-diagnostics
           path: |
             android-build.log
             android-build-exit-code.txt
@@ -42,27 +42,36 @@ jobs:
       - name: Stop if compilation failed
         run: test "$(cat android-build-exit-code.txt)" = "0"
 
-      - name: Verify staged-execution source contract
+      - name: Verify autonomous source contract
         shell: bash
         run: |
           CLIENT=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/GrowwClient.java
           MONITOR=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/StrategyMonitorService.java
           LISTENER=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/MultyfiNotificationService.java
+          PARSER=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/SignalParser.java
+          PREFS=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/AppPrefs.java
+          MAIN=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/MainActivity.java
           grep -q 'createEntryGtt' "$CLIENT"
+          grep -q 'Rapid-catch GTT' "$CLIENT"
           grep -q 'createStopLossGtt' "$CLIENT"
           grep -q 'placeTargetMarketSell' "$CLIENT"
+          grep -q 'placeTimedMarketSell' "$CLIENT"
           grep -q 'ddpi_enabled' "$CLIENT"
-          grep -q 'cancelGtt' "$MONITOR"
-          grep -q 'cancellation was not confirmed. No sell submitted' "$MONITOR"
+          grep -q 'confirmGtt' "$CLIENT"
+          grep -q 'PUBLIC IP CHANGED — AUTO-DISARMED' "$MONITOR"
+          grep -q 'MIS_FORCE_EXIT' "$MONITOR"
+          grep -q 'cancellation was not confirmed' "$MONITOR"
           grep -q 'Stop-loss will be created only for actual filled quantity' "$LISTENER"
+          grep -q 'MULTIBAGGER_PATTERN' "$PARSER"
+          grep -q 'INTRADAY_PATTERN' "$PARSER"
+          grep -q 'DEFAULT_ENTRY_BUFFER_PERCENT = 1.5d' "$PREFS"
+          grep -q 'Detect and copy current public IP' "$MAIN"
           ! grep -q 'child_legs' "$CLIENT"
-          grep -q 'TARGET_PATTERN' android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/SignalParser.java
-          grep -q 'STOP_LOSS_PATTERN' android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/SignalParser.java
 
       - name: Verify APK signature
         run: $ANDROID_HOME/build-tools/35.0.0/apksigner verify --verbose --print-certs android-stable/app/build/outputs/apk/debug/app-debug.apk
       - name: Rename APK
-        run: cp android-stable/app/build/outputs/apk/debug/app-debug.apk android-stable/app/build/outputs/apk/debug/Multyfi-AutoBuy-Staged-v1.3.0.apk
+        run: cp android-stable/app/build/outputs/apk/debug/app-debug.apk android-stable/app/build/outputs/apk/debug/Multyfi-AutoBuy-LG-Android10-v1.4.0.apk
 
       - name: Enable KVM access
         run: |
@@ -71,24 +80,24 @@ jobs:
           sudo udevadm trigger --name-match=kvm
           ls -l /dev/kvm || true
 
-      - name: Emulator install and startup acceptance
+      - name: Android 10 install and startup acceptance
         timeout-minutes: 12
         shell: bash
         run: |
           set +e
           OUT=android-stable/app/build/outputs/apk/debug
           mkdir -p "$OUT"
-          : > "$OUT/acceptance.log"
-          : > "$OUT/emulator.log"
+          : > "$OUT/acceptance-api29.log"
+          : > "$OUT/emulator-api29.log"
           code=0
           export ANDROID_AVD_HOME="$RUNNER_TEMP/android-avd"
           export ANDROID_SDK_HOME="$RUNNER_TEMP/android-sdk-home"
           mkdir -p "$ANDROID_AVD_HOME" "$ANDROID_SDK_HOME/.android"
-          AVD_PATH="$ANDROID_AVD_HOME/staged_api35.avd"
-          echo no | avdmanager create avd --force --name staged_api35 --package 'system-images;android-35;google_apis;x86_64' --device 'pixel_6' --path "$AVD_PATH" >> "$OUT/acceptance.log" 2>&1 || code=1
-          "$ANDROID_HOME/emulator/emulator" -avd staged_api35 -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none > "$OUT/emulator.log" 2>&1 &
+          AVD_PATH="$ANDROID_AVD_HOME/lg_api29.avd"
+          echo no | avdmanager create avd --force --name lg_api29 --package 'system-images;android-29;google_apis;x86_64' --device 'pixel_2' --path "$AVD_PATH" >> "$OUT/acceptance-api29.log" 2>&1 || code=1
+          "$ANDROID_HOME/emulator/emulator" -avd lg_api29 -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none > "$OUT/emulator-api29.log" 2>&1 &
           EMULATOR_PID=$!
-          timeout 180 adb wait-for-device >> "$OUT/acceptance.log" 2>&1 || code=1
+          timeout 180 adb wait-for-device >> "$OUT/acceptance-api29.log" 2>&1 || code=1
           booted=0
           if adb get-state >/dev/null 2>&1; then
             for i in $(seq 1 72); do
@@ -98,46 +107,48 @@ jobs:
               sleep 5
             done
           fi
-          if [ "$booted" != "1" ]; then echo 'Emulator did not complete boot.' >> "$OUT/acceptance.log"; code=1; fi
+          if [ "$booted" != "1" ]; then echo 'Android 10 emulator did not complete boot.' >> "$OUT/acceptance-api29.log"; code=1; fi
           if [ "$booted" = "1" ]; then
-            timeout 60 adb install -r "$OUT/Multyfi-AutoBuy-Staged-v1.3.0.apk" >> "$OUT/acceptance.log" 2>&1 || code=1
-            adb logcat -c >> "$OUT/acceptance.log" 2>&1
-            timeout 30 adb shell am start -W -n com.suhas.multyfiautobuy.stable/.MainActivity >> "$OUT/acceptance.log" 2>&1 || code=1
+            timeout 60 adb install -r "$OUT/Multyfi-AutoBuy-LG-Android10-v1.4.0.apk" >> "$OUT/acceptance-api29.log" 2>&1 || code=1
+            adb logcat -c >> "$OUT/acceptance-api29.log" 2>&1
+            timeout 30 adb shell am start -W -n com.suhas.multyfiautobuy.stable/.MainActivity >> "$OUT/acceptance-api29.log" 2>&1 || code=1
             sleep 5
-            adb shell dumpsys activity activities > "$OUT/activity-dump.txt" 2>&1
-            if ! grep -q 'com.suhas.multyfiautobuy.stable/.MainActivity' "$OUT/activity-dump.txt"; then code=1; fi
-            adb logcat -d -v threadtime > "$OUT/logcat.txt" 2>&1
-            if grep -E 'FATAL EXCEPTION|Process: com.suhas.multyfiautobuy.stable|AndroidRuntime.*com.suhas.multyfiautobuy.stable' "$OUT/logcat.txt" >> "$OUT/acceptance.log"; then code=1; fi
-            adb exec-out screencap -p > "$OUT/startup.png" 2>> "$OUT/acceptance.log"
+            timeout 20 adb shell am start-foreground-service -n com.suhas.multyfiautobuy.stable/.StrategyMonitorService >> "$OUT/acceptance-api29.log" 2>&1 || code=1
+            sleep 5
+            adb shell dumpsys activity activities > "$OUT/activity-api29.txt" 2>&1
+            if ! grep -q 'com.suhas.multyfiautobuy.stable/.MainActivity' "$OUT/activity-api29.txt"; then code=1; fi
+            adb logcat -d -v threadtime > "$OUT/logcat-api29.txt" 2>&1
+            if grep -E 'FATAL EXCEPTION|Process: com.suhas.multyfiautobuy.stable|AndroidRuntime.*com.suhas.multyfiautobuy.stable' "$OUT/logcat-api29.txt" >> "$OUT/acceptance-api29.log"; then code=1; fi
+            adb exec-out screencap -p > "$OUT/startup-api29.png" 2>> "$OUT/acceptance-api29.log"
           else
-            touch "$OUT/activity-dump.txt" "$OUT/logcat.txt" "$OUT/startup.png"
+            touch "$OUT/activity-api29.txt" "$OUT/logcat-api29.txt" "$OUT/startup-api29.png"
           fi
-          echo "$code" > "$OUT/acceptance-exit-code.txt"
-          timeout 15 adb emu kill >> "$OUT/acceptance.log" 2>&1 || true
+          echo "$code" > "$OUT/acceptance-api29-exit-code.txt"
+          timeout 15 adb emu kill >> "$OUT/acceptance-api29.log" 2>&1 || true
           exit 0
 
-      - name: Upload emulator acceptance diagnostics
+      - name: Upload Android 10 acceptance diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Multyfi-AutoBuy-Staged-emulator-acceptance
+          name: Multyfi-AutoBuy-LG-Android10-acceptance
           path: |
-            android-stable/app/build/outputs/apk/debug/acceptance.log
-            android-stable/app/build/outputs/apk/debug/acceptance-exit-code.txt
-            android-stable/app/build/outputs/apk/debug/activity-dump.txt
-            android-stable/app/build/outputs/apk/debug/logcat.txt
-            android-stable/app/build/outputs/apk/debug/emulator.log
-            android-stable/app/build/outputs/apk/debug/startup.png
+            android-stable/app/build/outputs/apk/debug/acceptance-api29.log
+            android-stable/app/build/outputs/apk/debug/acceptance-api29-exit-code.txt
+            android-stable/app/build/outputs/apk/debug/activity-api29.txt
+            android-stable/app/build/outputs/apk/debug/logcat-api29.txt
+            android-stable/app/build/outputs/apk/debug/emulator-api29.log
+            android-stable/app/build/outputs/apk/debug/startup-api29.png
           if-no-files-found: error
-      - name: Stop if emulator acceptance failed
-        run: test "$(cat android-stable/app/build/outputs/apk/debug/acceptance-exit-code.txt)" = "0"
+      - name: Stop if Android 10 acceptance failed
+        run: test "$(cat android-stable/app/build/outputs/apk/debug/acceptance-api29-exit-code.txt)" = "0"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Multyfi-AutoBuy-Staged-v1.3.0
+          name: Multyfi-AutoBuy-LG-Android10-v1.4.0
           path: |
-            android-stable/app/build/outputs/apk/debug/Multyfi-AutoBuy-Staged-v1.3.0.apk
-            android-stable/app/build/outputs/apk/debug/startup.png
+            android-stable/app/build/outputs/apk/debug/Multyfi-AutoBuy-LG-Android10-v1.4.0.apk
+            android-stable/app/build/outputs/apk/debug/startup-api29.png
             android-stable/app/build/reports/tests/testDebugUnitTest/
             android-stable/app/build/reports/lint-results-debug.html
           if-no-files-found: error
