@@ -120,9 +120,10 @@ jobs:
             if ! grep -Eq '(topResumedActivity|ResumedActivity|mResumedActivity).*com.suhas.multyfiautobuy.stable/.MainActivity' "$OUT/activity-api36.txt"; then code=1; fi
             timeout 20 adb shell uiautomator dump /sdcard/multyfi-ui.xml >> "$OUT/acceptance-api36.log" 2>&1 || code=1
             adb pull /sdcard/multyfi-ui.xml "$OUT/ui-api36.xml" >> "$OUT/acceptance-api36.log" 2>&1 || code=1
-            if ! grep -q 'Multyfi AutoBuy' "$OUT/ui-api36.xml"; then code=1; fi
+            if ! grep -q 'PRIVATE S24 TRADING BRIDGE' "$OUT/ui-api36.xml"; then code=1; fi
             if ! grep -q 'TRADE SIZING' "$OUT/ui-api36.xml"; then code=1; fi
-            if ! grep -q 'SURFSHARK DEDICATED IP' "$OUT/ui-api36.xml"; then code=1; fi
+            if ! grep -q 'Target notional ₹10000' "$OUT/ui-api36.xml"; then code=1; fi
+            if ! grep -q 'Surfshark Dedicated IP + DDPI required' "$OUT/ui-api36.xml"; then code=1; fi
             adb logcat -d -v threadtime > "$OUT/logcat-api36.txt" 2>&1
             if grep -E 'FATAL EXCEPTION|Process: com.suhas.multyfiautobuy.stable|AndroidRuntime.*com.suhas.multyfiautobuy.stable' "$OUT/logcat-api36.txt" >> "$OUT/acceptance-api36.log"; then code=1; fi
             adb exec-out screencap -p > "$OUT/startup-api36.png" 2>> "$OUT/acceptance-api36.log"
