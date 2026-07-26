@@ -78,6 +78,7 @@ jobs:
           [ "$booted" = "1" ] || code=1
           if [ "$booted" = "1" ]; then
             timeout 60 adb install -r "$OUT/Multyfi-AutoBuy-S24-TimeWindow-v1.6.0.apk" >> "$OUT/acceptance-v1.6.log" 2>&1 || code=1
+            adb shell pm grant com.suhas.multyfiautobuy.stable android.permission.POST_NOTIFICATIONS >> "$OUT/acceptance-v1.6.log" 2>&1 || true
             adb logcat -c
             timeout 30 adb shell am start -W -n com.suhas.multyfiautobuy.stable/.MainActivity >> "$OUT/acceptance-v1.6.log" 2>&1 || code=1
             sleep 8
