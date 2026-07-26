@@ -12,13 +12,13 @@
         android:paddingStart="18dp"
         android:paddingTop="22dp"
         android:paddingEnd="18dp"
-        android:paddingBottom="32dp">
+        android:paddingBottom="36dp">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:letterSpacing="0.12"
-            android:text="PRIVATE HOME TRADING BRIDGE"
+            android:text="PRIVATE S24 TRADING BRIDGE"
             android:textColor="@color/accent"
             android:textSize="12sp"
             android:textStyle="bold" />
@@ -36,7 +36,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="3dp"
-            android:text="LG G7 / Android 10 • Complete signal → adaptive GTT → protected exit"
+            android:text="Galaxy S24 Ultra • Android 16 • Surfshark Dedicated IP"
             android:textColor="@color/text_secondary"
             android:textSize="14sp" />
 
@@ -118,7 +118,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="● Public/static IP: not verified"
+                android:text="● Surfshark Dedicated IP: not verified"
                 android:textColor="@color/danger"
                 android:textSize="14sp" />
 
@@ -131,6 +131,11 @@
                 android:id="@+id/openBatterySettings"
                 style="@style/SecondaryButton"
                 android:text="Open battery optimisation settings" />
+
+            <Button
+                android:id="@+id/openVpnSettings"
+                style="@style/SecondaryButton"
+                android:text="Open VPN / Always-on VPN settings" />
         </LinearLayout>
 
         <LinearLayout
@@ -146,15 +151,15 @@
                 android:id="@+id/rulesSummary"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:lineSpacingMultiplier="1.15"
                 android:textColor="@color/text_primary"
-                android:textSize="14sp"
-                android:lineSpacingMultiplier="1.15" />
+                android:textSize="14sp" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:text="Groww currently documents daily approval for API-key/TOTP access. This app attempts pre-market authentication automatically but cannot bypass a broker approval requirement."
+                android:text="Brokerage and statutory charges still apply. Automation cannot guarantee profit, prevent slippage, or bypass Groww authentication and exchange restrictions."
                 android:textColor="@color/warning"
                 android:textSize="12sp" />
         </LinearLayout>
@@ -166,17 +171,17 @@
             android:background="@drawable/bg_card"
             android:orientation="vertical">
 
-            <TextView style="@style/SectionTitle" android:text="ORDER SETTINGS" />
+            <TextView style="@style/SectionTitle" android:text="TRADE SIZING" />
 
             <EditText
-                android:id="@+id/quantityInput"
+                android:id="@+id/budgetInput"
                 android:layout_width="match_parent"
                 android:layout_height="54dp"
                 android:background="@drawable/bg_field"
-                android:digits="0123456789"
-                android:hint="Order quantity — default 10"
-                android:inputType="number"
-                android:maxLength="5"
+                android:digits="0123456789."
+                android:hint="Target trade value in ₹ — default 10000"
+                android:inputType="numberDecimal"
+                android:maxLength="9"
                 android:singleLine="true"
                 android:textColor="@color/text_primary"
                 android:textColorHint="@color/text_secondary"
@@ -201,7 +206,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="Quantity 1–10,000. Entry buffer 0–2%. Maximum order value ₹5,00,000."
+                android:text="Quantity is calculated automatically as floor(target value ÷ maximum permitted buy price), so the order does not exceed the configured budget."
                 android:textColor="@color/text_secondary"
                 android:textSize="12sp" />
         </LinearLayout>
@@ -213,13 +218,13 @@
             android:background="@drawable/bg_card"
             android:orientation="vertical">
 
-            <TextView style="@style/SectionTitle" android:text="PUBLIC / STATIC IP" />
+            <TextView style="@style/SectionTitle" android:text="SURFSHARK DEDICATED IP" />
 
             <TextView
                 android:id="@+id/currentIpStatus"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Current public IP: not checked"
+                android:text="Surfshark public IP: not checked"
                 android:textColor="@color/text_primary"
                 android:textIsSelectable="true"
                 android:textSize="15sp"
@@ -228,7 +233,7 @@
             <Button
                 android:id="@+id/detectCopyIp"
                 style="@style/PrimaryButton"
-                android:text="Detect and copy current public IP" />
+                android:text="Detect and copy Surfshark Dedicated IP" />
 
             <EditText
                 android:id="@+id/expectedIpInput"
@@ -236,7 +241,7 @@
                 android:layout_height="54dp"
                 android:layout_marginTop="10dp"
                 android:background="@drawable/bg_field"
-                android:hint="Public IP whitelisted in Groww"
+                android:hint="Dedicated IP whitelisted in Groww"
                 android:inputType="text"
                 android:singleLine="true"
                 android:textColor="@color/text_primary"
@@ -248,20 +253,20 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
-                android:text="This exact public IP is configured in Groww Trading APIs"
+                android:text="This exact Surfshark Dedicated IP is configured in Groww Trading APIs"
                 android:textColor="@color/text_primary"
                 android:textSize="13sp" />
 
             <Button
                 android:id="@+id/verifyIp"
                 style="@style/SecondaryButton"
-                android:text="Verify current IP against Groww whitelist" />
+                android:text="Verify Surfshark IP against Groww" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="Home Wi-Fi is not automatically static. Use an ISP static IP or dedicated VPN IP. The app auto-disarms new entries if this public IP changes."
+                android:text="Enable Surfshark Always-on VPN and Block connections without VPN. The app auto-disarms new entries if the VPN or Dedicated IP changes."
                 android:textColor="@color/warning"
                 android:textSize="12sp" />
         </LinearLayout>
@@ -341,14 +346,14 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Tests equity, swing, multibagger, free-equity and intraday parsing locally. No order is submitted."
+                android:text="Tests equity, swing, multibagger, free-equity, intraday and strict symbol-matched early-exit parsing locally. No order is submitted."
                 android:textColor="@color/text_secondary"
                 android:textSize="13sp" />
 
             <Button
                 android:id="@+id/parserTest"
                 style="@style/SecondaryButton"
-                android:text="Run multi-category parser test" />
+                android:text="Run entry and early-exit parser test" />
         </LinearLayout>
 
         <LinearLayout
@@ -397,7 +402,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="18dp"
             android:gravity="center"
-            android:text="LG G7 Android 10 Home-Phone Candidate v1.4.0 • Private APK"
+            android:text="S24 Android 16 Release v1.5.0 • Private sideload • Auto-Buy OFF by default"
             android:textColor="@color/text_secondary"
             android:textSize="11sp" />
     </LinearLayout>
