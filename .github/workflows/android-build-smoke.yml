@@ -69,73 +69,120 @@ jobs:
         timeout-minutes: 16
         shell: bash
         run: |
-          set -euo pipefail
+          set +e
           OUT=android-stable/app/build/outputs/apk/debug
+          mkdir -p "$OUT"
+          : > "$OUT/acceptance-api36.log"
+          : > "$OUT/ui-api36-all.xml"
+          code=0
+          mark() { echo "==== $1 ====" | tee -a "$OUT/acceptance-api36.log"; }
+          check() {
+            if "$@"; then
+              echo "PASS: $*" >> "$OUT/acceptance-api36.log"
+            else
+              echo "FAIL: $*" >> "$OUT/acceptance-api36.log"
+              code=1
+            fi
+          }
+
           export ANDROID_AVD_HOME="$RUNNER_TEMP/android-avd"
           export ANDROID_SDK_HOME="$RUNNER_TEMP/android-sdk-home"
-          mkdir -p "$ANDROID_AVD_HOME" "$ANDROID_SDK_HOME/.android" "$OUT"
+          mkdir -p "$ANDROID_AVD_HOME" "$ANDROID_SDK_HOME/.android"
           AVD_PATH="$ANDROID_AVD_HOME/s24_v2_api36.avd"
-          echo no | avdmanager create avd --force --name s24_v2_api36 --package 'system-images;android-36;google_apis;x86_64' --device 'pixel_8_pro' --path "$AVD_PATH"
+          mark "CREATE AVD"
+          echo no | avdmanager create avd --force --name s24_v2_api36 --package 'system-images;android-36;google_apis;x86_64' --device 'pixel_8_pro' --path "$AVD_PATH" >> "$OUT/acceptance-api36.log" 2>&1 || code=1
           "$ANDROID_HOME/emulator/emulator" -avd s24_v2_api36 -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none > "$OUT/emulator-api36.log" 2>&1 &
           EMULATOR_PID=$!
-          cleanup() {
-            timeout 15 adb emu kill >/dev/null 2>&1 || true
-            kill "$EMULATOR_PID" >/dev/null 2>&1 || true
-          }
-          trap cleanup EXIT
-          timeout 240 adb wait-for-device
+          timeout 240 adb wait-for-device >> "$OUT/acceptance-api36.log" 2>&1 || code=1
+          booted=0
           for i in $(seq 1 90); do
             state=$(timeout 10 adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
-            [ "$state" = "1" ] && break
+            if [ "$state" = "1" ]; then booted=1; break; fi
+            if ! kill -0 "$EMULATOR_PID" 2>/dev/null; then break; fi
             sleep 4
           done
-          [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1" ]
-
-          APK="$OUT/Multyfi-AutoBuy-Pro-S24-Android16-v2.0.0.apk"
-          adb install -r "$APK" | tee "$OUT/install-api36.txt"
-          grep -q Success "$OUT/install-api36.txt"
-          adb shell pm grant com.suhas.multyfiautobuy.stable android.permission.POST_NOTIFICATIONS
-
-          adb logcat -c
-          adb shell am start -W -n com.suhas.multyfiautobuy.stable/.MainActivity | tee "$OUT/cold-launch-1.txt"
-          sleep 10
-          adb shell dumpsys activity activities > "$OUT/activity-api36-1.txt"
-          grep -Eq '(topResumedActivity|ResumedActivity|mResumedActivity).*com.suhas.multyfiautobuy.stable/.MainActivity' "$OUT/activity-api36-1.txt"
-          timeout 25 adb shell uiautomator dump /sdcard/multyfi-v2-ui.xml
-          adb pull /sdcard/multyfi-v2-ui.xml "$OUT/ui-api36.xml"
-          grep -q 'Multyfi AutoBuy Pro' "$OUT/ui-api36.xml"
-          grep -q 'SAVE TRADING WINDOWS' "$OUT/ui-api36.xml"
-          grep -q 'TEST GROWW CONNECTION (READ-ONLY)' "$OUT/ui-api36.xml"
-          grep -q 'CREATE &amp; CANCEL 1-SHARE TEST GTT' "$OUT/ui-api36.xml"
-          grep -q 'CNC delivery' "$OUT/ui-api36.xml"
-          adb exec-out screencap -p > "$OUT/startup-api36.png"
-
-          adb shell am force-stop com.suhas.multyfiautobuy.stable
-          sleep 2
-          adb shell am start -W -n com.suhas.multyfiautobuy.stable/.MainActivity | tee "$OUT/cold-launch-2.txt"
-          sleep 10
-          adb shell dumpsys activity activities > "$OUT/activity-api36-2.txt"
-          grep -Eq '(topResumedActivity|ResumedActivity|mResumedActivity).*com.suhas.multyfiautobuy.stable/.MainActivity' "$OUT/activity-api36-2.txt"
-          adb logcat -d -v threadtime > "$OUT/logcat-api36.txt"
-          if grep -E 'FATAL EXCEPTION|Process: com.suhas.multyfiautobuy.stable|ClassNotFoundException.*com.suhas.multyfiautobuy.stable' "$OUT/logcat-api36.txt"; then
-            echo 'Application crash detected'
-            exit 1
+          if [ "$booted" != "1" ]; then
+            echo "FAIL: emulator did not boot" >> "$OUT/acceptance-api36.log"
+            code=1
           fi
 
-      - name: Upload source-built production release
+          if [ "$booted" = "1" ]; then
+            APK="$OUT/Multyfi-AutoBuy-Pro-S24-Android16-v2.0.0.apk"
+            mark "INSTALL"
+            adb install -r "$APK" > "$OUT/install-api36.txt" 2>&1
+            check grep -q Success "$OUT/install-api36.txt"
+            adb shell pm grant com.suhas.multyfiautobuy.stable android.permission.POST_NOTIFICATIONS >> "$OUT/acceptance-api36.log" 2>&1 || code=1
+
+            mark "FIRST COLD LAUNCH"
+            adb logcat -c
+            adb shell am start -W -n com.suhas.multyfiautobuy.stable/.MainActivity > "$OUT/cold-launch-1.txt" 2>&1
+            sleep 10
+            adb shell dumpsys activity activities > "$OUT/activity-api36-1.txt" 2>&1
+            check grep -Eq '(topResumedActivity|ResumedActivity|mResumedActivity).*com.suhas.multyfiautobuy.stable/.MainActivity' "$OUT/activity-api36-1.txt"
+            pid=$(adb shell pidof com.suhas.multyfiautobuy.stable | tr -d '\r')
+            if [ -z "$pid" ]; then echo "FAIL: no live process after first launch" >> "$OUT/acceptance-api36.log"; code=1; else echo "PASS: live PID $pid" >> "$OUT/acceptance-api36.log"; fi
+
+            mark "SCROLLED DASHBOARD UI"
+            for index in 0 1 2 3 4 5; do
+              timeout 25 adb shell uiautomator dump "/sdcard/multyfi-v2-ui-$index.xml" >> "$OUT/acceptance-api36.log" 2>&1 || code=1
+              adb pull "/sdcard/multyfi-v2-ui-$index.xml" "$OUT/ui-api36-$index.xml" >> "$OUT/acceptance-api36.log" 2>&1 || code=1
+              cat "$OUT/ui-api36-$index.xml" >> "$OUT/ui-api36-all.xml" 2>/dev/null
+              adb exec-out screencap -p > "$OUT/startup-api36-$index.png" 2>/dev/null
+              adb shell input swipe 500 1550 500 420 450 >> "$OUT/acceptance-api36.log" 2>&1
+              sleep 1
+            done
+            check grep -q 'Multyfi AutoBuy Pro' "$OUT/ui-api36-all.xml"
+            check grep -q 'SAVE TRADING WINDOWS' "$OUT/ui-api36-all.xml"
+            check grep -q 'TEST GROWW CONNECTION (READ-ONLY)' "$OUT/ui-api36-all.xml"
+            check grep -Eq 'CREATE (&amp;|&) CANCEL 1-SHARE TEST GTT' "$OUT/ui-api36-all.xml"
+            check grep -q 'CNC delivery' "$OUT/ui-api36-all.xml"
+
+            mark "SECOND COLD LAUNCH"
+            adb shell am force-stop com.suhas.multyfiautobuy.stable
+            sleep 2
+            adb shell am start -W -n com.suhas.multyfiautobuy.stable/.MainActivity > "$OUT/cold-launch-2.txt" 2>&1
+            sleep 10
+            adb shell dumpsys activity activities > "$OUT/activity-api36-2.txt" 2>&1
+            check grep -Eq '(topResumedActivity|ResumedActivity|mResumedActivity).*com.suhas.multyfiautobuy.stable/.MainActivity' "$OUT/activity-api36-2.txt"
+            pid=$(adb shell pidof com.suhas.multyfiautobuy.stable | tr -d '\r')
+            if [ -z "$pid" ]; then echo "FAIL: no live process after second launch" >> "$OUT/acceptance-api36.log"; code=1; else echo "PASS: second live PID $pid" >> "$OUT/acceptance-api36.log"; fi
+            adb logcat -d -v threadtime > "$OUT/logcat-api36.txt" 2>&1
+            if grep -E 'FATAL EXCEPTION|Process: com.suhas.multyfiautobuy.stable|ClassNotFoundException.*com.suhas.multyfiautobuy.stable' "$OUT/logcat-api36.txt" >> "$OUT/acceptance-api36.log"; then
+              echo "FAIL: application crash detected" >> "$OUT/acceptance-api36.log"
+              code=1
+            else
+              echo "PASS: no application crash" >> "$OUT/acceptance-api36.log"
+            fi
+          else
+            touch "$OUT/install-api36.txt" "$OUT/cold-launch-1.txt" "$OUT/cold-launch-2.txt" "$OUT/activity-api36-1.txt" "$OUT/activity-api36-2.txt" "$OUT/logcat-api36.txt"
+          fi
+
+          echo "$code" > "$OUT/acceptance-api36-exit-code.txt"
+          timeout 15 adb emu kill >> "$OUT/acceptance-api36.log" 2>&1 || true
+          kill "$EMULATOR_PID" >/dev/null 2>&1 || true
+          exit 0
+
+      - name: Upload production APK and acceptance diagnostics
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: Multyfi-AutoBuy-Pro-S24-Android16-v2.0.0
           path: |
             android-stable/app/build/outputs/apk/debug/Multyfi-AutoBuy-Pro-S24-Android16-v2.0.0.apk
+            android-stable/app/build/outputs/apk/debug/acceptance-api36.log
+            android-stable/app/build/outputs/apk/debug/acceptance-api36-exit-code.txt
             android-stable/app/build/outputs/apk/debug/install-api36.txt
             android-stable/app/build/outputs/apk/debug/cold-launch-1.txt
             android-stable/app/build/outputs/apk/debug/cold-launch-2.txt
             android-stable/app/build/outputs/apk/debug/activity-api36-1.txt
             android-stable/app/build/outputs/apk/debug/activity-api36-2.txt
-            android-stable/app/build/outputs/apk/debug/ui-api36.xml
+            android-stable/app/build/outputs/apk/debug/ui-api36-*.xml
             android-stable/app/build/outputs/apk/debug/logcat-api36.txt
-            android-stable/app/build/outputs/apk/debug/startup-api36.png
+            android-stable/app/build/outputs/apk/debug/startup-api36-*.png
+            android-stable/app/build/outputs/apk/debug/emulator-api36.log
             android-stable/app/build/reports/tests/testDebugUnitTest/
             android-stable/app/build/reports/lint-results-debug.html
           if-no-files-found: error
+
+      - name: Stop if Android 16 acceptance failed
+        run: test "$(cat android-stable/app/build/outputs/apk/debug/acceptance-api36-exit-code.txt)" = "0"
