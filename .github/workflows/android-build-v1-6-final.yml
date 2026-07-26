@@ -87,7 +87,8 @@ jobs:
             adb shell uiautomator dump /sdcard/ui-v16-final.xml >> "$OUT/acceptance-v1.6.log" 2>&1 || code=1
             adb pull /sdcard/ui-v16-final.xml "$OUT/ui-v1.6.xml" >> "$OUT/acceptance-v1.6.log" 2>&1 || code=1
             grep -q 'TIME-WINDOW SIZING' "$OUT/ui-v1.6.xml" || code=1
-            grep -q 'Post-window fixed quantity' "$OUT/ui-v1.6.xml" || code=1
+            grep -q '09:00' "$OUT/ui-v1.6.xml" || code=1
+            grep -q '10:00' "$OUT/ui-v1.6.xml" || code=1
             adb logcat -d -v threadtime > "$OUT/logcat-v1.6.txt" 2>&1
             grep -E 'FATAL EXCEPTION|Process: com.suhas.multyfiautobuy.stable|AndroidRuntime.*com.suhas.multyfiautobuy.stable' "$OUT/logcat-v1.6.txt" && code=1
             adb exec-out screencap -p > "$OUT/startup-v1.6.png"
