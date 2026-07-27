@@ -47,6 +47,16 @@ with tempfile.NamedTemporaryFile("w", suffix=".py", encoding="utf-8", delete=Fal
 
 runpy.run_path(fixed, run_name="__main__")
 
+# Groww waives its own DP fee for debit values below ₹100, but the depository
+# component still applies. Use the conservative male-account ₹3.50 component.
+charge_file = Path("android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/DeliveryChargeCalculator.java")
+charge_source = charge_file.read_text(encoding="utf-8")
+old_dp = "double dp = sellValue < 100d ? 0d : DP_SELL_CHARGE;"
+new_dp = "double dp = sellValue < 100d ? 3.50d : DP_SELL_CHARGE;"
+if old_dp not in charge_source:
+    raise RuntimeError("Could not correct low-value DP charge")
+charge_file.write_text(charge_source.replace(old_dp, new_dp, 1), encoding="utf-8")
+
 # v2.0.2 generated a fixed-10 test. Replace it with the v2.2.0 configurable-budget contract.
 test = Path("android-stable/app/src/test/java/com/suhas/multyfiautobuy/stable/FreeRecommendationPolicyTest.java")
 test.write_text(r'''package com.suhas.multyfiautobuy.stable;
@@ -78,3 +88,24 @@ public class FreeRecommendationPolicyTest {
     }
 }
 ''', encoding="utf-8")
+
+charge_test = Path("android-stable/app/src/test/java/com/suhas/multyfiautobuy/stable/DeliveryChargeCalculatorTest.java")
+charge_text = charge_test.read_text(encoding="utf-8")
+needle = '''    @Test public void largerQuantityStillMeetsTarget() {
+        double target = DeliveryChargeCalculator.requiredSellPrice(500d, 20, 6d);
+        assertTrue(DeliveryChargeCalculator.estimatedNetProfit(500d, target, 20) >= 600d - 1e-6d);
+    }
+}'''
+replacement = '''    @Test public void largerQuantityStillMeetsTarget() {
+        double target = DeliveryChargeCalculator.requiredSellPrice(500d, 20, 6d);
+        assertTrue(DeliveryChargeCalculator.estimatedNetProfit(500d, target, 20) >= 600d - 1e-6d);
+    }
+
+    @Test public void lowValueSaleStillIncludesDepositoryComponent() {
+        double target = DeliveryChargeCalculator.requiredSellPrice(40d, 1, 6d);
+        assertTrue(DeliveryChargeCalculator.estimatedNetProfit(40d, target, 1) >= 2.4d - 1e-6d);
+    }
+}'''
+if needle not in charge_text:
+    raise RuntimeError("Could not extend low-value charge test")
+charge_test.write_text(charge_text.replace(needle, replacement, 1), encoding="utf-8")
