@@ -62,6 +62,40 @@ if old_summary_patch not in source:
     raise RuntimeError("Could not normalize v2.1.1 summary signature patch")
 source = source.replace(old_summary_patch, new_summary_patch, 1)
 
+# v2.0.2 generated a legacy fixed-ten unit test. Overwrite it with the new
+# configurable-budget contract before Gradle runs.
+marker = '# Pure unit tests for the new amount-based FREE quantity policy.'
+legacy_test_update = r'''
+write(TEST / "FreeRecommendationPolicyTest.java", r"""package com.suhas.multyfiautobuy.stable;
+
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+public class FreeRecommendationPolicyTest {
+    @Test public void detectsStandaloneFreeWord() {
+        assertTrue(SignalParser.isFreeRecommendation(
+                "Today's Free Equity Recommendation"));
+        assertTrue(SignalParser.isFreeRecommendation(
+                "FREE recommendation: WANBURY"));
+        assertFalse(SignalParser.isFreeRecommendation(
+                "Equity recommendation"));
+    }
+
+    @Test public void freeRecommendationUsesConfiguredBudget() {
+        assertEquals(14, OrderPolicy.quantity(true, 5_000d, 342.05d));
+        assertEquals(1, OrderPolicy.quantity(true, 5_000d, 5_000d));
+        assertEquals(0, OrderPolicy.quantity(true, 5_000d, 5_000.05d));
+    }
+}
+""")
+'''
+if marker not in source:
+    raise RuntimeError("Could not insert replacement FREE policy test")
+source = source.replace(marker, legacy_test_update + "\n" + marker, 1)
+
 with tempfile.NamedTemporaryFile("w", suffix=".py", encoding="utf-8", delete=False) as handle:
     handle.write(source)
     fixed = handle.name
