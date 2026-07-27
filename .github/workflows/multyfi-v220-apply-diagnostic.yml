@@ -1,0 +1,34 @@
+name: Diagnose Multyfi AutoBuy v2.2.0 Source Apply
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'hotfix/apply_v220.py'
+      - 'hotfix/run_v220.py'
+      - '.github/workflows/multyfi-v220-apply-diagnostic.yml'
+  workflow_dispatch:
+
+jobs:
+  diagnose-apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply source patch and capture diagnostics
+        shell: bash
+        run: |
+          set +e
+          python3 hotfix/run_v220.py > apply-v220.log 2>&1
+          code=$?
+          cat apply-v220.log
+          echo "$code" > apply-v220-exit-code.txt
+          exit 0
+      - name: Upload apply diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Multyfi-v2.2.0-apply-diagnostics
+          path: |
+            apply-v220.log
+            apply-v220-exit-code.txt
+          if-no-files-found: error
