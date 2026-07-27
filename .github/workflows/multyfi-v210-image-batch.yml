@@ -1,0 +1,203 @@
+name: Build Multyfi AutoBuy Pro v2.1.0 Image Batch
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'hotfix/apply_v210.py'
+      - 'hotfix/run_v210.py'
+      - '.github/workflows/multyfi-v210-image-batch.yml'
+  workflow_dispatch:
+
+jobs:
+  build-and-accept:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android 16 SDK
+        run: yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools" "emulator" "system-images;android-36;google_apis;x86_64"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Apply v2.1.0 source update
+        run: python3 hotfix/run_v210.py
+
+      - name: Unit tests, lint and source-built APK
+        shell: bash
+        run: |
+          set +e
+          gradle --no-daemon --console=plain -p android-stable :app:testDebugUnitTest :app:lintDebug :app:assembleDebug > build-v210.log 2>&1
+          code=$?
+          cat build-v210.log
+          echo "$code" > build-v210-exit-code.txt
+          exit 0
+
+      - name: Stop if Gradle build failed
+        run: test "$(cat build-v210-exit-code.txt)" = "0"
+
+      - name: Verify image-batch safety contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable
+          grep -q "versionName '2.1.0'" android-stable/app/build.gradle
+          grep -q 'versionCode 210' android-stable/app/build.gradle
+          grep -q "com.google.mlkit:text-recognition:16.0.1" android-stable/app/build.gradle
+          grep -q 'MONTHLY IMAGE GTT IMPORT' "$ROOT/ProductionActivity.java"
+          grep -q 'UPLOAD ORDER-LIST IMAGE' "$ROOT/ProductionActivity.java"
+          grep -q 'Review OCR text' "$ROOT/ProductionActivity.java"
+          grep -q 'Create .* real entry GTTs' "$ROOT/ProductionActivity.java"
+          grep -q 'MAX_BATCH_VALUE = 500_000d' "$ROOT/ImageBatchExecutor.java"
+          grep -q 'ENTRY_EXPIRY_MS = 35L' "$ROOT/ImageBatchExecutor.java"
+          grep -q 'IMAGE BATCH ENTRY GTT ACTIVE' "$ROOT/ImageBatchExecutor.java"
+          grep -q 'Stop-loss and target monitoring start automatically' "$ROOT/ImageBatchExecutor.java"
+          grep -q 'MAX_ORDERS = 50' "$ROOT/ImageOrderParser.java"
+          grep -q 'recoverActiveStopLossGtt' "$ROOT/GrowwClient.java"
+          grep -q 'ARMED 24×7 — PRODUCTION POLICY' "$ROOT/ProductionActivity.java"
+
+      - name: Verify APK signature
+        run: $ANDROID_HOME/build-tools/35.0.0/apksigner verify --verbose --print-certs android-stable/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Name source-built artifact
+        run: cp android-stable/app/build/outputs/apk/debug/app-debug.apk android-stable/app/build/outputs/apk/debug/Multyfi-AutoBuy-Pro-S24-Android16-v2.1.0.apk
+
+      - name: Enable KVM access
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Android 16 install and two successful cold launches
+        timeout-minutes: 18
+        shell: bash
+        run: |
+          set +e
+          OUT=android-stable/app/build/outputs/apk/debug
+          LOG="$OUT/acceptance-v210.log"
+          mkdir -p "$OUT"
+          : > "$LOG"
+          code=0
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/android-avd"
+          export ANDROID_SDK_HOME="$RUNNER_TEMP/android-sdk-home"
+          mkdir -p "$ANDROID_AVD_HOME" "$ANDROID_SDK_HOME/.android"
+          AVD_PATH="$ANDROID_AVD_HOME/s24_v210_api36.avd"
+
+          wait_for_boot() {
+            timeout 240 adb wait-for-device >> "$LOG" 2>&1 || return 1
+            for i in $(seq 1 90); do
+              state=$(timeout 10 adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+              if [ "$state" = "1" ]; then return 0; fi
+              sleep 3
+            done
+            return 1
+          }
+
+          launch_and_require_pid() {
+            label="$1"
+            launch_file="$OUT/cold-launch-v210-$label.txt"
+            pid_file="$OUT/pid-v210-$label.txt"
+            : > "$launch_file"
+            : > "$pid_file"
+            for attempt in 1 2 3; do
+              wait_for_boot || true
+              adb shell am force-stop com.suhas.multyfiautobuy.stable >> "$LOG" 2>&1 || true
+              sleep 2
+              adb shell am start -W -n com.suhas.multyfiautobuy.stable/.MainActivity > "$launch_file" 2>&1 || true
+              sleep 10
+              adb shell pidof com.suhas.multyfiautobuy.stable > "$pid_file" 2>/dev/null || true
+              if test -s "$pid_file"; then
+                echo "Launch $label passed on attempt $attempt with PID $(cat "$pid_file")" >> "$LOG"
+                return 0
+              fi
+              echo "Launch $label attempt $attempt had no live app PID; waiting for emulator recovery." >> "$LOG"
+              sleep 5
+            done
+            return 1
+          }
+
+          collect_dashboard_ui() {
+            combined="$OUT/ui-v210-combined.xml"
+            : > "$combined"
+            for i in $(seq 0 10); do
+              remote="/sdcard/multyfi-v210-ui-$i.xml"
+              local="$OUT/ui-v210-$i.xml"
+              timeout 30 adb shell uiautomator dump "$remote" >> "$LOG" 2>&1 || true
+              adb pull "$remote" "$local" >> "$LOG" 2>&1 || true
+              if test -f "$local"; then cat "$local" >> "$combined"; fi
+              if grep -q 'Multyfi AutoBuy Pro' "$combined" \
+                  && grep -q 'source-built production release 2.1.0' "$combined" \
+                  && grep -q 'MONTHLY IMAGE GTT IMPORT' "$combined" \
+                  && grep -q 'UPLOAD ORDER-LIST IMAGE' "$combined"; then
+                cp "$combined" "$OUT/ui-v210.xml"
+                return 0
+              fi
+              adb shell input swipe 500 1800 500 300 700 >> "$LOG" 2>&1 || true
+              sleep 2
+            done
+            cp "$combined" "$OUT/ui-v210.xml"
+            return 1
+          }
+
+          echo no | avdmanager create avd --force --name s24_v210_api36 --package 'system-images;android-36;google_apis;x86_64' --device 'pixel_8_pro' --path "$AVD_PATH" >> "$LOG" 2>&1 || code=1
+          "$ANDROID_HOME/emulator/emulator" -avd s24_v210_api36 -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none > "$OUT/emulator-v210.log" 2>&1 &
+          EMULATOR_PID=$!
+          if ! wait_for_boot; then echo 'Android 16 emulator did not boot.' >> "$LOG"; code=1; fi
+
+          APK="$OUT/Multyfi-AutoBuy-Pro-S24-Android16-v2.1.0.apk"
+          if [ "$code" = "0" ]; then
+            adb install -r "$APK" > "$OUT/install-v210.txt" 2>&1 || code=1
+            grep -q Success "$OUT/install-v210.txt" || code=1
+            sleep 12
+            wait_for_boot || code=1
+            adb shell pm grant com.suhas.multyfiautobuy.stable android.permission.POST_NOTIFICATIONS >> "$LOG" 2>&1 || code=1
+            adb logcat -c
+
+            launch_and_require_pid 1 || code=1
+            if [ "$code" = "0" ]; then
+              collect_dashboard_ui || code=1
+              adb exec-out screencap -p > "$OUT/startup-v210.png" 2>> "$LOG"
+            fi
+
+            launch_and_require_pid 2 || code=1
+            adb logcat -d -v threadtime > "$OUT/logcat-v210.txt" 2>&1
+            if grep -E 'Process: com.suhas.multyfiautobuy.stable|ClassNotFoundException.*com.suhas.multyfiautobuy.stable' "$OUT/logcat-v210.txt" >> "$LOG"; then code=1; fi
+          else
+            touch "$OUT/install-v210.txt" "$OUT/cold-launch-v210-1.txt" "$OUT/cold-launch-v210-2.txt" "$OUT/pid-v210-1.txt" "$OUT/pid-v210-2.txt" "$OUT/ui-v210.xml" "$OUT/logcat-v210.txt" "$OUT/startup-v210.png"
+          fi
+
+          echo "$code" > "$OUT/acceptance-v210-exit-code.txt"
+          timeout 15 adb emu kill >> "$LOG" 2>&1 || true
+          exit 0
+
+      - name: Upload v2.1.0 APK and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Multyfi-AutoBuy-Pro-S24-Android16-v2.1.0
+          path: |
+            build-v210.log
+            build-v210-exit-code.txt
+            android-stable/app/build/outputs/apk/debug/Multyfi-AutoBuy-Pro-S24-Android16-v2.1.0.apk
+            android-stable/app/build/outputs/apk/debug/acceptance-v210.log
+            android-stable/app/build/outputs/apk/debug/acceptance-v210-exit-code.txt
+            android-stable/app/build/outputs/apk/debug/install-v210.txt
+            android-stable/app/build/outputs/apk/debug/cold-launch-v210-1.txt
+            android-stable/app/build/outputs/apk/debug/cold-launch-v210-2.txt
+            android-stable/app/build/outputs/apk/debug/pid-v210-1.txt
+            android-stable/app/build/outputs/apk/debug/pid-v210-2.txt
+            android-stable/app/build/outputs/apk/debug/ui-v210*.xml
+            android-stable/app/build/outputs/apk/debug/logcat-v210.txt
+            android-stable/app/build/outputs/apk/debug/startup-v210.png
+            android-stable/app/build/reports/tests/testDebugUnitTest/
+            android-stable/app/build/reports/lint-results-debug.html
+          if-no-files-found: warn
+
+      - name: Stop if Android 16 acceptance failed
+        run: test "$(cat android-stable/app/build/outputs/apk/debug/acceptance-v210-exit-code.txt)" = "0"
