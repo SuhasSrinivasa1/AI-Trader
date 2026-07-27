@@ -25,7 +25,7 @@ new = '''reject_pattern = re.compile(
 )
 new_reject = \'\'\'    private void rejectAndDisarm(String reason, String summary) {
         AppPrefs.log(this, "REJECTED — ARMED, WAITING FOR GATE",
-                summary + "\\n" + reason
+                summary + "\\\\n" + reason
                         + " Armed state remains ON; this notification was not submitted.");
         UserAlertNotifier.notifyAutoBuyUnavailable(this,
                 "entry_gate_" + Integer.toHexString(reason.hashCode()), reason);
