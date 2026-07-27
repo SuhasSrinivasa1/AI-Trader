@@ -27,7 +27,17 @@ jobs:
           gradle-version: '8.13'
 
       - name: Apply v2.1.1 source update
-        run: python3 hotfix/run_v211.py
+        shell: bash
+        run: |
+          set +e
+          python3 hotfix/run_v211.py > apply-v211.log 2>&1
+          code=$?
+          cat apply-v211.log
+          echo "$code" > apply-v211-exit-code.txt
+          exit 0
+
+      - name: Stop if source update failed
+        run: test "$(cat apply-v211-exit-code.txt)" = "0"
 
       - name: Unit tests, lint and source-built APK
         shell: bash
@@ -181,6 +191,8 @@ jobs:
         with:
           name: Multyfi-AutoBuy-Pro-S24-Android16-v2.1.1
           path: |
+            apply-v211.log
+            apply-v211-exit-code.txt
             build-v211.log
             build-v211-exit-code.txt
             android-stable/app/build/outputs/apk/debug/Multyfi-AutoBuy-Pro-S24-Android16-v2.1.1.apk
