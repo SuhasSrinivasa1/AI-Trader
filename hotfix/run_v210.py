@@ -21,3 +21,10 @@ with tempfile.NamedTemporaryFile("w", suffix=".py", encoding="utf-8", delete=Fal
     handle.write(source)
     fixed = handle.name
 runpy.run_path(fixed, run_name="__main__")
+
+properties = Path("android-stable/gradle.properties")
+text = properties.read_text(encoding="utf-8")
+if "android.useAndroidX=false" not in text:
+    raise RuntimeError("Expected android.useAndroidX=false in gradle.properties")
+properties.write_text(text.replace("android.useAndroidX=false", "android.useAndroidX=true", 1),
+                      encoding="utf-8")
