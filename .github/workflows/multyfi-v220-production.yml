@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'hotfix/apply_v220.py'
+      - 'hotfix/run_v220.py'
       - '.github/workflows/multyfi-v220-production.yml'
   workflow_dispatch:
 
@@ -26,7 +27,7 @@ jobs:
           gradle-version: '8.13'
 
       - name: Apply v2.2.0 source update
-        run: python3 hotfix/apply_v220.py
+        run: python3 hotfix/run_v220.py
 
       - name: Unit tests, lint and source-built APK
         shell: bash
