@@ -46,3 +46,35 @@ with tempfile.NamedTemporaryFile("w", suffix=".py", encoding="utf-8", delete=Fal
     fixed = handle.name
 
 runpy.run_path(fixed, run_name="__main__")
+
+# v2.0.2 generated a fixed-10 test. Replace it with the v2.2.0 configurable-budget contract.
+test = Path("android-stable/app/src/test/java/com/suhas/multyfiautobuy/stable/FreeRecommendationPolicyTest.java")
+test.write_text(r'''package com.suhas.multyfiautobuy.stable;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+import org.junit.Test;
+
+public class FreeRecommendationPolicyTest {
+    @Test public void detectsStandaloneFreeWordCaseInsensitively() {
+        assertTrue(SignalParser.isFreeRecommendation("Today's Free Equity Recommendation"));
+        assertTrue(SignalParser.isFreeRecommendation("FREE recommendation"));
+        assertFalse(SignalParser.isFreeRecommendation("Equity recommendation"));
+        assertFalse(SignalParser.isFreeRecommendation("freestyle equity recommendation"));
+    }
+
+    @Test public void freeRecommendationUsesConfiguredAmount() {
+        assertEquals(5, OrderPolicy.quantity(true, 10_000d, 5_000d, 1_000d));
+        assertEquals(0, OrderPolicy.quantity(true, 10_000d, 5_000d, 5_001d));
+        assertEquals(100, OrderPolicy.quantity(true, 1_000d, 5_000d, 50d));
+        assertFalse(OrderPolicy.usesWindowBudget(true));
+    }
+
+    @Test public void normalRecommendationKeepsWindowBudgetSizing() {
+        assertEquals(2, OrderPolicy.quantity(false, 10_000d, 5_000d, 4_000d));
+        assertTrue(OrderPolicy.usesWindowBudget(false));
+    }
+}
+''', encoding="utf-8")
