@@ -1,0 +1,159 @@
+name: Build Multyfi AutoBuy Pro v2.0.1 Hotfix
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'hotfix/apply_v201.py'
+      - '.github/workflows/multyfi-v201-hotfix.yml'
+  workflow_dispatch:
+
+jobs:
+  build-and-accept:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android 16 SDK
+        run: yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools" "emulator" "system-images;android-36;google_apis;x86_64"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Apply v2.0.1 source hotfix
+        shell: bash
+        run: |
+          set +e
+          python3 hotfix/apply_v201.py > hotfix-v201.log 2>&1
+          code=$?
+          cat hotfix-v201.log
+          echo "$code" > hotfix-v201-exit-code.txt
+          exit 0
+
+      - name: Upload hotfix diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Multyfi-v2.0.1-hotfix-apply-diagnostics
+          path: |
+            hotfix-v201.log
+            hotfix-v201-exit-code.txt
+          if-no-files-found: error
+
+      - name: Stop if hotfix application failed
+        run: test "$(cat hotfix-v201-exit-code.txt)" = "0"
+
+      - name: Unit tests, lint and source-built APK
+        run: gradle --no-daemon --console=plain -p android-stable :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+
+      - name: Verify v2.0.1 safety contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable
+          grep -q "versionName '2.0.1'" android-stable/app/build.gradle
+          grep -q 'versionCode 201' android-stable/app/build.gradle
+          grep -q 'recoverActiveStopLossGtt' "$ROOT/GrowwClient.java"
+          grep -q 'order-advance/list?segment=CASH' "$ROOT/GrowwClient.java"
+          grep -q 'STOP_RECOVERY_AMBIGUOUS' "$ROOT/GrowwClient.java"
+          grep -q 'ENTRY PAUSED — UNPROTECTED POSITION' "$ROOT/ProductionNotificationService.java"
+          grep -q 'REJECTED — ARMED, WAITING FOR GATE' "$ROOT/ProductionNotificationService.java"
+          grep -q 'STOP-LOSS RETRY PENDING — ARMED RETAINED' "$ROOT/StrategyMonitorService.java"
+          grep -q 'ARMED 24×7 — PRODUCTION POLICY' "$ROOT/ProductionActivity.java"
+          grep -q 'ARMED • ENTRY PAUSED' "$ROOT/ProductionActivity.java"
+          ! grep -q 'STOP-LOSS CREATION FAILED — AUTO-DISARMED' "$ROOT/StrategyMonitorService.java"
+
+      - name: Verify APK signature
+        run: $ANDROID_HOME/build-tools/35.0.0/apksigner verify --verbose --print-certs android-stable/app/build/outputs/apk/debug/app-debug.apk
+      - name: Name source-built artifact
+        run: cp android-stable/app/build/outputs/apk/debug/app-debug.apk android-stable/app/build/outputs/apk/debug/Multyfi-AutoBuy-Pro-S24-Android16-v2.0.1.apk
+      - name: Enable KVM access
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Android 16 install and two cold launches
+        timeout-minutes: 16
+        shell: bash
+        run: |
+          set +e
+          OUT=android-stable/app/build/outputs/apk/debug
+          LOG="$OUT/acceptance-v201.log"
+          mkdir -p "$OUT"
+          : > "$LOG"
+          code=0
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/android-avd"
+          export ANDROID_SDK_HOME="$RUNNER_TEMP/android-sdk-home"
+          mkdir -p "$ANDROID_AVD_HOME" "$ANDROID_SDK_HOME/.android"
+          AVD_PATH="$ANDROID_AVD_HOME/s24_v201_api36.avd"
+          echo no | avdmanager create avd --force --name s24_v201_api36 --package 'system-images;android-36;google_apis;x86_64' --device 'pixel_8_pro' --path "$AVD_PATH" >> "$LOG" 2>&1 || code=1
+          "$ANDROID_HOME/emulator/emulator" -avd s24_v201_api36 -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none > "$OUT/emulator-v201.log" 2>&1 &
+          EMULATOR_PID=$!
+          timeout 240 adb wait-for-device >> "$LOG" 2>&1 || code=1
+          booted=0
+          for i in $(seq 1 90); do
+            state=$(timeout 10 adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+            if [ "$state" = "1" ]; then booted=1; break; fi
+            if ! kill -0 "$EMULATOR_PID" 2>/dev/null; then break; fi
+            sleep 4
+          done
+          if [ "$booted" != "1" ]; then echo 'Android 16 emulator did not boot.' >> "$LOG"; code=1; fi
+          APK="$OUT/Multyfi-AutoBuy-Pro-S24-Android16-v2.0.1.apk"
+          if [ "$booted" = "1" ]; then
+            adb install -r "$APK" > "$OUT/install-v201.txt" 2>&1 || code=1
+            grep -q Success "$OUT/install-v201.txt" || code=1
+            adb shell pm grant com.suhas.multyfiautobuy.stable android.permission.POST_NOTIFICATIONS >> "$LOG" 2>&1 || code=1
+            adb logcat -c
+            adb shell am start -W -n com.suhas.multyfiautobuy.stable/.MainActivity > "$OUT/cold-launch-v201-1.txt" 2>&1 || code=1
+            sleep 8
+            adb shell pidof com.suhas.multyfiautobuy.stable > "$OUT/pid-v201-1.txt" 2>&1
+            test -s "$OUT/pid-v201-1.txt" || code=1
+            timeout 25 adb shell uiautomator dump /sdcard/multyfi-v201-ui.xml >> "$LOG" 2>&1 || code=1
+            adb pull /sdcard/multyfi-v201-ui.xml "$OUT/ui-v201.xml" >> "$LOG" 2>&1 || code=1
+            grep -q 'Multyfi AutoBuy Pro' "$OUT/ui-v201.xml" || code=1
+            grep -q 'source-built production release 2.0.1' "$OUT/ui-v201.xml" || code=1
+            adb exec-out screencap -p > "$OUT/startup-v201.png" 2>> "$LOG"
+            adb shell am force-stop com.suhas.multyfiautobuy.stable
+            sleep 2
+            adb shell am start -W -n com.suhas.multyfiautobuy.stable/.MainActivity > "$OUT/cold-launch-v201-2.txt" 2>&1 || code=1
+            sleep 8
+            adb shell pidof com.suhas.multyfiautobuy.stable > "$OUT/pid-v201-2.txt" 2>&1
+            test -s "$OUT/pid-v201-2.txt" || code=1
+            adb logcat -d -v threadtime > "$OUT/logcat-v201.txt" 2>&1
+            if grep -E 'FATAL EXCEPTION|Process: com.suhas.multyfiautobuy.stable|ClassNotFoundException.*com.suhas.multyfiautobuy.stable' "$OUT/logcat-v201.txt" >> "$LOG"; then code=1; fi
+          else
+            touch "$OUT/install-v201.txt" "$OUT/cold-launch-v201-1.txt" "$OUT/cold-launch-v201-2.txt" "$OUT/pid-v201-1.txt" "$OUT/pid-v201-2.txt" "$OUT/ui-v201.xml" "$OUT/logcat-v201.txt" "$OUT/startup-v201.png"
+          fi
+          echo "$code" > "$OUT/acceptance-v201-exit-code.txt"
+          timeout 15 adb emu kill >> "$LOG" 2>&1 || true
+          exit 0
+
+      - name: Upload v2.0.1 APK and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Multyfi-AutoBuy-Pro-S24-Android16-v2.0.1
+          path: |
+            android-stable/app/build/outputs/apk/debug/Multyfi-AutoBuy-Pro-S24-Android16-v2.0.1.apk
+            android-stable/app/build/outputs/apk/debug/acceptance-v201.log
+            android-stable/app/build/outputs/apk/debug/acceptance-v201-exit-code.txt
+            android-stable/app/build/outputs/apk/debug/install-v201.txt
+            android-stable/app/build/outputs/apk/debug/cold-launch-v201-1.txt
+            android-stable/app/build/outputs/apk/debug/cold-launch-v201-2.txt
+            android-stable/app/build/outputs/apk/debug/pid-v201-1.txt
+            android-stable/app/build/outputs/apk/debug/pid-v201-2.txt
+            android-stable/app/build/outputs/apk/debug/ui-v201.xml
+            android-stable/app/build/outputs/apk/debug/logcat-v201.txt
+            android-stable/app/build/outputs/apk/debug/startup-v201.png
+            android-stable/app/build/reports/tests/testDebugUnitTest/
+            android-stable/app/build/reports/lint-results-debug.html
+          if-no-files-found: warn
+
+      - name: Stop if Android 16 acceptance failed
+        run: test "$(cat android-stable/app/build/outputs/apk/debug/acceptance-v201-exit-code.txt)" = "0"
