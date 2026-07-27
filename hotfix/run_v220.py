@@ -17,7 +17,7 @@ text, count = signature_pattern.subn(
 )
 if count != 1:
     raise RuntimeError("Could not update summary signature")'''
-source, count = block.subn(replacement, source, count=1)
+source, count = block.subn(lambda match: replacement, source, count=1)
 if count != 1:
     raise RuntimeError("Could not normalize v2.2.0 summary signature patch block")
 
