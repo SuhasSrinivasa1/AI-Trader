@@ -129,3 +129,78 @@ for filename in tick_files:
     if count < 1:
         raise RuntimeError(f"No ₹0.05 tick constant found in {filename}")
     path.write_text(text.replace("0.05d", "0.10d"), encoding="utf-8")
+
+# One-time credentials and automatic daily token/profile refresh. Blank secure
+# fields preserve their stored value; users only re-enter credentials to change them.
+activity = java_root / "ProductionActivity.java"
+text = activity.read_text(encoding="utf-8")
+ui_replacements = {
+    "Credentials remain encrypted by Android Keystore. The connection test is read-only. The one-share test creates a real CNC GTT approximately 10% below LTP and immediately cancels it.":
+        "Credentials are stored once in Android Keystore and the daily Groww token is generated automatically. The connection test is read-only. Re-enter credentials only when changing them.",
+    "Groww API key — leave blank to keep saved value":
+        "Groww API key — saved once; only edit to change",
+    "Groww Base32 TOTP secret — leave blank to keep saved value":
+        "Groww TOTP secret — securely saved; only edit to change it",
+    "Today’s access token — optional":
+        "Today’s token — automatic daily",
+    "AUTHENTICATE TODAY":
+        "REFRESH TOKEN NOW",
+    "API key saved securely":
+        "API key saved one-time",
+    "TOTP secret saved securely":
+        "TOTP stored for auto-auth",
+    "Access token saved for today":
+        "Daily token auto-refreshed",
+    "Today’s access token (optional)":
+        "Today’s token auto-generated",
+}
+for old, new in ui_replacements.items():
+    if old not in text:
+        raise RuntimeError(f"Could not update one-time credential UI: {old}")
+    text = text.replace(old, new, 1)
+
+field_marker = "    private boolean windowsDirty;\n"
+if field_marker not in text:
+    raise RuntimeError("Could not add automaticAuthRunning field")
+text = text.replace(field_marker, field_marker + "    private boolean automaticAuthRunning;\n", 1)
+
+resume_marker = "        StrategyMonitorService.ensureRunning(this);\n        refreshStatus();"
+if text.count(resume_marker) != 2:
+    raise RuntimeError("Expected onCreate and onResume monitor/status markers")
+text = text.replace(resume_marker,
+                    "        StrategyMonitorService.ensureRunning(this);\n"
+                    "        refreshAuthenticationAutomatically();\n"
+                    "        refreshStatus();", 2)
+
+auth_marker = "    private void authenticateToday(Button button) {\n"
+auto_method = '''    private void refreshAuthenticationAutomatically() {
+        if (automaticAuthRunning || AppPrefs.isAuthVerifiedToday(this)) return;
+        if (!SecureStore.has(this, SecureStore.API_KEY)
+                || !SecureStore.has(this, SecureStore.TOTP_SECRET)) return;
+        if (!NetworkUtil.isNetworkAvailable(this) || !NetworkUtil.isVpnActive(this)) return;
+        automaticAuthRunning = true;
+        executor.execute(() -> {
+            String token = TokenManager.validToken(this);
+            GrowwClient.ApiResult result = token.isEmpty()
+                    ? GrowwClient.ApiResult.failure("", "Automatic Groww token refresh failed.", 0)
+                    : GrowwClient.verifyProfile(token);
+            if (result.success) {
+                AppPrefs.setAuthVerified(this, result.id);
+                AppPrefs.log(this, "AUTOMATIC DAILY AUTH READY",
+                        result.message + " No credential re-entry was required.");
+            } else {
+                AppPrefs.clearAuthVerified(this);
+                AppPrefs.log(this, "AUTOMATIC DAILY AUTH FAILED", result.message);
+            }
+            runOnUiThread(() -> {
+                automaticAuthRunning = false;
+                refreshStatus();
+            });
+        });
+    }
+
+'''
+if auth_marker not in text:
+    raise RuntimeError("Could not insert automatic daily authentication method")
+text = text.replace(auth_marker, auto_method + auth_marker, 1)
+activity.write_text(text, encoding="utf-8")
