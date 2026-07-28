@@ -30,7 +30,30 @@ jobs:
           gradle-version: '8.13'
 
       - name: Apply stable v2.2.1 source update
-        run: python3 hotfix/run_v221.py
+        id: apply_source
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          python3 hotfix/run_v221.py > apply-v221.log 2>&1
+          code=$?
+          cat apply-v221.log
+          echo "$code" > apply-v221-exit-code.txt
+          exit "$code"
+
+      - name: Upload source-apply diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Multyfi-v2.2.1-source-apply-diagnostics
+          path: |
+            apply-v221.log
+            apply-v221-exit-code.txt
+          if-no-files-found: error
+
+      - name: Stop if source update failed
+        if: steps.apply_source.outcome != 'success'
+        run: exit 1
 
       - name: Unit tests, lint and source-built APK
         run: gradle --no-daemon --console=plain -p android-stable :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
