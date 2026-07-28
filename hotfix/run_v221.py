@@ -207,11 +207,15 @@ for old_route_text in (
             old_route_text,
             "Explicit Intraday/Intra day/MIS => MIS immediate LIMIT • all other complete calls => CNC entry GTT")
 write(activity, activity_text)
-replace_once(
-    activity,
-    '                ? "● Routing policy: MIS before 09:30 • CNC GTT after 09:30"',
-    '                ? "● Routing policy: notification-owned • Intraday/MIS => MIS • otherwise CNC GTT"'
-)
+activity_text = read(activity)
+for old_policy_text in (
+    "● Routing policy: MIS before 09:30 • CNC GTT after 09:30",
+    "● Routing policy: clock-owned MIS/CNC routing",
+):
+    activity_text = activity_text.replace(
+            old_policy_text,
+            "● Routing policy: notification-owned • Intraday/MIS => MIS • otherwise CNC GTT")
+write(activity, activity_text)
 
 # Update existing unit expectations for the conservative ₹0.10 tick grid applied
 # by run_v220.py, and replace the obsolete parser-time restriction test.
