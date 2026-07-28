@@ -194,11 +194,19 @@ replace_regex_once(
     r"    private void runParserTest\(\) \{.*?(?=    private void handleArmedChange)",
     new_parser_test
 )
-replace_once(
-    activity,
-    '                        "09:00–09:30 MIS immediate LIMIT • 09:30–15:30 CNC entry GTT"',
-    '                        "Explicit Intraday/Intra day/MIS => MIS immediate LIMIT • all other complete calls => CNC entry GTT"'
-)
+# Older generators used slightly different armed-log wording. Replace every
+# known clock-owned sentence if present; routing correctness is asserted below
+# against the actual service call, not this display-only audit sentence.
+activity_text = read(activity)
+for old_route_text in (
+    "09:00–09:30 MIS immediate LIMIT • 09:30–15:30 CNC entry GTT",
+    "09:00–09:30 MIS LIMIT • 09:30 onward CNC entry GTT",
+    "09:00–09:30 routes to MIS LIMIT; 09:30 onward routes to CNC entry GTT",
+):
+    activity_text = activity_text.replace(
+            old_route_text,
+            "Explicit Intraday/Intra day/MIS => MIS immediate LIMIT • all other complete calls => CNC entry GTT")
+write(activity, activity_text)
 replace_once(
     activity,
     '                ? "● Routing policy: MIS before 09:30 • CNC GTT after 09:30"',
