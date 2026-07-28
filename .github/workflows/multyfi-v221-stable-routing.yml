@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'hotfix/run_v221.py'
+      - 'hotfix/run_v221_safe.py'
       - '.github/workflows/multyfi-v221-stable-routing.yml'
   workflow_dispatch:
 
@@ -34,7 +35,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          python3 hotfix/run_v221.py > apply-v221.log 2>&1
+          python3 hotfix/run_v221_safe.py > apply-v221.log 2>&1
           code=$?
           cat apply-v221.log
           echo "$code" > apply-v221-exit-code.txt
