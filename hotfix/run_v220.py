@@ -109,3 +109,23 @@ replacement = '''    @Test public void largerQuantityStillMeetsTarget() {
 if needle not in charge_text:
     raise RuntimeError("Could not extend low-value charge test")
 charge_test.write_text(charge_text.replace(needle, replacement, 1), encoding="utf-8")
+
+# Tick-size hotfix r1. NSE CASH instruments currently use ₹0.01, ₹0.05 or
+# ₹0.10 price grids. Normalising generated order prices to ₹0.10 keeps them
+# valid on all three grids and prevents rejections such as STYRENIX ₹2,573.45.
+tick_files = [
+    "DeliveryChargeCalculator.java",
+    "GrowwClient.java",
+    "ImageBatchExecutor.java",
+    "ImageOrderParser.java",
+    "ProductionActivity.java",
+    "SignalParser.java",
+]
+java_root = Path("android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable")
+for filename in tick_files:
+    path = java_root / filename
+    text = path.read_text(encoding="utf-8")
+    count = text.count("0.05d")
+    if count < 1:
+        raise RuntimeError(f"No ₹0.05 tick constant found in {filename}")
+    path.write_text(text.replace("0.05d", "0.10d"), encoding="utf-8")
