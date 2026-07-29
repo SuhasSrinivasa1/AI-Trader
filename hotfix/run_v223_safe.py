@@ -5,8 +5,35 @@ import tempfile
 
 source = Path("hotfix/run_v223.py").read_text(encoding="utf-8")
 
-# Replace only the named Java method body. The generated monitor contains extra
-# image-import helpers between methods, so broad regex ranges are unsafe.
+# Replace only the named Java methods. The generated monitor contains image-import
+# helpers between these methods, so broad regex ranges would delete valid code.
+old_protect_patch = r'''replace_regex_once(monitor,
+                   r"    private boolean protectNewFill\(String token, Strategy strategy\) \{.*?(?=    private boolean anyStopLegTriggered)",
+                   new_protect)'''
+new_protect_patch = r'''monitor_text = read(monitor)
+method_start = monitor_text.find("    private boolean protectNewFill(")
+if method_start < 0:
+    raise RuntimeError("Could not locate protectNewFill")
+open_brace = monitor_text.find("{", method_start)
+depth = 0
+method_end = -1
+for index in range(open_brace, len(monitor_text)):
+    char = monitor_text[index]
+    if char == "{":
+        depth += 1
+    elif char == "}":
+        depth -= 1
+        if depth == 0:
+            method_end = index + 1
+            break
+if method_end < 0:
+    raise RuntimeError("Could not find end of protectNewFill")
+write(monitor, monitor_text[:method_start] + new_protect.rstrip()
+        + monitor_text[method_end:])'''
+if source.count(old_protect_patch) != 1:
+    raise RuntimeError("Could not locate broad protectNewFill replacement")
+source = source.replace(old_protect_patch, new_protect_patch, 1)
+
 old_any_patch = r'''replace_regex_once(monitor,
                    r"    private boolean anyStopLegTriggered\(String token, Strategy strategy\) \{.*?(?=    private void cancelEntryRemainder)",
                    new_any_triggered)'''
