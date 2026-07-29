@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'hotfix/run_v224.py'
+      - 'hotfix/run_v224_safe.py'
       - '.github/workflows/multyfi-v224-type-budgets.yml'
   workflow_dispatch:
 
@@ -33,7 +34,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          python3 hotfix/run_v224.py > apply-v224.log 2>&1
+          python3 hotfix/run_v224_safe.py > apply-v224.log 2>&1
           code=$?
           cat apply-v224.log
           echo "$code" > apply-v224-exit-code.txt
@@ -70,6 +71,9 @@ jobs:
           grep -q "Swing / ordinary equity budget" "$ROOT/ProductionActivity.java"
           grep -q "Multibagger budget" "$ROOT/ProductionActivity.java"
           grep -q "Free recommendation budget" "$ROOT/ProductionActivity.java"
+          grep -q "Free recommendations use the saved Free budget" "$ROOT/ProductionActivity.java"
+          ! grep -q "exactly 10 shares" "$ROOT/ProductionActivity.java"
+          ! grep -q "FREE fixed quantity 10" "$ROOT/ProductionActivity.java"
           grep -q "recommendationTypeSelectsBudgetNotClock" "$TEST/TradeTypeBudgetPolicyTest.java"
           grep -q "createMisStopLossOrder" "$ROOT/GrowwClient.java"
           grep -q 'body.put("product", "MIS")' "$ROOT/GrowwClient.java"
@@ -134,6 +138,8 @@ jobs:
           grep -q 'Multyfi AutoBuy Pro' "$OUT/ui-v224.xml"
           grep -q 'stable release 2.2.4' "$OUT/ui-v224.xml"
           grep -q 'TRADE-TYPE BUDGETS' "$OUT/ui-v224.xml"
+          grep -q 'Free recommendations use the saved Free budget' "$OUT/ui-v224.xml"
+          ! grep -q '10 shares' "$OUT/ui-v224.xml"
           adb exec-out screencap -p > "$OUT/startup-v224.png"
           adb logcat -d -v threadtime > "$OUT/logcat-v224.txt"
           if grep -E 'FATAL EXCEPTION|Process: com.suhas.multyfiautobuy.stable|ClassNotFoundException.*com.suhas.multyfiautobuy.stable' "$OUT/logcat-v224.txt"; then
