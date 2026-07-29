@@ -12,7 +12,7 @@ source = Path("hotfix/run_v223.py").read_text(encoding="utf-8")
 old_any_patch = r'''replace_regex_once(monitor,
                    r"    private boolean anyStopLegTriggered\(String token, Strategy strategy\) \{.*?(?=    private void cancelEntryRemainder)",
                    new_any_triggered)'''
-new_any_patch = r'''old_any_method = '''    private boolean anyStopLegTriggered(String token, Strategy strategy) {
+new_any_patch = r"""old_any_method = r'''    private boolean anyStopLegTriggered(String token, Strategy strategy) {
         for (Strategy.StopLeg leg : strategy.stopLegs) {
             GrowwClient.SmartStatus status = GrowwClient.getGtt(token, leg.smartOrderId);
             if (!status.success) continue;
@@ -29,7 +29,7 @@ new_any_patch = r'''old_any_method = '''    private boolean anyStopLegTriggered(
 monitor_text = read(monitor)
 if monitor_text.count(old_any_method) != 1:
     raise RuntimeError("Could not locate the exact legacy anyStopLegTriggered method")
-write(monitor, monitor_text.replace(old_any_method, new_any_triggered, 1))'''
+write(monitor, monitor_text.replace(old_any_method, new_any_triggered, 1))"""
 
 if source.count(old_any_patch) != 1:
     raise RuntimeError("Could not locate the broad anyStopLegTriggered replacement")
