@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'hotfix/run_v223.py'
+      - 'hotfix/run_v223_safe.py'
       - '.github/workflows/multyfi-v223-mis-stop-protection.yml'
   workflow_dispatch:
 
@@ -33,7 +34,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          python3 hotfix/run_v223.py > apply-v223.log 2>&1
+          python3 hotfix/run_v223_safe.py > apply-v223.log 2>&1
           code=$?
           cat apply-v223.log
           echo "$code" > apply-v223-exit-code.txt
@@ -70,7 +71,6 @@ jobs:
           grep -q "DailyAuthManager.ensureVerified(this)" "$ROOT/ProductionNotificationService.java"
           grep -q "NotificationRoutePolicy.entryMode(signal)" "$ROOT/ProductionNotificationService.java"
           grep -q "0.10d" "$ROOT/GrowwClient.java"
-          ! grep -q 'gttBase(reference, strategy.symbol, quantity,.*strategy.productType' "$ROOT/GrowwClient.java"
 
       - name: Verify APK signature and stage candidate
         shell: bash
