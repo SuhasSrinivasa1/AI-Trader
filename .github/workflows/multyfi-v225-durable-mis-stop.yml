@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'hotfix/run_v225.py'
+      - 'hotfix/run_v225_safe.py'
       - '.github/workflows/multyfi-v225-durable-mis-stop.yml'
   workflow_dispatch:
 
@@ -33,7 +34,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          python3 hotfix/run_v225.py > apply-v225.log 2>&1
+          python3 hotfix/run_v225_safe.py > apply-v225.log 2>&1
           code=$?
           cat apply-v225.log
           echo "$code" > apply-v225-exit-code.txt
