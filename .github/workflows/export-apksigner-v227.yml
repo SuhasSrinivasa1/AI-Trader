@@ -1,0 +1,26 @@
+name: Export apksigner for v2.2.7
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/export-apksigner-v227.yml'
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: android-actions/setup-android@v3
+      - name: Install build tools
+        run: yes | sdkmanager "build-tools;35.0.0"
+      - name: Stage apksigner
+        run: |
+          mkdir -p export/lib
+          cp "$ANDROID_HOME/build-tools/35.0.0/apksigner" export/apksigner
+          cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" export/lib/apksigner.jar
+          chmod +x export/apksigner
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apksigner-35.0.0
+          path: export/
