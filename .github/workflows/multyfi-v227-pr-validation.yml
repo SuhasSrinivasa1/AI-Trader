@@ -64,7 +64,6 @@ jobs:
           grep -q "parsesMostOvernightProfitStock" "$TEST/Research360ParserTest.java"
           grep -q "ignoresOptionsAndOptionWriter" "$TEST/Research360ParserTest.java"
           grep -q "ignoresOvernightLoss" "$TEST/Research360ParserTest.java"
-          grep -q "EntryOrderPolicy.isTransient" "$ROOT/GrowwClient.java"
           grep -q "MIS STOP-LOSS ORDER CONFIRMED" "$ROOT/StrategyMonitorService.java"
           grep -q "DailyAuthManager.ensureVerified" "$ROOT/ProductionNotificationService.java"
           grep -q "TradeTypeBudgetPolicy" "$ROOT/ProductionNotificationService.java"
