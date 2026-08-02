@@ -1,0 +1,24 @@
+name: Export generated v2.2.7 source
+
+on:
+  push:
+    branches: [multyfi-v2.2.8-two-stage-intraday]
+    paths:
+      - '.github/workflows/export-v227-generated-source.yml'
+  workflow_dispatch:
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply v2.2.7 release chain
+        run: python3 hotfix/run_v227.py
+      - name: Upload generated source
+        uses: actions/upload-artifact@v4
+        with:
+          name: multyfi-v227-generated-source
+          path: |
+            android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/
+            android-stable/app/src/test/java/com/suhas/multyfiautobuy/stable/
+            android-stable/app/build.gradle
