@@ -1,10 +1,8 @@
 name: Export generated v2.2.7 source
 
 on:
-  push:
-    branches: [multyfi-v2.2.8-two-stage-intraday]
-    paths:
-      - '.github/workflows/export-v227-generated-source.yml'
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
