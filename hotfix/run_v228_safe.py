@@ -11,7 +11,7 @@ end = source.find(end_marker, start)
 if start < 0 or end < 0:
     raise RuntimeError("Could not locate the fragile v2.2.8 service patch section")
 
-replacement = r'''# Do not accept a new Multyfi buy while any prior early exit remains unresolved.
+replacement = r"""# Do not accept a new Multyfi buy while any prior early exit remains unresolved.
 # Insert after the existing phrase-handling block using brace matching so this
 # remains stable across earlier generated-version wording changes.
 text = read(service)
@@ -61,7 +61,7 @@ if text.count(marker) != 1:
     raise RuntimeError("Could not locate ProductionNotificationService helper marker")
 write(service, text.replace(marker, helper + marker, 1))
 
-'''
+"""
 source = source[:start] + replacement + source[end:]
 
 with tempfile.NamedTemporaryFile("w", suffix=".py", encoding="utf-8", delete=False) as handle:
