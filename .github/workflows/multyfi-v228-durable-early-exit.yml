@@ -1,0 +1,197 @@
+name: Build Multyfi AutoBuy Pro v2.2.8 Durable Early Exit
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'hotfix/run_v228.py'
+      - '.github/workflows/multyfi-v228-durable-early-exit.yml'
+
+jobs:
+  build-test-android16:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android 16 SDK
+        run: yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools" "emulator" "system-images;android-36;google_apis;x86_64"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Apply v2.2.8 source update
+        shell: bash
+        run: |
+          set +e
+          python3 hotfix/run_v228.py > apply-v228.log 2>&1
+          code=$?
+          cat apply-v228.log
+          echo "$code" > apply-v228-exit-code.txt
+          exit "$code"
+
+      - name: Unit tests, lint and source-built APK
+        shell: bash
+        run: |
+          set +e
+          gradle --no-daemon --console=plain -p android-stable :app:testDebugUnitTest :app:lintDebug :app:assembleDebug > build-v228.log 2>&1
+          code=$?
+          cat build-v228.log
+          echo "$code" > build-v228-exit-code.txt
+          exit "$code"
+
+      - name: Verify durable early-exit contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable
+          TEST=android-stable/app/src/test/java/com/suhas/multyfiautobuy/stable
+          grep -q "versionCode 228" android-stable/app/build.gradle
+          grep -q "versionName '2.2.8'" android-stable/app/build.gradle
+          grep -q "MULTYFI EARLY EXIT PERSISTED" "$ROOT/ProductionNotificationService.java"
+          grep -q "NEW ENTRY BLOCKED — EARLY EXIT PENDING" "$ROOT/ProductionNotificationService.java"
+          grep -q "hasPendingEarlyExit" "$ROOT/ProductionNotificationService.java"
+          grep -q "exactly one filled Multyfi strategy" "$ROOT/SignalParser.java"
+          grep -q "compactIdentity" "$ROOT/SignalParser.java"
+          grep -q "Groww position is zero; automatic or manual exit completed" "$ROOT/StrategyMonitorService.java"
+          grep -q "EARLY EXIT WAITING — WILL RETRY" "$ROOT/StrategyMonitorService.java"
+          grep -q "Reconnect the whitelisted VPN immediately" "$ROOT/StrategyMonitorService.java"
+          grep -q "matchesDisciplinedEarlyExitWithCompanyName" "$TEST/DurableEarlyExitTest.java"
+          grep -q "ambiguousSymbolLessUpdateNeverSelectsTwoStrategies" "$TEST/DurableEarlyExitTest.java"
+          grep -q "processResearch360" "$ROOT/ProductionNotificationService.java"
+          grep -q "RESEARCH 360 OVERNIGHT PROFIT SELL SUBMITTED" "$ROOT/ProductionNotificationService.java"
+          grep -q "MIS BLOCKED BY GROWW — TRYING CNC SAME-DAY FALLBACK" "$ROOT/ProductionNotificationService.java"
+          grep -q "MIS STOP-LOSS ORDER CONFIRMED" "$ROOT/StrategyMonitorService.java"
+          grep -q "DailyAuthManager.ensureVerified" "$ROOT/ProductionNotificationService.java"
+          grep -q "TradeTypeBudgetPolicy" "$ROOT/ProductionNotificationService.java"
+
+      - name: Verify APK signature and stage candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=android-stable/app/build/outputs/apk/debug
+          $ANDROID_HOME/build-tools/35.0.0/apksigner verify --verbose --print-certs "$OUT/app-debug.apk" | tee "$OUT/signature-v228.txt"
+          cp "$OUT/app-debug.apk" "$OUT/Multyfi-AutoBuy-Pro-S24-Android16-v2.2.8-CANDIDATE.apk"
+
+      - name: Enable KVM access
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Android 16 install, two cold launches and crash scan
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=android-stable/app/build/outputs/apk/debug
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/android-avd"
+          export ANDROID_SDK_HOME="$RUNNER_TEMP/android-sdk-home"
+          mkdir -p "$ANDROID_AVD_HOME" "$ANDROID_SDK_HOME/.android"
+          AVD_PATH="$ANDROID_AVD_HOME/s24_v228_api36.avd"
+          echo no | avdmanager create avd --force --name s24_v228_api36 --package 'system-images;android-36;google_apis;x86_64' --device 'pixel_8_pro' --path "$AVD_PATH"
+          "$ANDROID_HOME/emulator/emulator" -avd s24_v228_api36 -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none > "$OUT/emulator-v228.log" 2>&1 &
+          EMULATOR_PID=$!
+          trap 'timeout 15 adb emu kill >/dev/null 2>&1 || true; kill "$EMULATOR_PID" >/dev/null 2>&1 || true' EXIT
+          timeout 240 adb wait-for-device
+          booted=0
+          for i in $(seq 1 100); do
+            state=$(timeout 10 adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+            if [ "$state" = "1" ]; then booted=1; break; fi
+            if ! kill -0 "$EMULATOR_PID" 2>/dev/null; then break; fi
+            sleep 4
+          done
+          test "$booted" = "1"
+          APK="$OUT/Multyfi-AutoBuy-Pro-S24-Android16-v2.2.8-CANDIDATE.apk"
+          adb install -r "$APK" | tee "$OUT/install-v228.txt"
+          grep -q Success "$OUT/install-v228.txt"
+          adb shell pm grant com.suhas.multyfiautobuy.stable android.permission.POST_NOTIFICATIONS
+          adb logcat -c
+          for n in 1 2; do
+            adb shell am force-stop com.suhas.multyfiautobuy.stable
+            sleep 2
+            adb shell am start -W -n com.suhas.multyfiautobuy.stable/.MainActivity | tee "$OUT/cold-launch-v228-$n.txt"
+            sleep 10
+            adb shell pidof com.suhas.multyfiautobuy.stable | tee "$OUT/pid-v228-$n.txt"
+            test -s "$OUT/pid-v228-$n.txt"
+          done
+          adb shell uiautomator dump /sdcard/multyfi-v228-ui.xml
+          adb pull /sdcard/multyfi-v228-ui.xml "$OUT/ui-v228.xml"
+          grep -q 'Multyfi AutoBuy Pro' "$OUT/ui-v228.xml"
+          grep -q '2.2.8' "$OUT/ui-v228.xml"
+          adb exec-out screencap -p > "$OUT/startup-v228.png"
+          adb logcat -d -v threadtime > "$OUT/logcat-v228.txt"
+          if grep -E 'FATAL EXCEPTION|Process: com.suhas.multyfiautobuy.stable|ClassNotFoundException.*com.suhas.multyfiautobuy.stable' "$OUT/logcat-v228.txt"; then
+            exit 1
+          fi
+
+      - name: Create validation manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=android-stable/app/build/outputs/apk/debug
+          SHA=$(sha256sum "$OUT/Multyfi-AutoBuy-Pro-S24-Android16-v2.2.8-CANDIDATE.apk" | awk '{print $1}')
+          cat > "$OUT/VALIDATION-v2.2.8.json" <<EOF
+          {
+            "version": "2.2.8-candidate",
+            "package": "com.suhas.multyfiautobuy.stable",
+            "android_api": 36,
+            "apk_sha256": "$SHA",
+            "unit_tests": "PASS",
+            "lint": "PASS",
+            "signature_verification": "PASS",
+            "android16_install": "PASS",
+            "cold_launch_1": "PASS",
+            "cold_launch_2": "PASS",
+            "crash_scan": "PASS",
+            "early_exit": {
+              "persist_before_network_checks": true,
+              "single_filled_strategy_fallback": true,
+              "company_name_normalization": true,
+              "block_new_entries_until_zero": true,
+              "manual_sale_zero_position_reconciliation": true,
+              "retry_after_vpn_or_ip_recovery": true,
+              "duplicate_log_suppression": true
+            },
+            "retained": {
+              "Research360": "MOST Overnight-Profit sell-only",
+              "options": "never trade",
+              "Multyfi_buy_routing": "Intraday MIS first; otherwise CNC GTT",
+              "MIS_fallback": "assigned-basket rejection retries CNC same-day",
+              "trade_type_budgets": "Intraday/Swing/Multibagger/Free"
+            }
+          }
+          EOF
+
+      - name: Upload v2.2.8 candidate and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Multyfi-AutoBuy-Pro-S24-Android16-v2.2.8-CANDIDATE
+          path: |
+            apply-v228.log
+            apply-v228-exit-code.txt
+            build-v228.log
+            build-v228-exit-code.txt
+            android-stable/app/build/outputs/apk/debug/Multyfi-AutoBuy-Pro-S24-Android16-v2.2.8-CANDIDATE.apk
+            android-stable/app/build/outputs/apk/debug/VALIDATION-v2.2.8.json
+            android-stable/app/build/outputs/apk/debug/signature-v228.txt
+            android-stable/app/build/outputs/apk/debug/install-v228.txt
+            android-stable/app/build/outputs/apk/debug/cold-launch-v228-*.txt
+            android-stable/app/build/outputs/apk/debug/pid-v228-*.txt
+            android-stable/app/build/outputs/apk/debug/ui-v228.xml
+            android-stable/app/build/outputs/apk/debug/logcat-v228.txt
+            android-stable/app/build/outputs/apk/debug/startup-v228.png
+            android-stable/app/build/outputs/apk/debug/emulator-v228.log
+            android-stable/app/build/reports/tests/testDebugUnitTest/
+            android-stable/app/build/reports/lint-results-debug.html
+          if-no-files-found: warn
