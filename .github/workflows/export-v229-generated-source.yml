@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - multyfi-v2.3.0-authoritative-early-sell
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
