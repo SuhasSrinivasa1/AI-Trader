@@ -1,6 +1,9 @@
 name: Build Multyfi AutoBuy Pro v2.3.0 Authoritative Early Sell
 
 on:
+  push:
+    branches:
+      - multyfi-v2.3.0-authoritative-early-sell
   pull_request:
     branches: [main]
     paths:
