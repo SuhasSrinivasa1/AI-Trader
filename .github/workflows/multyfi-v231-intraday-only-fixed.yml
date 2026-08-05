@@ -3,6 +3,12 @@ name: Build Multyfi v2.3.1 Intraday Only Fixed
 on:
   push:
     branches: [multyfi-v2.3.1-intraday-only]
+  pull_request:
+    branches: [main]
+    paths:
+      - 'hotfix/run_v231.py'
+      - 'hotfix/fix_v231_newline.py'
+      - '.github/workflows/multyfi-v231-intraday-only-fixed.yml'
   workflow_dispatch:
 
 jobs:
