@@ -1,12 +1,9 @@
-name: Export generated v2.2.9 source
+name: Export generated v2.3.0 source
 
 on:
   push:
     branches:
-      - multyfi-v2.3.0-authoritative-early-sell
-  pull_request:
-    branches:
-      - main
+      - multyfi-v2.3.1-intraday-only
   workflow_dispatch:
 
 jobs:
@@ -15,14 +12,15 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - name: Apply v2.2.9 release chain
-        run: python3 hotfix/run_v229.py
+      - name: Apply v2.3.0 release chain
+        run: python3 hotfix/run_v230.py
       - name: Upload generated source
         uses: actions/upload-artifact@v4
         with:
-          name: multyfi-v229-generated-source
+          name: multyfi-v230-generated-source
           path: |
             android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/
             android-stable/app/src/test/java/com/suhas/multyfiautobuy/stable/
+            android-stable/app/src/main/res/
             android-stable/app/build.gradle
           if-no-files-found: error
