@@ -1,0 +1,79 @@
+name: Build Multyfi v2.3.1 Intraday Only Fixed
+
+on:
+  push:
+    branches: [multyfi-v2.3.1-intraday-only]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK
+        run: yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Apply intraday-only source update
+        run: |
+          set -euo pipefail
+          python3 hotfix/run_v231.py
+          python3 hotfix/fix_v231_newline.py
+      - name: Test lint and build
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --console=plain -p android-stable \
+            :app:testDebugUnitTest \
+            :app:lintDebug \
+            :app:assembleDebug \
+            :app:assembleRelease | tee build-v231-fixed.log
+      - name: Verify scope
+        run: |
+          set -euo pipefail
+          ROOT=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable
+          grep -q "versionCode 231" android-stable/app/build.gradle
+          grep -q "versionName '2.3.1'" android-stable/app/build.gradle
+          grep -q "class IntradayOnlyPolicy" "$ROOT/IntradayOnlyPolicy.java"
+          grep -q "IGNORED — INTRADAY-ONLY MODE" "$ROOT/ProductionNotificationService.java"
+          grep -q '"\\n" + compact(rawText)' "$ROOT/ProductionNotificationService.java"
+          grep -q "MULTYFI EARLY EXIT PERSISTED" "$ROOT/ProductionNotificationService.java"
+          grep -q "queueEarlyExit(earlyExit)" "$ROOT/ProductionNotificationService.java"
+          grep -q "SAVE INTRADAY SETTINGS" "$ROOT/ProductionActivity.java"
+          ! grep -q "Swing / ordinary equity budget" "$ROOT/ProductionActivity.java"
+          ! grep -q "Multibagger budget" "$ROOT/ProductionActivity.java"
+          ! grep -q "Free recommendation budget" "$ROOT/ProductionActivity.java"
+      - name: Stage files
+        run: |
+          set -euo pipefail
+          OUT=android-stable/app/build/outputs/apk/v231
+          mkdir -p "$OUT"
+          cp android-stable/app/build/outputs/apk/debug/app-debug.apk "$OUT/Multyfi-AutoBuy-Pro-S24-Android16-v2.3.1-VALIDATION.apk"
+          UNSIGNED=$(find android-stable/app/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n 1)
+          test -n "$UNSIGNED"
+          cp "$UNSIGNED" "$OUT/Multyfi-AutoBuy-Pro-S24-Android16-v2.3.1-UNSIGNED.apk"
+          cat > "$OUT/RELEASE-NOTES-v2.3.1.txt" <<'EOF'
+          MULTYFI AUTOBUY PRO v2.3.1 — INTRADAY ONLY
+
+          - Accepts new paid Multyfi Intraday/Intra day/MIS calls only.
+          - Ignores Swing, Multibagger, Free, Free Intraday and unlabelled equity calls.
+          - Shows only the Intraday budget and entry-buffer settings.
+          - Keeps the v2.3.0 Intraday entry, stop protection and authoritative Multyfi early-sell logic unchanged.
+          - Existing active strategies remain monitored during an update.
+          EOF
+          sha256sum "$OUT/Multyfi-AutoBuy-Pro-S24-Android16-v2.3.1-UNSIGNED.apk" > "$OUT/SHA256-v2.3.1.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Multyfi-AutoBuy-Pro-S24-Android16-v2.3.1-INTRADAY-ONLY-FIXED
+          path: |
+            android-stable/app/build/outputs/apk/v231/
+            android-stable/app/build/reports/tests/testDebugUnitTest/
+            android-stable/app/build/reports/lint-results-debug.html
+            build-v231-fixed.log
+          if-no-files-found: error
