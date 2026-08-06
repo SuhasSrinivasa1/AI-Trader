@@ -54,10 +54,12 @@ jobs:
           grep -q "convertOpenMisStopToMarketSell" "$ROOT/GrowwClient.java"
           grep -q 'API_BASE + "/order/modify"' "$ROOT/GrowwClient.java"
           grep -q 'body.put("order_type", "MARKET")' "$ROOT/GrowwClient.java"
+          grep -q 'body.put("groww_order_id"' "$ROOT/GrowwClient.java"
+          ! sed -n '/convertOpenMisStopToMarketSell/,/placeTargetMarketSell/p' "$ROOT/GrowwClient.java" | grep -q 'body.put("trigger_price"'
           grep -q "MULTYFI EARLY EXIT FAST SUBMITTED" "$ROOT/StrategyMonitorService.java"
           grep -q "MULTYFI FAST EXIT FALLBACK" "$ROOT/StrategyMonitorService.java"
-          grep -q "tryFastAuthoritativeEarlyExit" "$ROOT/StrategyMonitorService.java"
-          grep -q "gspcropSingleFullStopUsesOneRequestFastPath" "$TEST/FastEarlyExitPolicyTest.java"
+          grep -q "tryImmediateTrackedEarlyExit" "$ROOT/StrategyMonitorService.java"
+          grep -q "gspcropCompleteProtectedTradeUsesImmediateOneRequestPath" "$TEST/FastEarlyExitPolicyTest.java"
           grep -q "MULTYFI EARLY EXIT WAITING — STOP CANCEL NOT CONFIRMED" "$ROOT/StrategyMonitorService.java"
           grep -q "queueEarlyExit(earlyExit)" "$ROOT/ProductionNotificationService.java"
           grep -q "acceptsUnlabelledNewEquityTradeAsMis" "$TEST/IntradayOnlyPolicyTest.java"
@@ -138,16 +140,19 @@ jobs:
           FINAL=android-stable/app/build/outputs/apk/v234
           SHA=$(sha256sum "$FINAL/Multyfi-AutoBuy-Pro-S24-Android16-v2.3.4-UNSIGNED.apk" | awk '{print $1}')
           cat > "$FINAL/RELEASE-NOTES-v2.3.4.txt" <<'EOF'
-          MULTYFI AUTOBUY PRO v2.3.4 — FAST AUTHORITATIVE EARLY EXIT
+          MULTYFI AUTOBUY PRO v2.3.4 — IMMEDIATE AUTHORITATIVE EARLY EXIT
 
-          - For one fully protected MIS position, converts the existing full-quantity
-            stop-loss order directly into a MARKET SELL using one Groww modify request.
-          - Removes the normal stop-cancel confirmation delay from the common path.
-          - Exits only the matching Multyfi stock, not unrelated account positions.
-          - If the one-request conversion is unavailable or rejected, retains the
-            verified v2.3.3 cancel-then-market fallback.
-          - Retains blocklist intake: Free, Swing and Multibagger are rejected.
-          - Retains durable early-exit persistence until Groww confirms zero position.
+          - For one completely filled and protected MIS trade, the existing
+            full-quantity stop-loss is changed directly to MARKET using one Groww
+            modify request as soon as the Multyfi early-exit instruction is processed.
+          - The common fast path performs no pre-status lookup, position lookup,
+            stop cancellation, cancellation polling, quote request or second order create.
+          - It exits the complete quantity of the matching Multyfi stock only; it does
+            not close unrelated manual or other-symbol account positions.
+          - If the one-request conversion is unavailable or rejected, v2.3.3's
+            broker-verified cancel-then-market fallback runs immediately.
+          - Free, Swing and Multibagger entry notifications remain blocked.
+          - Early-exit intent remains persisted until Groww confirms zero position.
           EOF
           cat > "$FINAL/VALIDATION-v2.3.4.json" <<EOF
           {
@@ -160,10 +165,14 @@ jobs:
             "android_16_install": "PASS",
             "cold_launch_1": "PASS",
             "cold_launch_2": "PASS",
-            "fast_exit": "single regular MIS stop converted to MARKET by order modify",
+            "fast_exit": "one immediate regular-order modify from full MIS SL to MARKET",
+            "fast_path_pre_status_lookup": false,
+            "fast_path_cancel_request": false,
+            "fast_path_position_lookup": false,
             "fallback": "verified stop cancel then MARKET sell",
             "account_wide_exit": false,
-            "matching_symbol_full_quantity_exit": true
+            "matching_symbol_complete_quantity_exit": true,
+            "live_groww_execution_test": false
           }
           EOF
 
