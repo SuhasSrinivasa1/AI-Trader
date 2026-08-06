@@ -1,0 +1,37 @@
+name: Temporary Export Android Build Tools
+
+on:
+  push:
+    branches:
+      - temp-android-sdk-links-20260806
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export-tools:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: android-actions/setup-android@v3
+      - name: Install Android platform and build tools
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Package required tools
+        run: |
+          set -euo pipefail
+          mkdir -p android-tools/platforms android-tools/build-tools
+          cp -a "$ANDROID_HOME/platforms/android-35" android-tools/platforms/
+          cp -a "$ANDROID_HOME/build-tools/35.0.0" android-tools/build-tools/
+          tar -C android-tools -czf android-tools-api35.tar.gz .
+          sha256sum android-tools-api35.tar.gz > android-tools-api35.tar.gz.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-tools-api35
+          path: |
+            android-tools-api35.tar.gz
+            android-tools-api35.tar.gz.sha256
+          retention-days: 1
