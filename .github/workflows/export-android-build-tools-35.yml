@@ -1,0 +1,30 @@
+name: Export Android Build Tools 35
+
+on:
+  push:
+    branches: [multyfi-v2.3.2-blocklist-intraday]
+  workflow_dispatch:
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: android-actions/setup-android@v3
+      - name: Install build tools
+        run: yes | sdkmanager "build-tools;35.0.0"
+      - name: Stage signing tools
+        run: |
+          set -euo pipefail
+          mkdir -p exported-build-tools
+          cp "$ANDROID_HOME/build-tools/35.0.0/zipalign" exported-build-tools/
+          cp "$ANDROID_HOME/build-tools/35.0.0/apksigner" exported-build-tools/
+          cp -R "$ANDROID_HOME/build-tools/35.0.0/lib" exported-build-tools/
+          cp -R "$ANDROID_HOME/build-tools/35.0.0/lib64" exported-build-tools/
+          chmod +x exported-build-tools/zipalign exported-build-tools/apksigner
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-build-tools-35-linux
+          path: exported-build-tools/
+          if-no-files-found: error
