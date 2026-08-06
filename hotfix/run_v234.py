@@ -92,10 +92,11 @@ modify_method = r'''
                     "The fast-exit quantity must be positive.", 0);
         }
         try {
+            // Groww's official MARKET modify example requires only quantity,
+            // order_type, segment and groww_order_id. Do not carry the old SL
+            // price or trigger into the MARKET conversion request.
             JSONObject body = new JSONObject();
             body.put("quantity", quantity);
-            body.put("price", 0);
-            body.put("trigger_price", 0);
             body.put("order_type", "MARKET");
             body.put("segment", "CASH");
             body.put("groww_order_id", growwOrderId.trim());
@@ -166,10 +167,10 @@ fast_helper = r'''
                 ? "" : candidate.smartOrderId.trim();
         if (orderId.isEmpty()) return false;
 
-        // No pre-status, cancel or second position request is made here. The
-        // known full-quantity stop itself becomes the MARKET exit. If Groww
-        // rejects or ambiguously fails this request, the existing v2.3.3 path
-        // immediately reconciles the broker state before doing anything else.
+        // No pre-status, cancel, position, quote or second order-create request
+        // is made here. The known full-quantity stop itself becomes the MARKET
+        // exit. A rejected/ambiguous response falls through to the v2.3.3
+        // broker-reconciliation path in the same monitor tick.
         GrowwClient.ApiResult modified =
                 GrowwClient.convertOpenMisStopToMarketSell(
                         token, orderId, candidate.referenceId,
@@ -292,6 +293,8 @@ assert "convertOpenMisStopToMarketSell" in read(client)
 assert 'API_BASE + "/order/modify"' in read(client)
 assert 'body.put("order_type", "MARKET")' in read(client)
 assert 'body.put("groww_order_id"' in read(client)
+assert 'body.put("price"' not in modify_method
+assert 'body.put("trigger_price"' not in modify_method
 assert "MULTYFI EARLY EXIT FAST SUBMITTED" in read(monitor)
 assert "MULTYFI FAST EXIT FALLBACK" in read(monitor)
 assert "tryImmediateTrackedEarlyExit(token, strategy, staticIpReady)" in read(monitor)
