@@ -1,0 +1,186 @@
+name: Build Multyfi AutoBuy Pro v2.3.2 Blocklist Intraday
+
+on:
+  push:
+    branches: [multyfi-v2.3.2-blocklist-intraday]
+  workflow_dispatch:
+
+jobs:
+  build-test-android16:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android 16 SDK and build tools
+        run: yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools" "emulator" "system-images;android-36;google_apis;x86_64"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Apply v2.3.2 source update
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 hotfix/run_v232.py | tee apply-v232.log
+
+      - name: Unit tests, lint and APK builds
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --console=plain -p android-stable \
+            :app:testDebugUnitTest \
+            :app:lintDebug \
+            :app:assembleDebug \
+            :app:assembleRelease | tee build-v232.log
+
+      - name: Verify v2.3.2 scope and early-sell retention
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable
+          TEST=android-stable/app/src/test/java/com/suhas/multyfiautobuy/stable
+          grep -q "versionCode 232" android-stable/app/build.gradle
+          grep -q "versionName '2.3.2'" android-stable/app/build.gradle
+          grep -q "acceptsUnlabelledNewEquityTradeAsMis" "$TEST/IntradayOnlyPolicyTest.java"
+          grep -q "Released: New Equity Trade" "$TEST/IntradayOnlyPolicyTest.java"
+          grep -q "multi\\\\s\*\[- \]\?\\\\s\*bagger" "$ROOT/IntradayOnlyPolicy.java"
+          grep -q 'return "INTRADAY";' "$ROOT/SignalParser.java"
+          grep -q "IGNORED — BLOCKED MULTYFI CATEGORY" "$ROOT/ProductionNotificationService.java"
+          grep -q "queueEarlyExit(earlyExit)" "$ROOT/ProductionNotificationService.java"
+          grep -q "MULTYFI EARLY EXIT PERSISTED" "$ROOT/ProductionNotificationService.java"
+          grep -q "all complete Multyfi calls → MIS" "$ROOT/ProductionActivity.java"
+          ! grep -q "source-built stable release 2.3.1" "$ROOT/ProductionActivity.java"
+
+      - name: Stage unsigned release, validation APK and local signing tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          FINAL=android-stable/app/build/outputs/apk/v232
+          TOOLS="$FINAL/android-build-tools-35.0.0"
+          mkdir -p "$FINAL" "$TOOLS"
+          cp android-stable/app/build/outputs/apk/debug/app-debug.apk \
+            "$FINAL/Multyfi-AutoBuy-Pro-S24-Android16-v2.3.2-VALIDATION.apk"
+          UNSIGNED=$(find android-stable/app/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n 1)
+          test -n "$UNSIGNED"
+          cp "$UNSIGNED" \
+            "$FINAL/Multyfi-AutoBuy-Pro-S24-Android16-v2.3.2-UNSIGNED.apk"
+          cp "$ANDROID_HOME/build-tools/35.0.0/zipalign" "$TOOLS/"
+          cp "$ANDROID_HOME/build-tools/35.0.0/apksigner" "$TOOLS/"
+          cp -R "$ANDROID_HOME/build-tools/35.0.0/lib" "$TOOLS/"
+          chmod +x "$TOOLS/zipalign" "$TOOLS/apksigner"
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Android 16 install and two cold launches
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          set -euo pipefail
+          FINAL=android-stable/app/build/outputs/apk/v232
+          APK="$FINAL/Multyfi-AutoBuy-Pro-S24-Android16-v2.3.2-VALIDATION.apk"
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/android-avd"
+          export ANDROID_SDK_HOME="$RUNNER_TEMP/android-sdk-home"
+          mkdir -p "$ANDROID_AVD_HOME" "$ANDROID_SDK_HOME/.android"
+          echo no | avdmanager create avd --force --name s24_v232 \
+            --package 'system-images;android-36;google_apis;x86_64' \
+            --device 'pixel_8_pro' --path "$ANDROID_AVD_HOME/s24_v232.avd"
+          "$ANDROID_HOME/emulator/emulator" -avd s24_v232 -no-window \
+            -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim \
+            -camera-back none > "$FINAL/emulator-v232.log" 2>&1 &
+          EMULATOR_PID=$!
+          trap 'timeout 15 adb emu kill >/dev/null 2>&1 || true; kill "$EMULATOR_PID" >/dev/null 2>&1 || true' EXIT
+          timeout 240 adb wait-for-device
+          booted=0
+          for i in $(seq 1 100); do
+            state=$(timeout 10 adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+            if [ "$state" = "1" ]; then booted=1; break; fi
+            if ! kill -0 "$EMULATOR_PID" 2>/dev/null; then break; fi
+            sleep 4
+          done
+          test "$booted" = "1"
+          adb install -r "$APK" | tee "$FINAL/install-v232.txt"
+          grep -q Success "$FINAL/install-v232.txt"
+          adb shell pm grant com.suhas.multyfiautobuy.stable android.permission.POST_NOTIFICATIONS
+          adb logcat -c
+          for n in 1 2; do
+            adb shell am force-stop com.suhas.multyfiautobuy.stable
+            sleep 2
+            adb shell am start -W -n com.suhas.multyfiautobuy.stable/.MainActivity \
+              | tee "$FINAL/cold-launch-v232-$n.txt"
+            sleep 8
+            adb shell pidof com.suhas.multyfiautobuy.stable \
+              | tee "$FINAL/pid-v232-$n.txt"
+            test -s "$FINAL/pid-v232-$n.txt"
+          done
+          adb shell uiautomator dump /sdcard/v232-ui.xml
+          adb pull /sdcard/v232-ui.xml "$FINAL/ui-v232.xml"
+          grep -q 'Multyfi AutoBuy Pro' "$FINAL/ui-v232.xml"
+          grep -q '2.3.2' "$FINAL/ui-v232.xml"
+          adb exec-out screencap -p > "$FINAL/startup-v232.png"
+          adb logcat -d -v threadtime > "$FINAL/logcat-v232.txt"
+          if grep -E 'FATAL EXCEPTION|Process: com.suhas.multyfiautobuy.stable|ClassNotFoundException.*com.suhas.multyfiautobuy.stable' "$FINAL/logcat-v232.txt"; then exit 1; fi
+
+      - name: Create release notes and validation manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          FINAL=android-stable/app/build/outputs/apk/v232
+          SHA=$(sha256sum "$FINAL/Multyfi-AutoBuy-Pro-S24-Android16-v2.3.2-UNSIGNED.apk" | awk '{print $1}')
+          cat > "$FINAL/RELEASE-NOTES-v2.3.2.txt" <<'EOF'
+          MULTYFI AUTOBUY PRO v2.3.2 — SIMPLIFIED INTRADAY INTAKE
+
+          Minimal update from v2.3.1:
+          - Accepts every complete Multyfi equity trade notification as Intraday MIS.
+          - This includes unlabelled notifications such as "Released: New Equity Trade".
+          - Rejects a notification when its text contains Free, Swing or Multibagger.
+          - Still requires stock name, entry/entry range, target and stop loss.
+          - Intraday budget, entry, protection, monitoring and authoritative early sell are unchanged.
+          - Existing active strategies remain monitored during an app update.
+          EOF
+          cat > "$FINAL/VALIDATION-v2.3.2.json" <<EOF
+          {
+            "version": "2.3.2",
+            "version_code": 232,
+            "package": "com.suhas.multyfiautobuy.stable",
+            "unsigned_release_sha256": "$SHA",
+            "unit_tests": "PASS",
+            "lint": "PASS",
+            "android_16_install": "PASS",
+            "cold_launch_1": "PASS",
+            "cold_launch_2": "PASS",
+            "accept_unlabelled_complete_trade": true,
+            "route_accepted_trade_as_mis": true,
+            "blocked_words": ["free", "swing", "multibagger"],
+            "authoritative_early_sell_retained": true
+          }
+          EOF
+
+      - name: Upload v2.3.2 build package
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Multyfi-AutoBuy-Pro-S24-Android16-v2.3.2-BUILD
+          path: |
+            apply-v232.log
+            build-v232.log
+            android-stable/app/build/outputs/apk/v232/
+            android-stable/app/build/reports/tests/testDebugUnitTest/
+            android-stable/app/build/reports/lint-results-debug.html
+            android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/IntradayOnlyPolicy.java
+            android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/SignalParser.java
+            android-stable/app/src/test/java/com/suhas/multyfiautobuy/stable/IntradayOnlyPolicyTest.java
+          if-no-files-found: warn
