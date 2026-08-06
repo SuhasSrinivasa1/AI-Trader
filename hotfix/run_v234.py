@@ -36,20 +36,25 @@ replace_once(gradle, "versionCode 233", "versionCode 234")
 replace_once(gradle, "versionName '2.3.3'", "versionName '2.3.4'")
 
 
-# One-request fast exit is used only when one regular MIS stop exactly covers
-# the live remaining position. Any mismatch falls back to the verified v2.3.3
-# cancel-then-market path instead of risking an over-sell or unrelated exit.
+# The one-request path is deliberately strict. It is available only when the
+# persisted broker-confirmed state proves that one regular MIS stop protects the
+# complete requested/fill quantity. All other states use the v2.3.3 verified
+# cancellation fallback.
 write(JAVA / "FastEarlyExitPolicy.java", r'''package com.suhas.multyfiautobuy.stable;
 
 final class FastEarlyExitPolicy {
     private FastEarlyExitPolicy() { }
 
-    static boolean canConvertSingleStop(int activeRegularStopCount,
-                                        int stopQuantity,
-                                        int remainingPosition) {
+    static boolean canConvertTrackedSingleStop(int activeRegularStopCount,
+                                               int stopQuantity,
+                                               int requestedQuantity,
+                                               int observedFilledQuantity,
+                                               int protectedQuantity) {
         return activeRegularStopCount == 1
-                && remainingPosition > 0
-                && stopQuantity == remainingPosition;
+                && requestedQuantity > 0
+                && observedFilledQuantity == requestedQuantity
+                && protectedQuantity == requestedQuantity
+                && stopQuantity == requestedQuantity;
     }
 
     static boolean modificationAccepted(String status) {
@@ -111,8 +116,8 @@ modify_method = r'''
             }
             return ApiResult.success(id,
                     orderReferenceId == null ? "" : orderReferenceId,
-                    "Existing MIS stop converted to full-quantity MARKET SELL in one "
-                            + "broker request • order " + id + " • status "
+                    "Existing full-quantity MIS stop converted directly to MARKET SELL "
+                            + "in one broker request • order " + id + " • status "
                             + (status.isEmpty() ? "submitted" : status) + ".",
                     http.code);
         } catch (Exception e) {
@@ -125,14 +130,16 @@ replace_once(client, insert_anchor, "\n" + modify_method.rstrip() + insert_ancho
 
 
 monitor = JAVA / "StrategyMonitorService.java"
-helper_anchor = "\n    private void executeExit(String token, Strategy strategy,"
+helper_anchor = "\n    private void processEarlyExit(String token, Strategy strategy, int remaining,"
 if helper_anchor not in read(monitor):
-    raise RuntimeError("Could not locate executeExit insertion point")
+    raise RuntimeError("Could not locate early-exit helper insertion point")
 fast_helper = r'''
-    private boolean tryFastAuthoritativeEarlyExit(String token,
-                                                   Strategy strategy,
-                                                   int remaining) {
-        if (!strategy.isIntraday() || remaining <= 0) return false;
+    private boolean tryImmediateTrackedEarlyExit(String token,
+                                                 Strategy strategy,
+                                                 boolean staticIpReady) {
+        if (!isMarketSession() || !staticIpReady || !strategy.isIntraday()) {
+            return false;
+        }
 
         Strategy.StopLeg candidate = null;
         int activeRegularStops = 0;
@@ -146,44 +153,31 @@ fast_helper = r'''
             candidate = leg;
         }
         if (candidate == null
-                || !FastEarlyExitPolicy.canConvertSingleStop(
-                        activeRegularStops, candidate.quantity, remaining)) {
+                || !FastEarlyExitPolicy.canConvertTrackedSingleStop(
+                        activeRegularStops,
+                        candidate.quantity,
+                        strategy.requestedQuantity,
+                        strategy.observedFilledQuantity,
+                        strategy.protectedQuantity)) {
             return false;
         }
 
         String orderId = candidate.smartOrderId == null
                 ? "" : candidate.smartOrderId.trim();
-        GrowwClient.OrderStatus status = !orderId.isEmpty()
-                ? GrowwClient.getOrderById(token, orderId)
-                : GrowwClient.OrderStatus.failure(0, "Order ID unavailable.");
-        if (!status.success && candidate.referenceId != null
-                && !candidate.referenceId.isEmpty()) {
-            status = GrowwClient.getOrderByReference(token, candidate.referenceId);
-        }
-        if (!status.success) return false;
-        if (EarlyExitProtectionPolicy.isTriggeredOrExecuted(status.status)) {
-            candidate.status = status.status;
-            strategy.lastMessage = "Multyfi early exit arrived while the protective "
-                    + "order was already " + status.status
-                    + "; waiting for position settlement to avoid a duplicate sell.";
-            save(strategy);
-            requestImmediateTick(this, strategy.eventId);
-            return true;
-        }
-        if (!EarlyExitProtectionPolicy.isOpen(status.status)
-                || EarlyExitProtectionPolicy.isCancellationPending(status.status)) {
-            return false;
-        }
-        if (orderId.isEmpty()) orderId = status.orderId;
-        if (orderId == null || orderId.isEmpty()) return false;
+        if (orderId.isEmpty()) return false;
 
+        // No pre-status, cancel or second position request is made here. The
+        // known full-quantity stop itself becomes the MARKET exit. If Groww
+        // rejects or ambiguously fails this request, the existing v2.3.3 path
+        // immediately reconciles the broker state before doing anything else.
         GrowwClient.ApiResult modified =
                 GrowwClient.convertOpenMisStopToMarketSell(
-                        token, orderId, candidate.referenceId, remaining);
+                        token, orderId, candidate.referenceId,
+                        strategy.requestedQuantity);
         if (!modified.success) {
             AppPrefs.log(this, "MULTYFI FAST EXIT FALLBACK",
-                    strategy.symbol + " • one-request stop-to-market conversion failed; "
-                            + "using verified cancel-and-market fallback. "
+                    strategy.symbol + " • direct one-request stop-to-market conversion "
+                            + "was not broker-accepted; running verified fallback now. "
                             + modified.message);
             return false;
         }
@@ -191,15 +185,17 @@ fast_helper = r'''
         candidate.status = "MODIFICATION_REQUESTED";
         strategy.targetOrderId = modified.id;
         strategy.targetOrderReferenceId = modified.secondaryId;
+        strategy.targetFilledQuantity = 0;
         strategy.pendingExitLabel = "Multyfi early exit";
+        // Retain authoritative intent until Groww confirms the position is zero.
         strategy.earlyExitRequested = true;
         strategy.state = Strategy.TARGET_SELL_PENDING;
-        strategy.lastMessage = "Multyfi early exit fast path: the existing full-quantity "
-                + "MIS stop was converted directly into a MARKET sell.";
+        strategy.lastMessage = "Multyfi early exit fast path submitted immediately: "
+                + "the existing complete MIS stop became the MARKET sell.";
         save(strategy);
         AppPrefs.log(this, "MULTYFI EARLY EXIT FAST SUBMITTED",
-                strategy.symbol + " • quantity " + remaining + " • "
-                        + modified.message);
+                strategy.symbol + " • full quantity " + strategy.requestedQuantity
+                        + " • " + modified.message);
         requestImmediateTick(this, strategy.eventId);
         return true;
     }
@@ -207,20 +203,27 @@ fast_helper = r'''
 replace_once(monitor, helper_anchor, "\n" + fast_helper.rstrip() + helper_anchor)
 
 
-# processEarlyExit has already fetched the live Groww position. Use that quantity
-# directly so the common path needs only the status lookup plus one modify call.
-old_early_handoff = r'''        executeExit(token, strategy, true, EXIT_MULTYFI_EARLY);
-'''
-new_early_handoff = r'''        if (tryFastAuthoritativeEarlyExit(token, strategy, remaining)) {
+# The authoritative notification already has an immediate foreground-service
+# tick. Attempt the one-request broker conversion before any position lookup,
+# entry-status lookup, cancellation polling or quote request.
+old_early_branch = r'''        if (strategy.earlyExitRequested) {
+            processEarlyExit(token, strategy, -1, staticIpReady);
             return;
         }
-        executeExit(token, strategy, true, EXIT_MULTYFI_EARLY);
 '''
-replace_once(monitor, old_early_handoff, new_early_handoff)
+new_early_branch = r'''        if (strategy.earlyExitRequested) {
+            if (tryImmediateTrackedEarlyExit(token, strategy, staticIpReady)) {
+                return;
+            }
+            processEarlyExit(token, strategy, -1, staticIpReady);
+            return;
+        }
+'''
+replace_once(monitor, old_early_branch, new_early_branch)
 
 
-# The fast path modifies the existing stop order, so reconcile by Groww order ID
-# first and use its original reference only as fallback.
+# The fast path modifies the existing protective order, so reconcile by Groww
+# order ID first. The original reference remains only as a fallback.
 old_pending = r'''        GrowwClient.OrderStatus status = GrowwClient.getOrderByReference(
                 token, strategy.targetOrderReferenceId);
         if (!status.success) {
@@ -259,13 +262,18 @@ import static org.junit.Assert.assertTrue;
 import org.junit.Test;
 
 public class FastEarlyExitPolicyTest {
-    @Test public void gspcropSingleFullStopUsesOneRequestFastPath() {
-        assertTrue(FastEarlyExitPolicy.canConvertSingleStop(1, 520, 520));
+    @Test public void gspcropCompleteProtectedTradeUsesImmediateOneRequestPath() {
+        assertTrue(FastEarlyExitPolicy.canConvertTrackedSingleStop(
+                1, 520, 520, 520, 520));
     }
 
-    @Test public void partialOrMultipleStopsUseSafeFallback() {
-        assertFalse(FastEarlyExitPolicy.canConvertSingleStop(1, 500, 520));
-        assertFalse(FastEarlyExitPolicy.canConvertSingleStop(2, 520, 520));
+    @Test public void partialMultipleOrUnprotectedTradeUsesVerifiedFallback() {
+        assertFalse(FastEarlyExitPolicy.canConvertTrackedSingleStop(
+                1, 500, 520, 520, 500));
+        assertFalse(FastEarlyExitPolicy.canConvertTrackedSingleStop(
+                2, 520, 520, 520, 520));
+        assertFalse(FastEarlyExitPolicy.canConvertTrackedSingleStop(
+                1, 520, 520, 500, 500));
     }
 
     @Test public void modificationRequestedAndExecutedAreAccepted() {
@@ -286,11 +294,11 @@ assert 'body.put("order_type", "MARKET")' in read(client)
 assert 'body.put("groww_order_id"' in read(client)
 assert "MULTYFI EARLY EXIT FAST SUBMITTED" in read(monitor)
 assert "MULTYFI FAST EXIT FALLBACK" in read(monitor)
-assert "tryFastAuthoritativeEarlyExit(token, strategy, remaining)" in read(monitor)
+assert "tryImmediateTrackedEarlyExit(token, strategy, staticIpReady)" in read(monitor)
 assert "GrowwClient.getOrderById(token, strategy.targetOrderId)" in read(monitor)
 assert "MULTYFI EARLY EXIT WAITING — STOP CANCEL NOT CONFIRMED" in read(monitor)
 assert "queueEarlyExit(earlyExit)" in read(
         JAVA / "ProductionNotificationService.java")
 assert "acceptsUnlabelledNewEquityTradeAsMis" in read(
         TEST / "IntradayOnlyPolicyTest.java")
-print("Applied Multyfi AutoBuy Pro v2.3.4 one-request fast early-exit update")
+print("Applied Multyfi AutoBuy Pro v2.3.4 immediate one-request early-exit update")
