@@ -30,40 +30,15 @@ def replace_once(path: Path, old: str, new: str) -> None:
     write(path, text.replace(old, new, 1))
 
 
-def replace_java_method(path: Path, signature: str, replacement: str) -> None:
-    text = read(path)
-    start = text.find(signature)
-    if start < 0:
-        raise RuntimeError(f"Could not locate Java method in {path}: {signature}")
-    open_brace = text.find("{", start)
-    if open_brace < 0:
-        raise RuntimeError(f"Could not locate method brace in {path}: {signature}")
-    depth = 0
-    end = -1
-    for index in range(open_brace, len(text)):
-        char = text[index]
-        if char == "{":
-            depth += 1
-        elif char == "}":
-            depth -= 1
-            if depth == 0:
-                end = index + 1
-                break
-    if end < 0:
-        raise RuntimeError(f"Could not locate method end in {path}: {signature}")
-    write(path, text[:start] + replacement.rstrip() + text[end:])
-
-
 # Release identity.
 gradle = ROOT / "app/build.gradle"
 replace_once(gradle, "versionCode 233", "versionCode 234")
 replace_once(gradle, "versionName '2.3.3'", "versionName '2.3.4'")
 
 
-# Fast path policy is intentionally strict. It is safe to convert the existing
-# protective order into the exit only when one regular MIS stop exactly covers
-# the live remaining position. This avoids a separate cancel + create sequence
-# without risking an account-wide exit or an accidental short position.
+# One-request fast exit is used only when one regular MIS stop exactly covers
+# the live remaining position. Any mismatch falls back to the verified v2.3.3
+# cancel-then-market path instead of risking an over-sell or unrelated exit.
 write(JAVA / "FastEarlyExitPolicy.java", r'''package com.suhas.multyfiautobuy.stable;
 
 final class FastEarlyExitPolicy {
@@ -78,7 +53,8 @@ final class FastEarlyExitPolicy {
     }
 
     static boolean modificationAccepted(String status) {
-        return "NEW".equalsIgnoreCase(status)
+        return status == null || status.isEmpty()
+                || "NEW".equalsIgnoreCase(status)
                 || "ACKED".equalsIgnoreCase(status)
                 || "APPROVED".equalsIgnoreCase(status)
                 || "OPEN".equalsIgnoreCase(status)
@@ -128,7 +104,7 @@ modify_method = r'''
                     : payload.optString("groww_order_id", growwOrderId.trim());
             String status = payload == null ? ""
                     : payload.optString("order_status", "");
-            if (!status.isEmpty() && !FastEarlyExitPolicy.modificationAccepted(status)) {
+            if (!FastEarlyExitPolicy.modificationAccepted(status)) {
                 return ApiResult.failure("FAST_EXIT_MODIFY_REJECTED",
                         "Groww did not accept the protective-order conversion. Status: "
                                 + status + ".", http.code);
@@ -149,8 +125,6 @@ replace_once(client, insert_anchor, "\n" + modify_method.rstrip() + insert_ancho
 
 
 monitor = JAVA / "StrategyMonitorService.java"
-
-# Insert the fast conversion helper before executeExit.
 helper_anchor = "\n    private void executeExit(String token, Strategy strategy,"
 if helper_anchor not in read(monitor):
     raise RuntimeError("Could not locate executeExit insertion point")
@@ -191,8 +165,9 @@ fast_helper = r'''
             candidate.status = status.status;
             strategy.lastMessage = "Multyfi early exit arrived while the protective "
                     + "order was already " + status.status
-                    + "; waiting for the position to settle to avoid a duplicate sell.";
+                    + "; waiting for position settlement to avoid a duplicate sell.";
             save(strategy);
+            requestImmediateTick(this, strategy.eventId);
             return true;
         }
         if (!EarlyExitProtectionPolicy.isOpen(status.status)
@@ -217,67 +192,35 @@ fast_helper = r'''
         strategy.targetOrderId = modified.id;
         strategy.targetOrderReferenceId = modified.secondaryId;
         strategy.pendingExitLabel = "Multyfi early exit";
-        strategy.earlyExitRequested = false;
+        strategy.earlyExitRequested = true;
         strategy.state = Strategy.TARGET_SELL_PENDING;
         strategy.lastMessage = "Multyfi early exit fast path: the existing full-quantity "
                 + "MIS stop was converted directly into a MARKET sell.";
         save(strategy);
         AppPrefs.log(this, "MULTYFI EARLY EXIT FAST SUBMITTED",
-                strategy.symbol + " • " + modified.message);
+                strategy.symbol + " • quantity " + remaining + " • "
+                        + modified.message);
+        requestImmediateTick(this, strategy.eventId);
         return true;
     }
 '''
 replace_once(monitor, helper_anchor, "\n" + fast_helper.rstrip() + helper_anchor)
 
 
-# Use the one-request conversion before the slower cancel-and-create path. The
-# matching position quantity has already been fetched by processEarlyExit.
-old_execute_start = r'''        boolean authoritativeEarly = EXIT_MULTYFI_EARLY.equals(exitType);
-        for (Strategy.StopLeg leg : strategy.stopLegs) {
+# processEarlyExit has already fetched the live Groww position. Use that quantity
+# directly so the common path needs only the status lookup plus one modify call.
+old_early_handoff = r'''        executeExit(token, strategy, true, EXIT_MULTYFI_EARLY);
 '''
-new_execute_start = r'''        boolean authoritativeEarly = EXIT_MULTYFI_EARLY.equals(exitType);
-        if (authoritativeEarly
-                && tryFastAuthoritativeEarlyExit(token, strategy,
-                        strategy.remainingStrategyQuantity(
-                                GrowwClient.getNetPositionQuantity(
-                                        token, strategy.symbol,
-                                        strategy.productType).value))) {
+new_early_handoff = r'''        if (tryFastAuthoritativeEarlyExit(token, strategy, remaining)) {
             return;
         }
-        for (Strategy.StopLeg leg : strategy.stopLegs) {
+        executeExit(token, strategy, true, EXIT_MULTYFI_EARLY);
 '''
-replace_once(monitor, old_execute_start, new_execute_start)
+replace_once(monitor, old_early_handoff, new_early_handoff)
 
 
-# Avoid trusting a failed position read in the inline fast path. Replace the
-# inline expression with a small guarded lookup inside executeExit.
-unsafe = r'''        boolean authoritativeEarly = EXIT_MULTYFI_EARLY.equals(exitType);
-        if (authoritativeEarly
-                && tryFastAuthoritativeEarlyExit(token, strategy,
-                        strategy.remainingStrategyQuantity(
-                                GrowwClient.getNetPositionQuantity(
-                                        token, strategy.symbol,
-                                        strategy.productType).value))) {
-            return;
-        }
-'''
-safe = r'''        boolean authoritativeEarly = EXIT_MULTYFI_EARLY.equals(exitType);
-        if (authoritativeEarly) {
-            GrowwClient.IntResult fastPosition = GrowwClient.getNetPositionQuantity(
-                    token, strategy.symbol, strategy.productType);
-            if (fastPosition.success) {
-                int fastRemaining = strategy.remainingStrategyQuantity(
-                        fastPosition.value);
-                if (tryFastAuthoritativeEarlyExit(
-                        token, strategy, fastRemaining)) return;
-            }
-        }
-'''
-replace_once(monitor, unsafe, safe)
-
-
-# Pending status should use order-id first because the fast path modifies the
-# existing stop order and keeps its original reference ID.
+# The fast path modifies the existing stop order, so reconcile by Groww order ID
+# first and use its original reference only as fallback.
 old_pending = r'''        GrowwClient.OrderStatus status = GrowwClient.getOrderByReference(
                 token, strategy.targetOrderReferenceId);
         if (!status.success) {
@@ -304,7 +247,6 @@ new_pending = r'''        GrowwClient.OrderStatus status = strategy.targetOrderI
 replace_once(monitor, old_pending, new_pending)
 
 
-# Visible version text only.
 activity = JAVA / "ProductionActivity.java"
 write(activity, read(activity).replace("2.3.3", "2.3.4"))
 
@@ -336,7 +278,6 @@ public class FastEarlyExitPolicyTest {
 ''')
 
 
-# Build-time contracts.
 assert "versionCode 234" in read(gradle)
 assert "versionName '2.3.4'" in read(gradle)
 assert "convertOpenMisStopToMarketSell" in read(client)
@@ -345,7 +286,7 @@ assert 'body.put("order_type", "MARKET")' in read(client)
 assert 'body.put("groww_order_id"' in read(client)
 assert "MULTYFI EARLY EXIT FAST SUBMITTED" in read(monitor)
 assert "MULTYFI FAST EXIT FALLBACK" in read(monitor)
-assert "tryFastAuthoritativeEarlyExit" in read(monitor)
+assert "tryFastAuthoritativeEarlyExit(token, strategy, remaining)" in read(monitor)
 assert "GrowwClient.getOrderById(token, strategy.targetOrderId)" in read(monitor)
 assert "MULTYFI EARLY EXIT WAITING — STOP CANCEL NOT CONFIRMED" in read(monitor)
 assert "queueEarlyExit(earlyExit)" in read(
