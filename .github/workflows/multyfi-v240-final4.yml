@@ -1,0 +1,175 @@
+name: Multyfi v2.4.0 FINAL4 Master Child
+on:
+  push:
+    branches: [multyfi-v2.4.0-master-child-risk]
+  workflow_dispatch:
+jobs:
+  build-test-final4:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDKs
+        run: |
+          yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools" "emulator" "system-images;android-36;google_apis;x86_64" "system-images;android-29;google_apis;x86_64"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Apply final v2.4.0 source
+        run: python3 hotfix/run_v240_fix4.py | tee apply-v240-final4.log
+      - name: Test lint and build both roles
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --console=plain -p android-stable \
+            :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease \
+            :child:testDebugUnitTest :child:lintDebug :child:assembleDebug :child:assembleRelease \
+            | tee build-v240-final4.log
+      - name: Verify contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          M=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable
+          C=android-stable/child/src/main/java/com/suhas/multyfiautobuy/stable
+          MT=android-stable/app/src/test/java/com/suhas/multyfiautobuy/stable
+          CT=android-stable/child/src/test/java/com/suhas/multyfiautobuy/stable
+          grep -q "versionCode 240" android-stable/app/build.gradle
+          grep -q "versionName '2.4.0'" android-stable/app/build.gradle
+          grep -q "applicationId 'com.suhas.multyfiautobuy.child'" android-stable/child/build.gradle
+          grep -q "minSdk 26" android-stable/child/build.gradle
+          grep -q "NET_PROFIT_TARGET = 5000d" "$M/DailyRiskPolicy.java"
+          grep -q "NET_LOSS_FLOOR = -2000d" "$M/DailyRiskPolicy.java"
+          grep -q "strategy.stopLossPrice = strategy.dynamicLossStopPrice" "$M/StrategyMonitorService.java"
+          grep -q "₹2,000 DAILY NET LOSS EXIT FAST SUBMITTED" "$M/StrategyMonitorService.java"
+          grep -q "₹5,000 DAILY NET PROFIT EXIT FAST SUBMITTED" "$M/StrategyMonitorService.java"
+          grep -q "LanMasterRelayService.publishAsync" "$M/ProductionNotificationService.java"
+          grep -q "enqueueRelayedMultyfi" "$C/ProductionNotificationService.java"
+          grep -q 'String core = "SIGNAL|" + id' "$M/LanRelayProtocol.java"
+          grep -q 'android:name=".LanMasterRelayService"' android-stable/app/src/main/AndroidManifest.xml
+          grep -q 'android:name=".LanChildRelayService"' android-stable/child/src/main/AndroidManifest.xml
+          ! grep -q 'android:name=".MultyfiNotificationService"' android-stable/child/src/main/AndroidManifest.xml
+          grep -q "NEW ENTRY BLOCKED — ONE STOCK AT A TIME" "$M/ProductionNotificationService.java"
+          grep -q "netFiveThousandNeedsMoreThanFiveThousandGross" "$MT/ProfitTargetPolicyTest.java"
+          grep -q "netFiveThousandNeedsMoreThanFiveThousandGross" "$CT/ProfitTargetPolicyTest.java"
+          grep -q "signedSignalRoundTrips" "$MT/LanRelayProtocolTest.java"
+          grep -q "signedSignalRoundTrips" "$CT/LanRelayProtocolTest.java"
+      - name: Stage APKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          F=android-stable/v240-final4
+          mkdir -p "$F"
+          cp android-stable/app/build/outputs/apk/debug/app-debug.apk "$F/Multyfi-AutoBuy-MASTER-S24-Android16-v2.4.0-VALIDATION.apk"
+          cp android-stable/child/build/outputs/apk/debug/child-debug.apk "$F/Multyfi-AutoBuy-CHILD-LG-G7-ThinQ-v2.4.0-VALIDATION.apk"
+          MU=$(find android-stable/app/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          CU=$(find android-stable/child/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          test -n "$MU" && test -n "$CU"
+          cp "$MU" "$F/Multyfi-AutoBuy-MASTER-S24-Android16-v2.4.0-UNSIGNED.apk"
+          cp "$CU" "$F/Multyfi-AutoBuy-CHILD-LG-G7-ThinQ-v2.4.0-UNSIGNED.apk"
+          cp -R android-stable/app/src/main "$F/master-source"
+          cp -R android-stable/app/src/test "$F/master-tests"
+          cp -R android-stable/child/src/main "$F/child-source"
+          cp -R android-stable/child/src/test "$F/child-tests"
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Master Android 16 smoke
+        timeout-minutes: 15
+        shell: bash
+        run: |
+          set -euo pipefail
+          F=android-stable/v240-final4
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/avd36" ANDROID_SDK_HOME="$RUNNER_TEMP/sdk36"
+          mkdir -p "$ANDROID_AVD_HOME" "$ANDROID_SDK_HOME/.android"
+          echo no | avdmanager create avd --force --name master36 --package 'system-images;android-36;google_apis;x86_64' --device 'pixel_8_pro' --path "$ANDROID_AVD_HOME/master36.avd"
+          "$ANDROID_HOME/emulator/emulator" -avd master36 -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim > "$F/master-emulator.log" 2>&1 & PID=$!
+          trap 'timeout 15 adb emu kill >/dev/null 2>&1 || true; kill "$PID" >/dev/null 2>&1 || true' EXIT
+          timeout 240 adb wait-for-device
+          for i in $(seq 1 100); do [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ] && break; sleep 3; done
+          test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1
+          adb install -r "$F/Multyfi-AutoBuy-MASTER-S24-Android16-v2.4.0-VALIDATION.apk" | tee "$F/master-install.txt"
+          grep -q Success "$F/master-install.txt"
+          adb logcat -c
+          for n in 1 2; do
+            adb shell am force-stop com.suhas.multyfiautobuy.stable
+            adb shell am start -W -n com.suhas.multyfiautobuy.stable/.MainActivity > "$F/master-launch-$n.txt"
+            sleep 5
+            adb shell pidof com.suhas.multyfiautobuy.stable > "$F/master-pid-$n.txt"
+            test -s "$F/master-pid-$n.txt"
+          done
+          adb shell uiautomator dump /sdcard/master.xml >/dev/null
+          adb pull /sdcard/master.xml "$F/master-ui.xml" >/dev/null
+          grep -q 'Multyfi AutoBuy MASTER' "$F/master-ui.xml"
+          grep -q '2.4.0' "$F/master-ui.xml"
+          adb logcat -d > "$F/master-logcat.txt"
+          ! grep -E 'FATAL EXCEPTION|Process: com.suhas.multyfiautobuy.stable' "$F/master-logcat.txt"
+          adb emu kill >/dev/null 2>&1 || true; wait "$PID" 2>/dev/null || true; trap - EXIT
+      - name: Child Android 10 smoke
+        timeout-minutes: 15
+        shell: bash
+        run: |
+          set -euo pipefail
+          F=android-stable/v240-final4
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/avd29" ANDROID_SDK_HOME="$RUNNER_TEMP/sdk29"
+          mkdir -p "$ANDROID_AVD_HOME" "$ANDROID_SDK_HOME/.android"
+          echo no | avdmanager create avd --force --name child29 --package 'system-images;android-29;google_apis;x86_64' --device 'pixel_2' --path "$ANDROID_AVD_HOME/child29.avd"
+          "$ANDROID_HOME/emulator/emulator" -avd child29 -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim > "$F/child-emulator.log" 2>&1 & PID=$!
+          trap 'timeout 15 adb emu kill >/dev/null 2>&1 || true; kill "$PID" >/dev/null 2>&1 || true' EXIT
+          timeout 240 adb wait-for-device
+          for i in $(seq 1 100); do [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ] && break; sleep 3; done
+          test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1
+          adb install -r "$F/Multyfi-AutoBuy-CHILD-LG-G7-ThinQ-v2.4.0-VALIDATION.apk" | tee "$F/child-install.txt"
+          grep -q Success "$F/child-install.txt"
+          adb logcat -c
+          for n in 1 2; do
+            adb shell am force-stop com.suhas.multyfiautobuy.child
+            adb shell am start -W -n com.suhas.multyfiautobuy.child/.MainActivity > "$F/child-launch-$n.txt"
+            sleep 5
+            adb shell pidof com.suhas.multyfiautobuy.child > "$F/child-pid-$n.txt"
+            test -s "$F/child-pid-$n.txt"
+          done
+          adb shell uiautomator dump /sdcard/child.xml >/dev/null
+          adb pull /sdcard/child.xml "$F/child-ui.xml" >/dev/null
+          grep -q 'Multyfi AutoBuy CHILD' "$F/child-ui.xml"
+          grep -q '2.4.0' "$F/child-ui.xml"
+          adb logcat -d > "$F/child-logcat.txt"
+          ! grep -E 'FATAL EXCEPTION|Process: com.suhas.multyfiautobuy.child' "$F/child-logcat.txt"
+          adb emu kill >/dev/null 2>&1 || true; wait "$PID" 2>/dev/null || true; trap - EXIT
+      - name: Release metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          F=android-stable/v240-final4
+          MS=$(sha256sum "$F/Multyfi-AutoBuy-MASTER-S24-Android16-v2.4.0-UNSIGNED.apk" | awk '{print $1}')
+          CS=$(sha256sum "$F/Multyfi-AutoBuy-CHILD-LG-G7-ThinQ-v2.4.0-UNSIGNED.apk" | awk '{print $1}')
+          cat > "$F/VALIDATION-v2.4.0.json" <<EOF
+          {"version":"2.4.0","version_code":240,"master_package":"com.suhas.multyfiautobuy.stable","child_package":"com.suhas.multyfiautobuy.child","master_unsigned_sha256":"$MS","child_unsigned_sha256":"$CS","unit_tests_master":"PASS","unit_tests_child":"PASS","lint_master":"PASS","lint_child":"PASS","master_android_16_install":"PASS","master_cold_launch_1":"PASS","master_cold_launch_2":"PASS","child_android_10_install":"PASS","child_cold_launch_1":"PASS","child_cold_launch_2":"PASS","daily_net_profit_target_rupees":5000,"daily_net_loss_floor_rupees":-2000,"multyfi_stop":"audit_only","dynamic_stop":"broker_side calculated from entry quantity and cumulative daily net P&L","relay":"direct authenticated local LAN/hotspot; no cloud","live_broker_test":"NOT PERFORMED","physical_two_phone_relay_test":"NOT PERFORMED"}
+          EOF
+          cat > "$F/RELEASE-NOTES-v2.4.0.txt" <<'EOF'
+          MULTYFI AUTOBUY v2.4.0 — MASTER + CHILD
+          MASTER: Galaxy S24 Ultra / Android 16, in-place upgrade package. Local Multyfi processing is queued first, then the same raw signal is broadcast asynchronously to local child phones.
+          CHILD: separate LG G7 ThinQ package, min Android 8/API 26, validated on Android 10. It needs no Multyfi notification access; it auto-discovers MASTER on the same Wi-Fi/hotspot and uses its own Groww/VPN/static-IP/budget settings.
+          DAILY RISK: +₹5,000 charge-adjusted NET target; -₹2,000 cumulative charge-adjusted NET daily floor. Original Multyfi SL is audit-only. A dynamic broker-side stop is calculated from actual entry, full requested quantity and current daily net P&L. 250 ms watcher and one-request stop-to-MARKET fast exit are retained where broker state permits, with verified fallback. One stock at a time. New entries lock for the IST day at either boundary.
+          LIMITATIONS: exchange gaps/slippage can cross the desired boundaries. Charge calculation uses current published NSE/Groww intraday rates and is an estimate; actual contract-note charges are authoritative. CI did not place a live Groww order and did not run a physical S24-to-LG relay.
+          EOF
+      - name: Upload final4
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Multyfi-AutoBuy-v2.4.0-MASTER-CHILD-FINAL4
+          path: |
+            apply-v240-final4.log
+            build-v240-final4.log
+            android-stable/v240-final4/
+            android-stable/app/build/reports/tests/testDebugUnitTest/
+            android-stable/child/build/reports/tests/testDebugUnitTest/
+            android-stable/app/build/reports/lint-results-debug.html
+            android-stable/child/build/reports/lint-results-debug.html
+          if-no-files-found: warn
