@@ -1,0 +1,25 @@
+name: Export Android zipalign libcxx v2.4.0
+on:
+  push:
+    branches: [multyfi-v2.4.0-master-child-risk]
+  workflow_dispatch:
+jobs:
+  lib:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: android-actions/setup-android@v3
+      - run: yes | sdkmanager "build-tools;35.0.0"
+      - name: Stage libcxx
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p zipalign-lib/lib64
+          find "$ANDROID_HOME/build-tools/35.0.0" -name 'libc++.so*' -type f -print -exec cp -L {} zipalign-lib/lib64/libc++.so \;
+          test -s zipalign-lib/lib64/libc++.so
+          sha256sum zipalign-lib/lib64/libc++.so > zipalign-lib/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Android-Build-Tools-35-libcxx
+          path: zipalign-lib/
