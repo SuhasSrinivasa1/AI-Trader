@@ -1,0 +1,64 @@
+name: Multyfi v2.4.0 QUICK FINAL3
+on:
+  push:
+    branches: [multyfi-v2.4.0-master-child-risk]
+  workflow_dispatch:
+jobs:
+  quick3:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - uses: android-actions/setup-android@v3
+      - run: yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '8.13'}
+      - name: Apply fix3
+        run: python3 hotfix/run_v240_fix3.py | tee apply-v240-quick3.log
+      - name: Test lint build
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --console=plain -p android-stable \
+            :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease \
+            :child:testDebugUnitTest :child:lintDebug :child:assembleDebug :child:assembleRelease \
+            | tee build-v240-quick3.log
+      - name: Contract check
+        run: |
+          set -euo pipefail
+          M=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable
+          C=android-stable/child/src/main/java/com/suhas/multyfiautobuy/stable
+          grep -q "NET_PROFIT_TARGET = 5000d" "$M/DailyRiskPolicy.java"
+          grep -q "NET_LOSS_FLOOR = -2000d" "$M/DailyRiskPolicy.java"
+          grep -q "strategy.stopLossPrice = strategy.dynamicLossStopPrice" "$M/StrategyMonitorService.java"
+          grep -q "LanMasterRelayService.publishAsync" "$M/ProductionNotificationService.java"
+          grep -q "enqueueRelayedMultyfi" "$C/ProductionNotificationService.java"
+          grep -q 'String core = "SIGNAL|" + id' "$M/LanRelayProtocol.java"
+          grep -q "applicationId 'com.suhas.multyfiautobuy.child'" android-stable/child/build.gradle
+          ! grep -q 'android:name=".MultyfiNotificationService"' android-stable/child/src/main/AndroidManifest.xml
+      - name: Stage
+        run: |
+          set -euo pipefail
+          F=android-stable/v240-quick3
+          mkdir -p "$F"
+          cp android-stable/app/build/outputs/apk/debug/app-debug.apk "$F/master-validation.apk"
+          cp android-stable/child/build/outputs/apk/debug/child-debug.apk "$F/child-validation.apk"
+          MU=$(find android-stable/app/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          CU=$(find android-stable/child/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          cp "$MU" "$F/Multyfi-AutoBuy-MASTER-S24-Android16-v2.4.0-UNSIGNED.apk"
+          cp "$CU" "$F/Multyfi-AutoBuy-CHILD-LG-G7-ThinQ-v2.4.0-UNSIGNED.apk"
+          cp -R android-stable/app/src/main "$F/master-source"
+          cp -R android-stable/child/src/main "$F/child-source"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Multyfi-v2.4.0-QUICK-FINAL3
+          path: |
+            apply-v240-quick3.log
+            build-v240-quick3.log
+            android-stable/v240-quick3/
+            android-stable/app/build/reports/tests/testDebugUnitTest/
+            android-stable/child/build/reports/tests/testDebugUnitTest/
+            android-stable/app/build/reports/lint-results-debug.html
+            android-stable/child/build/reports/lint-results-debug.html
