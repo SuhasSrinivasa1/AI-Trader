@@ -1,0 +1,84 @@
+name: Multyfi v2.4.0 FINAL6
+on:
+  push:
+    branches: [multyfi-v2.4.0-master-child-risk]
+  workflow_dispatch:
+jobs:
+  final6:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - uses: android-actions/setup-android@v3
+      - run: yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '8.13'}
+      - name: Apply final6
+        run: python3 hotfix/run_v240_fix6.py | tee apply-v240-final6.log
+      - name: Test lint build
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --console=plain -p android-stable \
+            :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease \
+            :child:testDebugUnitTest :child:lintDebug :child:assembleDebug :child:assembleRelease \
+            | tee build-v240-final6.log
+      - name: Verify final6 contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          M=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable
+          C=android-stable/child/src/main/java/com/suhas/multyfiautobuy/stable
+          T=android-stable/app/src/test/java/com/suhas/multyfiautobuy/stable
+          grep -q "versionCode 240" android-stable/app/build.gradle
+          grep -q "versionName '2.4.0'" android-stable/app/build.gradle
+          grep -q "applicationId 'com.suhas.multyfiautobuy.child'" android-stable/child/build.gradle
+          grep -q "minSdk 26" android-stable/child/build.gradle
+          grep -q "NET_PROFIT_TARGET = 5000d" "$M/DailyRiskPolicy.java"
+          grep -q "NET_LOSS_FLOOR = -2000d" "$M/DailyRiskPolicy.java"
+          grep -q "Math.min(Math.abs(NET_LOSS_FLOOR), cumulativeRoom)" "$M/DailyRiskPolicy.java"
+          grep -q "strategy.stopLossPrice = strategy.dynamicLossStopPrice" "$M/StrategyMonitorService.java"
+          grep -q "₹2,000 NET LOSS THRESHOLD HIT — DAY LOCKED" "$M/StrategyMonitorService.java"
+          grep -q "₹5,000 DAILY NET PROFIT EXIT FAST SUBMITTED" "$M/StrategyMonitorService.java"
+          grep -q "LanMasterRelayService.publishAsync" "$M/ProductionNotificationService.java"
+          grep -q "enqueueRelayedMultyfi" "$C/ProductionNotificationService.java"
+          grep -q 'android:name=".LanMasterRelayService"' android-stable/app/src/main/AndroidManifest.xml
+          grep -q 'android:name=".LanChildRelayService"' android-stable/child/src/main/AndroidManifest.xml
+          ! grep -q 'android:name=".MultyfiNotificationService"' android-stable/child/src/main/AndroidManifest.xml
+          grep -q "previousProfitNeverExpandsOneStockRiskBeyondTwoThousand" "$T/ProfitTargetPolicyTest.java"
+          grep -q "priorLossShrinksNextStocksRiskRoomToProtectDailyFloor" "$T/ProfitTargetPolicyTest.java"
+          grep -q "signedSignalRoundTrips" "$T/LanRelayProtocolTest.java"
+      - name: Stage final6
+        shell: bash
+        run: |
+          set -euo pipefail
+          F=android-stable/v240-final6
+          mkdir -p "$F"
+          MU=$(find android-stable/app/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          CU=$(find android-stable/child/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          cp "$MU" "$F/Multyfi-AutoBuy-MASTER-S24-Android16-v2.4.0-UNSIGNED.apk"
+          cp "$CU" "$F/Multyfi-AutoBuy-CHILD-LG-G7-ThinQ-v2.4.0-UNSIGNED.apk"
+          cp -R android-stable/app/src/main "$F/master-source"
+          cp -R android-stable/app/src/test "$F/master-tests"
+          cp -R android-stable/child/src/main "$F/child-source"
+          cp -R android-stable/child/src/test "$F/child-tests"
+          MS=$(sha256sum "$F/Multyfi-AutoBuy-MASTER-S24-Android16-v2.4.0-UNSIGNED.apk" | awk '{print $1}')
+          CS=$(sha256sum "$F/Multyfi-AutoBuy-CHILD-LG-G7-ThinQ-v2.4.0-UNSIGNED.apk" | awk '{print $1}')
+          cat > "$F/VALIDATION-v2.4.0.json" <<EOF
+          {"version":"2.4.0","version_code":240,"master_package":"com.suhas.multyfiautobuy.stable","child_package":"com.suhas.multyfiautobuy.child","master_unsigned_sha256":"$MS","child_unsigned_sha256":"$CS","unit_tests_master":"PASS","unit_tests_child":"PASS","lint_master":"PASS","lint_child":"PASS","release_build_master":"PASS","release_build_child":"PASS","child_min_sdk":26,"daily_net_profit_target_rupees":5000,"single_stock_net_loss_cap_rupees":2000,"cumulative_daily_net_loss_floor_rupees":-2000,"prior_profit_does_not_expand_single_stock_loss_cap":true,"multyfi_stop":"audit_only","relay":"authenticated direct LAN/hotspot; no cloud","live_broker_test":"NOT PERFORMED","physical_two_phone_relay_test":"NOT PERFORMED"}
+          EOF
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Multyfi-v2.4.0-FINAL6-UNSIGNED
+          path: |
+            apply-v240-final6.log
+            build-v240-final6.log
+            android-stable/v240-final6/
+            android-stable/app/build/reports/tests/testDebugUnitTest/
+            android-stable/child/build/reports/tests/testDebugUnitTest/
+            android-stable/app/build/reports/lint-results-debug.html
+            android-stable/child/build/reports/lint-results-debug.html
+          if-no-files-found: warn
