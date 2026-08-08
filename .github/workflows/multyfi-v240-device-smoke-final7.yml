@@ -1,0 +1,94 @@
+name: Multyfi v2.4.0 FINAL7 Device Smoke
+on:
+  push:
+    branches: [multyfi-v2.4.0-master-child-risk]
+  workflow_dispatch:
+jobs:
+  smoke-final7:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - uses: android-actions/setup-android@v3
+      - name: Install SDK images
+        run: yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools" "emulator" "system-images;android-36;google_apis;x86_64" "system-images;android-26;google_apis;x86_64"
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '8.13'}
+      - run: python3 hotfix/run_v240_fix7.py
+      - name: Build debug roles
+        run: gradle --no-daemon --console=plain -p android-stable :app:assembleDebug :child:assembleDebug
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: MASTER Android 16 cold launches
+        timeout-minutes: 12
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p smoke-final7
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/avd36" ANDROID_SDK_HOME="$RUNNER_TEMP/sdk36"
+          mkdir -p "$ANDROID_AVD_HOME" "$ANDROID_SDK_HOME/.android"
+          echo no | avdmanager create avd --force --name master36 --package 'system-images;android-36;google_apis;x86_64' --device 'pixel_8_pro' --path "$ANDROID_AVD_HOME/master36.avd"
+          "$ANDROID_HOME/emulator/emulator" -avd master36 -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim > smoke-final7/master-emulator.log 2>&1 & PID=$!
+          trap 'timeout 15 adb emu kill >/dev/null 2>&1 || true; kill "$PID" >/dev/null 2>&1 || true' EXIT
+          timeout 240 adb wait-for-device
+          for i in $(seq 1 100); do [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ] && break; sleep 3; done
+          test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1
+          adb install -r android-stable/app/build/outputs/apk/debug/app-debug.apk | tee smoke-final7/master-install.txt
+          grep -q Success smoke-final7/master-install.txt
+          adb shell pm grant com.suhas.multyfiautobuy.stable android.permission.POST_NOTIFICATIONS || true
+          adb logcat -c
+          for n in 1 2; do
+            adb shell am force-stop com.suhas.multyfiautobuy.stable
+            adb shell am start -W -n com.suhas.multyfiautobuy.stable/.MainActivity > smoke-final7/master-launch-$n.txt
+            sleep 4
+            adb shell pidof com.suhas.multyfiautobuy.stable > smoke-final7/master-pid-$n.txt
+            test -s smoke-final7/master-pid-$n.txt
+          done
+          adb shell uiautomator dump /sdcard/master.xml >/dev/null
+          adb pull /sdcard/master.xml smoke-final7/master-ui.xml >/dev/null
+          grep -q 'Multyfi AutoBuy MASTER' smoke-final7/master-ui.xml
+          grep -q '2.4.0' smoke-final7/master-ui.xml
+          adb logcat -d > smoke-final7/master-logcat.txt
+          ! grep -E 'FATAL EXCEPTION|Process: com.suhas.multyfiautobuy.stable' smoke-final7/master-logcat.txt
+          adb emu kill >/dev/null 2>&1 || true; wait "$PID" 2>/dev/null || true; trap - EXIT
+      - name: CHILD Android 8 API26 cold launches
+        timeout-minutes: 12
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/avd26" ANDROID_SDK_HOME="$RUNNER_TEMP/sdk26"
+          mkdir -p "$ANDROID_AVD_HOME" "$ANDROID_SDK_HOME/.android"
+          echo no | avdmanager create avd --force --name child26 --package 'system-images;android-26;google_apis;x86_64' --device 'pixel_2' --path "$ANDROID_AVD_HOME/child26.avd"
+          "$ANDROID_HOME/emulator/emulator" -avd child26 -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim > smoke-final7/child-emulator.log 2>&1 & PID=$!
+          trap 'timeout 15 adb emu kill >/dev/null 2>&1 || true; kill "$PID" >/dev/null 2>&1 || true' EXIT
+          timeout 240 adb wait-for-device
+          for i in $(seq 1 100); do [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ] && break; sleep 3; done
+          test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1
+          adb install -r android-stable/child/build/outputs/apk/debug/child-debug.apk | tee smoke-final7/child-install.txt
+          grep -q Success smoke-final7/child-install.txt
+          adb logcat -c
+          for n in 1 2; do
+            adb shell am force-stop com.suhas.multyfiautobuy.child
+            adb shell am start -W -n com.suhas.multyfiautobuy.child/.MainActivity > smoke-final7/child-launch-$n.txt
+            sleep 4
+            adb shell pidof com.suhas.multyfiautobuy.child > smoke-final7/child-pid-$n.txt
+            test -s smoke-final7/child-pid-$n.txt
+          done
+          adb shell uiautomator dump /sdcard/child.xml >/dev/null
+          adb pull /sdcard/child.xml smoke-final7/child-ui.xml >/dev/null
+          grep -q 'Multyfi AutoBuy CHILD' smoke-final7/child-ui.xml
+          grep -q '2.4.0' smoke-final7/child-ui.xml
+          adb logcat -d > smoke-final7/child-logcat.txt
+          ! grep -E 'FATAL EXCEPTION|Process: com.suhas.multyfiautobuy.child' smoke-final7/child-logcat.txt
+          adb emu kill >/dev/null 2>&1 || true; wait "$PID" 2>/dev/null || true; trap - EXIT
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Multyfi-v2.4.0-FINAL7-DEVICE-SMOKE
+          path: smoke-final7/
+          if-no-files-found: warn
