@@ -1,0 +1,94 @@
+name: Multyfi v2.4.0 QUICK FINAL5
+on:
+  push:
+    branches: [multyfi-v2.4.0-master-child-risk]
+  workflow_dispatch:
+jobs:
+  final5:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - uses: android-actions/setup-android@v3
+      - run: yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '8.13'}
+      - name: Apply fix5
+        run: python3 hotfix/run_v240_fix5.py | tee apply-v240-final5.log
+      - name: Test lint build both apps
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --console=plain -p android-stable \
+            :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease \
+            :child:testDebugUnitTest :child:lintDebug :child:assembleDebug :child:assembleRelease \
+            | tee build-v240-final5.log
+      - name: Verify final contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          M=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable
+          C=android-stable/child/src/main/java/com/suhas/multyfiautobuy/stable
+          CT=android-stable/child/src/test/java/com/suhas/multyfiautobuy/stable
+          grep -q "versionCode 240" android-stable/app/build.gradle
+          grep -q "versionName '2.4.0'" android-stable/app/build.gradle
+          grep -q "applicationId 'com.suhas.multyfiautobuy.child'" android-stable/child/build.gradle
+          grep -q "minSdk 26" android-stable/child/build.gradle
+          grep -q "NET_PROFIT_TARGET = 5000d" "$M/DailyRiskPolicy.java"
+          grep -q "NET_LOSS_FLOOR = -2000d" "$M/DailyRiskPolicy.java"
+          grep -q "strategy.stopLossPrice = strategy.dynamicLossStopPrice" "$M/StrategyMonitorService.java"
+          grep -q "₹2,000 DAILY NET LOSS EXIT FAST SUBMITTED" "$M/StrategyMonitorService.java"
+          grep -q "₹5,000 DAILY NET PROFIT EXIT FAST SUBMITTED" "$M/StrategyMonitorService.java"
+          grep -q "LanMasterRelayService.publishAsync" "$M/ProductionNotificationService.java"
+          grep -q "enqueueRelayedMultyfi" "$C/ProductionNotificationService.java"
+          grep -q 'String core = "SIGNAL|" + id' "$M/LanRelayProtocol.java"
+          grep -q 'android:name=".LanMasterRelayService"' android-stable/app/src/main/AndroidManifest.xml
+          grep -q 'android:name=".LanChildRelayService"' android-stable/child/src/main/AndroidManifest.xml
+          ! grep -q 'android:name=".MultyfiNotificationService"' android-stable/child/src/main/AndroidManifest.xml
+          grep -q "android.os.Build.VERSION.SDK_INT < 27" "$C/ProductionActivity.java"
+          grep -q "netFiveThousandNeedsMoreThanFiveThousandGross" "$CT/ProfitTargetPolicyTest.java"
+          grep -q "signedSignalRoundTrips" "$CT/LanRelayProtocolTest.java"
+      - name: Stage final unsigned APKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          F=android-stable/v240-final5
+          mkdir -p "$F"
+          MU=$(find android-stable/app/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          CU=$(find android-stable/child/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          test -n "$MU" && test -n "$CU"
+          cp "$MU" "$F/Multyfi-AutoBuy-MASTER-S24-Android16-v2.4.0-UNSIGNED.apk"
+          cp "$CU" "$F/Multyfi-AutoBuy-CHILD-LG-G7-ThinQ-v2.4.0-UNSIGNED.apk"
+          cp android-stable/app/build/outputs/apk/debug/app-debug.apk "$F/master-validation.apk"
+          cp android-stable/child/build/outputs/apk/debug/child-debug.apk "$F/child-validation.apk"
+          cp -R android-stable/app/src/main "$F/master-source"
+          cp -R android-stable/app/src/test "$F/master-tests"
+          cp -R android-stable/child/src/main "$F/child-source"
+          cp -R android-stable/child/src/test "$F/child-tests"
+          MS=$(sha256sum "$F/Multyfi-AutoBuy-MASTER-S24-Android16-v2.4.0-UNSIGNED.apk" | awk '{print $1}')
+          CS=$(sha256sum "$F/Multyfi-AutoBuy-CHILD-LG-G7-ThinQ-v2.4.0-UNSIGNED.apk" | awk '{print $1}')
+          cat > "$F/VALIDATION-v2.4.0.json" <<EOF
+          {"version":"2.4.0","version_code":240,"master_package":"com.suhas.multyfiautobuy.stable","child_package":"com.suhas.multyfiautobuy.child","master_unsigned_sha256":"$MS","child_unsigned_sha256":"$CS","unit_tests_master":"PASS","unit_tests_child":"PASS","lint_master":"PASS","lint_child":"PASS","release_build_master":"PASS","release_build_child":"PASS","child_min_sdk":26,"daily_net_profit_target_rupees":5000,"daily_net_loss_floor_rupees":-2000,"multyfi_stop":"audit_only","dynamic_stop":"broker-side calculated from entry, full quantity and cumulative daily net P&L","relay":"authenticated direct LAN/hotspot; no cloud","live_broker_test":"NOT PERFORMED","physical_two_phone_relay_test":"NOT PERFORMED"}
+          EOF
+          cat > "$F/RELEASE-NOTES-v2.4.0.txt" <<'EOF'
+          MULTYFI AUTOBUY v2.4.0 — MASTER + CHILD
+          MASTER: Galaxy S24 Ultra / Android 16 in-place update. Master schedules its own Multyfi processing first and broadcasts asynchronously over local Wi-Fi/hotspot.
+          CHILD: separate LG G7 ThinQ app, min Android 8/API 26. No Multyfi notification access is required. It auto-discovers MASTER and uses its own Groww/VPN/static-IP/budget configuration.
+          DAILY RISK: cumulative charge-adjusted NET band -₹2,000 to +₹5,000. Original Multyfi stop is audit-only. Dynamic broker-side stop is calculated after fill. 250 ms fast watcher, Multyfi target and authoritative early-exit remain. One stock at a time. New entries lock for the IST day at either boundary.
+          LIMITATIONS: gaps/slippage can cross either threshold. Charge model is an estimate; actual contract-note charges are authoritative. No live Groww order or physical S24-to-LG relay was performed in CI.
+          EOF
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Multyfi-v2.4.0-FINAL5-UNSIGNED
+          path: |
+            apply-v240-final5.log
+            build-v240-final5.log
+            android-stable/v240-final5/
+            android-stable/app/build/reports/tests/testDebugUnitTest/
+            android-stable/child/build/reports/tests/testDebugUnitTest/
+            android-stable/app/build/reports/lint-results-debug.html
+            android-stable/child/build/reports/lint-results-debug.html
+          if-no-files-found: warn
