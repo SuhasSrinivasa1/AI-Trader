@@ -1,0 +1,196 @@
+name: Build Multyfi v2.3.5 Daily 5000 Fast Profit
+
+on:
+  push:
+    branches: [multyfi-v2.3.5-daily-5000-fast-profit]
+  workflow_dispatch:
+
+jobs:
+  build-test-android16:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android 16 SDK
+        run: yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools" "emulator" "system-images;android-36;google_apis;x86_64"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Apply v2.3.5 source update
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 hotfix/run_v235.py | tee apply-v235.log
+
+      - name: Unit tests, lint and builds
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --console=plain -p android-stable \
+            :app:testDebugUnitTest \
+            :app:lintDebug \
+            :app:assembleDebug \
+            :app:assembleRelease | tee build-v235.log
+
+      - name: Verify daily-profit safety contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable
+          TEST=android-stable/app/src/test/java/com/suhas/multyfiautobuy/stable
+          grep -q "versionCode 235" android-stable/app/build.gradle
+          grep -q "versionName '2.3.5'" android-stable/app/build.gradle
+          grep -q "DAILY_TARGET_RUPEES = 5000.00d" "$ROOT/ProfitTargetPolicy.java"
+          grep -q "POLL_INTERVAL_MS = 250L" "$ROOT/ProfitTargetPolicy.java"
+          grep -q "NEW ENTRY BLOCKED — ONE STOCK AT A TIME" "$ROOT/ProductionNotificationService.java"
+          grep -q "NEW ENTRY BLOCKED — DAILY ₹5,000 TARGET DONE" "$ROOT/ProductionNotificationService.java"
+          grep -q "ENTRY BLOCKED — DAILY P&L UNAVAILABLE" "$ROOT/ProductionNotificationService.java"
+          grep -q "₹5,000 DAILY PROFIT EXIT FAST SUBMITTED" "$ROOT/StrategyMonitorService.java"
+          grep -q "MULTYFI TARGET EXIT FAST SUBMITTED" "$ROOT/StrategyMonitorService.java"
+          grep -q "DAILY ₹5,000 TARGET COMPLETE — ENTRIES LOCKED" "$ROOT/StrategyMonitorService.java"
+          grep -q "convertOpenMisStopToMarketSell" "$ROOT/StrategyMonitorService.java"
+          grep -q "MULTYFI EARLY EXIT FAST SUBMITTED" "$ROOT/StrategyMonitorService.java"
+          grep -q "MIS STOP-LIMIT ORDER CONFIRMED" "$ROOT/StrategyMonitorService.java"
+          grep -q "acceptsUnlabelledNewEquityTradeAsMis" "$TEST/IntradayOnlyPolicyTest.java"
+          grep -q "zeroPriorPnlTargetsExactlyFiveThousandGross" "$TEST/ProfitTargetPolicyTest.java"
+
+      - name: Stage release and generated source
+        shell: bash
+        run: |
+          set -euo pipefail
+          FINAL=android-stable/app/build/outputs/apk/v235
+          mkdir -p "$FINAL"
+          cp android-stable/app/build/outputs/apk/debug/app-debug.apk \
+            "$FINAL/Multyfi-AutoBuy-Pro-S24-Android16-v2.3.5-VALIDATION.apk"
+          UNSIGNED=$(find android-stable/app/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n 1)
+          test -n "$UNSIGNED"
+          cp "$UNSIGNED" "$FINAL/Multyfi-AutoBuy-Pro-S24-Android16-v2.3.5-UNSIGNED.apk"
+          cp -R android-stable/app/src/main "$FINAL/generated-main-source"
+          cp -R android-stable/app/src/test "$FINAL/generated-test-source"
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Android 16 install and two cold launches
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          set -euo pipefail
+          FINAL=android-stable/app/build/outputs/apk/v235
+          APK="$FINAL/Multyfi-AutoBuy-Pro-S24-Android16-v2.3.5-VALIDATION.apk"
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/android-avd"
+          export ANDROID_SDK_HOME="$RUNNER_TEMP/android-sdk-home"
+          mkdir -p "$ANDROID_AVD_HOME" "$ANDROID_SDK_HOME/.android"
+          echo no | avdmanager create avd --force --name s24_v235 \
+            --package 'system-images;android-36;google_apis;x86_64' \
+            --device 'pixel_8_pro' --path "$ANDROID_AVD_HOME/s24_v235.avd"
+          "$ANDROID_HOME/emulator/emulator" -avd s24_v235 -no-window \
+            -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim \
+            -camera-back none > "$FINAL/emulator-v235.log" 2>&1 &
+          EMULATOR_PID=$!
+          trap 'timeout 15 adb emu kill >/dev/null 2>&1 || true; kill "$EMULATOR_PID" >/dev/null 2>&1 || true' EXIT
+          timeout 240 adb wait-for-device
+          booted=0
+          for i in $(seq 1 100); do
+            state=$(timeout 10 adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+            if [ "$state" = "1" ]; then booted=1; break; fi
+            if ! kill -0 "$EMULATOR_PID" 2>/dev/null; then break; fi
+            sleep 4
+          done
+          test "$booted" = "1"
+          adb install -r "$APK" | tee "$FINAL/install-v235.txt"
+          grep -q Success "$FINAL/install-v235.txt"
+          adb shell pm grant com.suhas.multyfiautobuy.stable android.permission.POST_NOTIFICATIONS
+          adb logcat -c
+          for n in 1 2; do
+            adb shell am force-stop com.suhas.multyfiautobuy.stable
+            sleep 2
+            adb shell am start -W -n com.suhas.multyfiautobuy.stable/.MainActivity \
+              | tee "$FINAL/cold-launch-v235-$n.txt"
+            sleep 8
+            adb shell pidof com.suhas.multyfiautobuy.stable \
+              | tee "$FINAL/pid-v235-$n.txt"
+            test -s "$FINAL/pid-v235-$n.txt"
+          done
+          adb shell uiautomator dump /sdcard/v235-ui.xml
+          adb pull /sdcard/v235-ui.xml "$FINAL/ui-v235.xml"
+          grep -q 'Multyfi AutoBuy Pro' "$FINAL/ui-v235.xml"
+          grep -q '2.3.5' "$FINAL/ui-v235.xml"
+          adb exec-out screencap -p > "$FINAL/startup-v235.png"
+          adb logcat -d -v threadtime > "$FINAL/logcat-v235.txt"
+          if grep -E 'FATAL EXCEPTION|Process: com.suhas.multyfiautobuy.stable|ClassNotFoundException.*com.suhas.multyfiautobuy.stable' "$FINAL/logcat-v235.txt"; then exit 1; fi
+
+      - name: Create release files
+        shell: bash
+        run: |
+          set -euo pipefail
+          FINAL=android-stable/app/build/outputs/apk/v235
+          SHA=$(sha256sum "$FINAL/Multyfi-AutoBuy-Pro-S24-Android16-v2.3.5-UNSIGNED.apk" | awk '{print $1}')
+          cat > "$FINAL/RELEASE-NOTES-v2.3.5.txt" <<'EOF'
+          MULTYFI AUTOBUY PRO v2.3.5 — DAILY ₹5,000 FAST PROFIT TARGET
+
+          - Exactly one active stock at a time.
+          - Daily target is ₹5,000 broker-reported realised MIS profit.
+          - After a protected fill, the app calculates the exact per-share price
+            needed to complete the remaining daily ₹5,000 goal.
+          - The lower of that calculated price and Multyfi's target becomes the
+            first profit-exit threshold.
+          - A dedicated 250 ms Live Data watcher observes the active stock.
+          - When either threshold is reached, the app converts the existing
+            full-quantity protective MIS stop directly into a MARKET SELL using
+            one Groww modify request, preserving stop-loss protection until exit.
+          - Multyfi authoritative early exit remains immediate and higher priority.
+          - If a fast conversion is unavailable, the verified cancel-then-market
+            fallback remains active.
+          - After the daily target exit, entries lock for the day only after Groww
+            confirms realised MIS P&L has reached ₹5,000; slippage below ₹5,000
+            leaves later calls eligible to complete the actual daily goal.
+          - Free, Swing and Multibagger entry calls remain blocked.
+          EOF
+          cat > "$FINAL/VALIDATION-v2.3.5.json" <<EOF
+          {
+            "version": "2.3.5",
+            "version_code": 235,
+            "package": "com.suhas.multyfiautobuy.stable",
+            "unsigned_release_sha256": "$SHA",
+            "daily_profit_target_inr": 5000,
+            "profit_watch_interval_ms": 250,
+            "one_active_stock": true,
+            "stop_loss_priority": "broker-side MIS stop remains active until converted to MARKET",
+            "profit_exit": "existing full-quantity MIS stop modified directly to MARKET",
+            "multyfi_target": "lower of Multyfi target and calculated daily-goal target exits first",
+            "multyfi_early_exit": "retained immediate fast path",
+            "unit_tests": "PASS",
+            "lint": "PASS",
+            "android_16_install": "PASS",
+            "cold_launch_1": "PASS",
+            "cold_launch_2": "PASS"
+          }
+          EOF
+
+      - name: Upload v2.3.5 build package
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Multyfi-AutoBuy-Pro-S24-Android16-v2.3.5-BUILD
+          path: |
+            apply-v235.log
+            build-v235.log
+            android-stable/app/build/outputs/apk/v235/
+            android-stable/app/build/reports/tests/testDebugUnitTest/
+            android-stable/app/build/reports/lint-results-debug.html
+          if-no-files-found: warn
