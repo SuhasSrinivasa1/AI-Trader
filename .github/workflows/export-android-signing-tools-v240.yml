@@ -1,0 +1,28 @@
+name: Export Android Signing Tools v2.4.0
+on:
+  push:
+    branches: [multyfi-v2.4.0-master-child-risk]
+  workflow_dispatch:
+jobs:
+  tools:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: android-actions/setup-android@v3
+      - name: Install build tools
+        run: yes | sdkmanager "build-tools;35.0.0"
+      - name: Stage signing tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p android-signing-tools/lib
+          cp "$ANDROID_HOME/build-tools/35.0.0/apksigner" android-signing-tools/
+          cp "$ANDROID_HOME/build-tools/35.0.0/zipalign" android-signing-tools/
+          cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" android-signing-tools/lib/
+          chmod +x android-signing-tools/apksigner android-signing-tools/zipalign
+          sha256sum android-signing-tools/apksigner android-signing-tools/zipalign android-signing-tools/lib/apksigner.jar > android-signing-tools/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Android-Build-Tools-35-Signing-Tools
+          path: android-signing-tools/
