@@ -1,0 +1,80 @@
+name: Multyfi v2.4.1 QUICK
+on:
+  push:
+    branches: [multyfi-v2.4.1-hard-off-gross-loss]
+  workflow_dispatch:
+jobs:
+  quick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - uses: android-actions/setup-android@v3
+      - run: yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '8.13'}
+      - name: Apply corrected v2.4.1
+        run: python3 hotfix/run_v241_fix.py | tee apply-v241-quick.log
+      - name: Tests lint builds
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --console=plain -p android-stable \
+            :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease \
+            :child:testDebugUnitTest :child:lintDebug :child:assembleDebug :child:assembleRelease \
+            | tee build-v241-quick.log
+      - name: Contract verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          M=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable
+          C=android-stable/child/src/main/java/com/suhas/multyfiautobuy/stable
+          MT=android-stable/app/src/test/java/com/suhas/multyfiautobuy/stable
+          CT=android-stable/child/src/test/java/com/suhas/multyfiautobuy/stable
+          grep -q "versionCode 241" android-stable/app/build.gradle
+          grep -q "versionCode 241" android-stable/child/build.gradle
+          grep -q "NET_PROFIT_TARGET = 5000d" "$M/DailyRiskPolicy.java"
+          grep -q "GROSS_LOSS_LIMIT = 2000d" "$M/DailyRiskPolicy.java"
+          grep -q "₹2,000 GROSS LOSS THRESHOLD HIT — DAY LOCKED" "$M/StrategyMonitorService.java"
+          grep -q "NO broker-side stop by design" "$M/StrategyMonitorService.java"
+          grep -q "placeRiskMarketSell" "$M/GrowwClient.java"
+          grep -q "AppRuntimeControl.deactivate(this)" "$M/ProductionActivity.java"
+          grep -q "if (!AppPrefs.isArmed(this)) return;" "$M/ProductionNotificationService.java"
+          grep -q "!AppPrefs.isArmed(c)" "$M/LanMasterRelayService.java"
+          grep -q "!AppPrefs.isArmed(c)" "$C/LanChildRelayService.java"
+          grep -q "PRIVATE LG G7 CHILD CONSOLE" "$C/ProductionActivity.java"
+          ! grep -q "AppPrefs.quantityForBudget(AppPrefs.intradayBudget(this)," "$C/ProductionActivity.java"
+          ! grep -q 'android:name=".MultyfiNotificationService"' android-stable/child/src/main/AndroidManifest.xml
+          grep -q "currentStockGrossMinusTwoThousandTriggersImmediately" "$MT/ProfitTargetPolicyTest.java"
+          grep -q "offAndFlatMeansAllBackgroundCanStop" "$CT/RuntimePowerPolicyTest.java"
+      - name: Stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          F=android-stable/v241-quick
+          mkdir -p "$F"
+          MU=$(find android-stable/app/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          CU=$(find android-stable/child/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          cp "$MU" "$F/Multyfi-AutoBuy-MASTER-S24-Android16-v2.4.1-UNSIGNED.apk"
+          cp "$CU" "$F/Multyfi-AutoBuy-CHILD-LG-G7-ThinQ-v2.4.1-UNSIGNED.apk"
+          cp android-stable/app/build/outputs/apk/debug/app-debug.apk "$F/master-validation.apk"
+          cp android-stable/child/build/outputs/apk/debug/child-debug.apk "$F/child-validation.apk"
+          cp -R android-stable/app/src/main "$F/master-source"
+          cp -R android-stable/app/src/test "$F/master-tests"
+          cp -R android-stable/child/src/main "$F/child-source"
+          cp -R android-stable/child/src/test "$F/child-tests"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Multyfi-v2.4.1-QUICK
+          path: |
+            apply-v241-quick.log
+            build-v241-quick.log
+            android-stable/v241-quick/
+            android-stable/app/build/reports/tests/testDebugUnitTest/
+            android-stable/child/build/reports/tests/testDebugUnitTest/
+            android-stable/app/build/reports/lint-results-debug.html
+            android-stable/child/build/reports/lint-results-debug.html
+          if-no-files-found: warn
