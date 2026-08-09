@@ -16,7 +16,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with: {gradle-version: '8.13'}
       - name: Apply corrected v2.4.1
-        run: python3 hotfix/run_v241_fix.py | tee apply-v241-quick.log
+        run: python3 hotfix/run_v241_fix2.py | tee apply-v241-quick.log
       - name: Tests lint builds
         shell: bash
         run: |
@@ -42,6 +42,8 @@ jobs:
           grep -q "placeRiskMarketSell" "$M/GrowwClient.java"
           grep -q "AppRuntimeControl.deactivate(this)" "$M/ProductionActivity.java"
           grep -q "if (!AppPrefs.isArmed(this)) return;" "$M/ProductionNotificationService.java"
+          grep -q "Build.VERSION.SDK_INT >= 34" "$M/AppRuntimeControl.java"
+          grep -q "try { requestUnbind(); }" "$M/ProductionNotificationService.java"
           grep -q "!AppPrefs.isArmed(c)" "$M/LanMasterRelayService.java"
           grep -q "!AppPrefs.isArmed(c)" "$C/LanChildRelayService.java"
           grep -q "PRIVATE LG G7 CHILD CONSOLE" "$C/ProductionActivity.java"
