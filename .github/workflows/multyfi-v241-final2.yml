@@ -1,0 +1,248 @@
+name: Multyfi v2.4.1 FINAL2 DEVICE VALIDATION
+
+on:
+  push:
+    branches: [multyfi-v2.4.1-hard-off-gross-loss]
+  workflow_dispatch:
+
+jobs:
+  final-device-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install SDK and emulator images
+        run: |
+          yes | sdkmanager \
+            "platforms;android-36" \
+            "build-tools;35.0.0" \
+            "platform-tools" \
+            "emulator" \
+            "system-images;android-36;google_apis;x86_64" \
+            "system-images;android-29;google_apis;x86_64"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Apply API-safe v2.4.1
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 hotfix/run_v241_fix2.py | tee apply-v241-final2.log
+
+      - name: Test lint and build
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --console=plain -p android-stable \
+            :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease \
+            :child:testDebugUnitTest :child:lintDebug :child:assembleDebug :child:assembleRelease \
+            | tee build-v241-final2.log
+
+      - name: Source contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          M=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable
+          C=android-stable/child/src/main/java/com/suhas/multyfiautobuy/stable
+          grep -q "versionCode 241" android-stable/app/build.gradle
+          grep -q "versionName '2.4.1'" android-stable/app/build.gradle
+          grep -q "versionCode 241" android-stable/child/build.gradle
+          grep -q "versionName '2.4.1'" android-stable/child/build.gradle
+          grep -q "NET_PROFIT_TARGET = 5000d" "$M/DailyRiskPolicy.java"
+          grep -q "GROSS_LOSS_LIMIT = 2000d" "$M/DailyRiskPolicy.java"
+          grep -q "₹2,000 GROSS LOSS THRESHOLD HIT — DAY LOCKED" "$M/StrategyMonitorService.java"
+          grep -q "placeRiskMarketSell" "$M/GrowwClient.java"
+          grep -q "NO broker-side stop by design" "$M/StrategyMonitorService.java"
+          grep -q "AppRuntimeControl.deactivate(this)" "$M/ProductionActivity.java"
+          grep -q "Build.VERSION.SDK_INT >= 34" "$M/AppRuntimeControl.java"
+          grep -q "try { requestUnbind(); }" "$M/ProductionNotificationService.java"
+          grep -q "!AppPrefs.isArmed(c)" "$M/LanMasterRelayService.java"
+          grep -q "!AppPrefs.isArmed(c)" "$C/LanChildRelayService.java"
+          grep -q "PRIVATE LG G7 CHILD CONSOLE" "$C/ProductionActivity.java"
+          ! grep -q "AppPrefs.quantityForBudget(AppPrefs.intradayBudget(this)," "$C/ProductionActivity.java"
+          ! grep -q 'android:name=".MultyfiNotificationService"' android-stable/child/src/main/AndroidManifest.xml
+
+      - name: Stage APKs and generated source
+        shell: bash
+        run: |
+          set -euo pipefail
+          F=android-stable/v241-final2
+          mkdir -p "$F"
+          MU=$(find android-stable/app/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          CU=$(find android-stable/child/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          test -n "$MU" && test -n "$CU"
+          cp "$MU" "$F/Multyfi-AutoBuy-MASTER-S24-Android16-v2.4.1-UNSIGNED.apk"
+          cp "$CU" "$F/Multyfi-AutoBuy-CHILD-LG-G7-ThinQ-v2.4.1-UNSIGNED.apk"
+          cp android-stable/app/build/outputs/apk/debug/app-debug.apk "$F/master-validation.apk"
+          cp android-stable/child/build/outputs/apk/debug/child-debug.apk "$F/child-validation.apk"
+          cp -R android-stable/app/src/main "$F/master-source"
+          cp -R android-stable/app/src/test "$F/master-tests"
+          cp -R android-stable/child/src/main "$F/child-source"
+          cp -R android-stable/child/src/test "$F/child-tests"
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: MASTER Android 16 — OFF means no background runtime
+        timeout-minutes: 14
+        shell: bash
+        run: |
+          set -euo pipefail
+          F=android-stable/v241-final2
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/avd36" ANDROID_SDK_HOME="$RUNNER_TEMP/sdk36"
+          mkdir -p "$ANDROID_AVD_HOME" "$ANDROID_SDK_HOME/.android"
+          echo no | avdmanager create avd --force --name master36 \
+            --package 'system-images;android-36;google_apis;x86_64' \
+            --device 'pixel_8_pro' --path "$ANDROID_AVD_HOME/master36.avd"
+          "$ANDROID_HOME/emulator/emulator" -avd master36 -no-window \
+            -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim \
+            > "$F/master-emulator.log" 2>&1 & PID=$!
+          trap 'timeout 15 adb emu kill >/dev/null 2>&1 || true; kill "$PID" >/dev/null 2>&1 || true' EXIT
+          timeout 240 adb wait-for-device
+          for i in $(seq 1 100); do
+            [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ] && break
+            sleep 3
+          done
+          test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1
+          adb install -r "$F/master-validation.apk" | tee "$F/master-install.txt"
+          grep -q Success "$F/master-install.txt"
+          adb shell pm grant com.suhas.multyfiautobuy.stable android.permission.POST_NOTIFICATIONS || true
+          adb logcat -c
+          for n in 1 2; do
+            adb shell am force-stop com.suhas.multyfiautobuy.stable
+            adb shell am start -W -n com.suhas.multyfiautobuy.stable/.MainActivity > "$F/master-launch-$n.txt"
+            sleep 4
+            adb shell pidof com.suhas.multyfiautobuy.stable > "$F/master-pid-$n.txt"
+            test -s "$F/master-pid-$n.txt"
+          done
+          adb shell uiautomator dump /sdcard/master.xml >/dev/null
+          adb pull /sdcard/master.xml "$F/master-ui.xml" >/dev/null
+          grep -q 'Multyfi AutoBuy MASTER' "$F/master-ui.xml"
+          grep -q '2.4.1' "$F/master-ui.xml"
+          grep -q 'Hard OFF' "$F/master-ui.xml"
+          adb shell dumpsys activity services com.suhas.multyfiautobuy.stable > "$F/master-services-off.txt"
+          ! grep -q 'LanMasterRelayService' "$F/master-services-off.txt"
+          ! grep -q 'LanChildRelayService' "$F/master-services-off.txt"
+          ! grep -q 'StrategyMonitorService' "$F/master-services-off.txt"
+          adb logcat -d > "$F/master-logcat.txt"
+          ! grep -E 'FATAL EXCEPTION|Process: com.suhas.multyfiautobuy.stable' "$F/master-logcat.txt"
+          adb emu kill >/dev/null 2>&1 || true
+          wait "$PID" 2>/dev/null || true
+          trap - EXIT
+
+      - name: CHILD Android 10 — OFF means no LAN/monitor runtime
+        timeout-minutes: 14
+        shell: bash
+        run: |
+          set -euo pipefail
+          F=android-stable/v241-final2
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/avd29" ANDROID_SDK_HOME="$RUNNER_TEMP/sdk29"
+          mkdir -p "$ANDROID_AVD_HOME" "$ANDROID_SDK_HOME/.android"
+          echo no | avdmanager create avd --force --name child29 \
+            --package 'system-images;android-29;google_apis;x86_64' \
+            --device 'pixel_2' --path "$ANDROID_AVD_HOME/child29.avd"
+          "$ANDROID_HOME/emulator/emulator" -avd child29 -no-window \
+            -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim \
+            > "$F/child-emulator.log" 2>&1 & PID=$!
+          trap 'timeout 15 adb emu kill >/dev/null 2>&1 || true; kill "$PID" >/dev/null 2>&1 || true' EXIT
+          timeout 240 adb wait-for-device
+          for i in $(seq 1 100); do
+            [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ] && break
+            sleep 3
+          done
+          test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1
+          adb install -r "$F/child-validation.apk" | tee "$F/child-install.txt"
+          grep -q Success "$F/child-install.txt"
+          adb logcat -c
+          for n in 1 2; do
+            adb shell am force-stop com.suhas.multyfiautobuy.child
+            adb shell am start -W -n com.suhas.multyfiautobuy.child/com.suhas.multyfiautobuy.stable.MainActivity > "$F/child-launch-$n.txt"
+            sleep 4
+            adb shell pidof com.suhas.multyfiautobuy.child > "$F/child-pid-$n.txt"
+            test -s "$F/child-pid-$n.txt"
+          done
+          adb shell uiautomator dump /sdcard/child.xml >/dev/null
+          adb pull /sdcard/child.xml "$F/child-ui.xml" >/dev/null
+          grep -q 'Multyfi AutoBuy CHILD' "$F/child-ui.xml"
+          grep -q 'PRIVATE LG G7 CHILD CONSOLE' "$F/child-ui.xml"
+          grep -q '2.4.1' "$F/child-ui.xml"
+          grep -q 'Hard OFF' "$F/child-ui.xml"
+          ! grep -q 'OPEN NOTIFICATION ACCESS' "$F/child-ui.xml"
+          adb shell dumpsys activity services com.suhas.multyfiautobuy.child > "$F/child-services-off.txt"
+          ! grep -q 'LanMasterRelayService' "$F/child-services-off.txt"
+          ! grep -q 'LanChildRelayService' "$F/child-services-off.txt"
+          ! grep -q 'StrategyMonitorService' "$F/child-services-off.txt"
+          adb logcat -d > "$F/child-logcat.txt"
+          ! grep -E 'FATAL EXCEPTION|Process: com.suhas.multyfiautobuy.child' "$F/child-logcat.txt"
+          adb emu kill >/dev/null 2>&1 || true
+          wait "$PID" 2>/dev/null || true
+          trap - EXIT
+
+      - name: Validation and release notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          F=android-stable/v241-final2
+          MS=$(sha256sum "$F/Multyfi-AutoBuy-MASTER-S24-Android16-v2.4.1-UNSIGNED.apk" | awk '{print $1}')
+          CS=$(sha256sum "$F/Multyfi-AutoBuy-CHILD-LG-G7-ThinQ-v2.4.1-UNSIGNED.apk" | awk '{print $1}')
+          MASTER_TESTS=$(find android-stable/app/build/test-results/testDebugUnitTest -name 'TEST-*.xml' -print0 | xargs -0 grep -h '<testsuite ' | sed -E 's/.*tests="([0-9]+)".*/\1/' | awk '{s+=$1} END{print s+0}')
+          CHILD_TESTS=$(find android-stable/child/build/test-results/testDebugUnitTest -name 'TEST-*.xml' -print0 | xargs -0 grep -h '<testsuite ' | sed -E 's/.*tests="([0-9]+)".*/\1/' | awk '{s+=$1} END{print s+0}')
+          cat > "$F/VALIDATION-v2.4.1.json" <<EOF
+          {"version":"2.4.1","version_code":241,"master_package":"com.suhas.multyfiautobuy.stable","child_package":"com.suhas.multyfiautobuy.child","master_unsigned_sha256":"$MS","child_unsigned_sha256":"$CS","master_unit_tests":$MASTER_TESTS,"child_unit_tests":$CHILD_TESTS,"lint_master":"PASS","lint_child":"PASS","release_build_master":"PASS","release_build_child":"PASS","master_android_16_two_cold_launches":"PASS","child_android_10_two_cold_launches":"PASS","master_off_has_no_lan_or_strategy_monitor_service":"PASS","child_off_has_no_lan_or_strategy_monitor_service":"PASS","profit_rule":"estimated NET +₹5,000 after published intraday charges","loss_rule":"GROSS -₹2,000 immediate MARKET sell + IST-day lock","multyfi_intraday_stop":"IGNORED","intraday_broker_side_stop":"NONE_BY_USER_REQUEST","watch_interval_ms":250,"live_groww_order_test":"NOT PERFORMED","physical_s24_lg_relay_test":"NOT PERFORMED"}
+          EOF
+          cat > "$F/RELEASE-NOTES-v2.4.1.txt" <<'EOF'
+          MULTYFI AUTOBUY v2.4.1 — MASTER + CHILD HARD-OFF UPDATE
+
+          HARD OFF
+          - When flat and UI toggle is OFF, local LAN relay and StrategyMonitorService are stopped.
+          - MASTER notification listener requests unbind on Android 16 and ignores Multyfi events whenever disarmed.
+          - Turning OFF with an active app-managed strategy is refused so an open position cannot be abandoned.
+
+          DAILY PROFIT
+          - +₹5,000 is estimated NET cumulative daily profit.
+          - Published Groww/NSE intraday brokerage/taxes/fees are estimated in the threshold calculation.
+          - When daily estimated NET reaches +₹5,000, exit and block later BUYs for the IST day.
+
+          LOSS
+          - -₹2,000 is GROSS P&L before brokerage/tax/fees.
+          - The original Multyfi stop is ignored for intraday execution.
+          - There is no broker-side intraday stop in this version, by explicit requirement.
+          - 250 ms watcher detects current gross loss and submits a MARKET SELL immediately.
+          - Loss trigger locks later BUYs for the IST day.
+          - Prior realised losses tighten remaining gross daily room; prior profits never allow one stock to lose more than ₹2,000 gross.
+
+          CHILD FIXES
+          - Correct LG G7 CHILD console label.
+          - Notification Access button removed from CHILD.
+          - Offline routing acceptance no longer depends on configured trade budget.
+
+          LIMITATIONS
+          - No broker-side stop means the -₹2,000 protection depends on Android process, network, VPN, Groww API and the 250 ms watcher being operational.
+          - Gaps, latency and slippage can result in a realised gross loss below -₹2,000.
+          - +₹5,000 uses estimated charges; the actual Groww contract note is authoritative.
+          - CI does not place a live Groww trade and cannot replace a physical S24↔LG relay test.
+          EOF
+
+      - name: Upload validated final unsigned package
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Multyfi-AutoBuy-v2.4.1-FINAL2-VALIDATED-UNSIGNED
+          path: |
+            apply-v241-final2.log
+            build-v241-final2.log
+            android-stable/v241-final2/
+            android-stable/app/build/reports/tests/testDebugUnitTest/
+            android-stable/child/build/reports/tests/testDebugUnitTest/
+            android-stable/app/build/reports/lint-results-debug.html
+            android-stable/child/build/reports/lint-results-debug.html
+          if-no-files-found: warn
