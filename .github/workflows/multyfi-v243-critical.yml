@@ -1,0 +1,101 @@
+name: Multyfi v2.4.3 CRITICAL EXIT SPEED
+
+on:
+  push:
+    branches: [multyfi-v2.4.3-critical-exit-speed]
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - uses: android-actions/setup-android@v3
+      - run: yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '8.13'}
+
+      - name: Apply v2.4.3 critical patch
+        run: python3 hotfix/run_v243.py | tee apply-v243.log
+
+      - name: Unit tests lint and release APKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --console=plain -p android-stable \
+            :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease \
+            :child:testDebugUnitTest :child:lintDebug :child:assembleDebug :child:assembleRelease \
+            | tee build-v243.log
+
+      - name: Verify critical contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          M=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable
+          C=android-stable/child/src/main/java/com/suhas/multyfiautobuy/stable
+          grep -q "versionCode 243" android-stable/app/build.gradle
+          grep -q "versionCode 243" android-stable/child/build.gradle
+          grep -q "versionName '2.4.3'" android-stable/app/build.gradle
+          grep -q "versionName '2.4.3'" android-stable/child/build.gradle
+          grep -q "NET_PROFIT_TARGET = 0d" "$M/DailyRiskPolicy.java"
+          grep -q "GROSS_LOSS_LIMIT = 2000d" "$M/DailyRiskPolicy.java"
+          grep -q "return false;" "$M/AppPrefs.java"
+          grep -q 'clos(?:e|ing).*early' "$M/SignalParser.java"
+          grep -q 'book\\s+profits?' "$M/SignalParser.java"
+          grep -q "MULTYFI EARLY EXIT DIRECT SUBMITTED" "$M/ProductionNotificationService.java"
+          grep -q "earlyExitExecutor" "$M/ProductionNotificationService.java"
+          grep -q "FastExitSubmissionGate.begin" "$M/ProductionNotificationService.java"
+          grep -q "if (attempt > 0)" "$M/GrowwClient.java"
+          grep -q "FastPositionCache.lookup" "$M/ProductionNotificationService.java"
+          grep -q "getCashPositionBook" "$M/GrowwClient.java"
+          grep -q "publishFast" "$M/LanMasterRelayService.java"
+          grep -q "wifi.bindSocket(d)" "$C/LanChildRelayService.java"
+          grep -q "wifi.bindSocket(s)" "$C/LanChildRelayService.java"
+          grep -q "targets.add(gateway)" "$C/LanChildRelayService.java"
+          ! grep -R -q -E 'NET \+₹5,000|NET profit \+₹5,000|DAILY NET ₹5,000 TARGET|\+₹5k DONE' "$M"
+          ! grep -R -q -E 'NET \+₹5,000|NET profit \+₹5,000|DAILY NET ₹5,000 TARGET|\+₹5k DONE' "$C"
+
+      - name: Stage unsigned release and generated source
+        shell: bash
+        run: |
+          set -euo pipefail
+          F=android-stable/v243-release
+          mkdir -p "$F"
+          MU=$(find android-stable/app/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          CU=$(find android-stable/child/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          cp "$MU" "$F/Multyfi-AutoBuy-MASTER-S24-Android16-v2.4.3-UNSIGNED.apk"
+          cp "$CU" "$F/Multyfi-AutoBuy-CHILD-LG-G7-ThinQ-v2.4.3-UNSIGNED.apk"
+          cp android-stable/app/build/outputs/apk/debug/app-debug.apk "$F/master-debug.apk"
+          cp android-stable/child/build/outputs/apk/debug/child-debug.apk "$F/child-debug.apk"
+          cp -R android-stable/app/src/main "$F/master-source"
+          cp -R android-stable/child/src/main "$F/child-source"
+          sha256sum "$F"/*.apk > "$F/SHA256-UNSIGNED.txt"
+          cat > "$F/RELEASE-NOTES-v2.4.3.txt" <<'EOF'
+          Multyfi AutoBuy MASTER + CHILD v2.4.3
+          CRITICAL trading update:
+          - Removes the +₹5,000 daily profit limit and daily profit lock completely.
+          - Keeps the -₹2,000 GROSS loss emergency/day lock.
+          - Adds authoritative early-exit phrases: closing early, close early, Book Profit.
+          - Early exits run on a dedicated executor and cannot sit behind normal entry work.
+          - Full-known MIS positions with no broker-side protection submit MARKET SELL directly from notification processing.
+          - First early-exit submission skips the pre-status GET and POSTs MARKET immediately; ambiguous failures still recover by deterministic reference.
+          - MASTER publishes to a connected CHILD through the already-live LAN service when available.
+          - BUY baseline is prewarmed in a local position cache; fresh cache avoids a pre-order position GET.
+          - BUY and early-SELL logs include source-age at API dispatch.
+          - 100 ms is an app-side dispatch objective, not a guarantee of Groww/network/exchange acknowledgement or fill.
+          - v2.4.2 physical hotspot/Wi-Fi gateway relay fix is retained.
+          EOF
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Multyfi-AutoBuy-v2.4.3-CRITICAL-EXIT-SPEED-UNSIGNED
+          path: |
+            android-stable/v243-release/
+            apply-v243.log
+            build-v243.log
+            android-stable/app/build/reports/tests/testDebugUnitTest/
+            android-stable/child/build/reports/tests/testDebugUnitTest/
+          if-no-files-found: error
