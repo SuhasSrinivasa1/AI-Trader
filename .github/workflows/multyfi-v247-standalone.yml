@@ -1,0 +1,170 @@
+name: Multyfi v2.4.7 STANDALONE
+
+on:
+  push:
+    branches: [multyfi-v2.4.7-standalone-clean]
+  workflow_dispatch:
+
+jobs:
+  build-test-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK
+        run: yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Apply v2.4.7 standalone source
+        run: python3 hotfix/run_v247.py | tee apply-v247.log
+
+      - name: Unit tests lint debug and release build
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --console=plain -p android-stable \
+            :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease \
+            | tee build-v247.log
+
+      - name: Verify standalone package identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "versionCode 247" android-stable/app/build.gradle
+          grep -q "versionName '2.4.7'" android-stable/app/build.gradle
+          ACT=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/ProductionActivity.java
+          grep -q 'Standalone phone • direct Multyfi → Groww • release ' "$ACT"
+          grep -q 'BuildConfig.VERSION_NAME' "$ACT"
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          "$AAPT" dump badging android-stable/app/build/outputs/apk/debug/app-debug.apk | tee standalone-badging-v247.txt
+          grep -q "versionCode='247'" standalone-badging-v247.txt
+          grep -q "versionName='2.4.7'" standalone-badging-v247.txt
+
+      - name: Verify relay is impossible at runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          J=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable
+          grep -q 'static void ensureRunning(Context c) { }' "$J/LanMasterRelayService.java"
+          grep -q 'static void publishFast(Context c, String raw, long post) { }' "$J/LanMasterRelayService.java"
+          python3 - <<'PY'
+          from pathlib import Path
+          j=Path('android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable')
+          for p in j.glob('*.java'):
+              if p.name == 'LanMasterRelayService.java':
+                  continue
+              s=p.read_text()
+              for needle in (
+                  'LanMasterRelayService.ensureRunning(',
+                  'LanMasterRelayService.publishAsync(',
+                  'LanMasterRelayService.publishFast(',
+                  'LanChildRelayService.ensureRunning(',
+              ):
+                  assert needle not in s, (p, needle)
+          PY
+
+      - name: Verify critical BUY SELL contracts preserved
+        shell: bash
+        run: |
+          set -euo pipefail
+          J=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable
+          grep -q 'ENTRY_PRIORITY = -4' "$J/PriorityExecutors.java"
+          grep -q 'EARLY_EXIT_PRIORITY == ENTRY_PRIORITY' "$J/PriorityExecutors.java"
+          grep -q 'NEW ENTRY BLOCKED — ONE STOCK AT A TIME' "$J/ProductionNotificationService.java"
+          grep -q 'GrowwClient.placeEarlyExitMarketSell' "$J/ProductionNotificationService.java"
+          grep -q 'GrowwClient.placeConfirmedEntryLimit' "$J/ProductionNotificationService.java"
+          grep -q 'Groww MARKET SELL was called before audit logging.' "$J/ProductionNotificationService.java"
+          grep -q 'Groww order/create was called before audit logging.' "$J/ProductionNotificationService.java"
+          grep -Fq 'save|protect|secure|lock|take' "$J/SignalParser.java"
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/ProductionNotificationService.java').read_text()
+          sell=s.index('GrowwClient.ApiResult sell = GrowwClient.placeEarlyExitMarketSell(')
+          sell_log=s.index('logBackground("MULTYFI EARLY EXIT API DISPATCH"',sell)
+          assert sell < sell_log
+          buy=s.index('GrowwClient.EntryResult mis = GrowwClient.placeConfirmedEntryLimit(')
+          buy_log=s.index('logBackground("BUY API DISPATCH"',buy)
+          assert buy < buy_log
+          PY
+
+      - name: Verify unit-test totals
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          root=Path('android-stable/app/build/test-results/testDebugUnitTest')
+          tests=failures=errors=0
+          for p in root.glob('TEST-*.xml'):
+              x=ET.parse(p).getroot()
+              tests += int(x.attrib.get('tests',0))
+              failures += int(x.attrib.get('failures',0))
+              errors += int(x.attrib.get('errors',0))
+          print('standalone',tests,failures,errors)
+          assert tests >= 84
+          assert failures == 0 and errors == 0
+          PY
+
+      - name: Stage v2.4.7 standalone release
+        shell: bash
+        run: |
+          set -euo pipefail
+          F=android-stable/v247-release
+          mkdir -p "$F"
+          cp android-stable/app/build/outputs/apk/debug/app-debug.apk "$F/Multyfi-AutoBuy-STANDALONE-v2.4.7-VALIDATION.apk"
+          U=$(find android-stable/app/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          test -n "$U"
+          cp "$U" "$F/Multyfi-AutoBuy-STANDALONE-v2.4.7-UNSIGNED.apk"
+          cp hotfix/run_v247.py "$F/"
+          cp standalone-badging-v247.txt "$F/"
+          SHA=$(sha256sum "$F/Multyfi-AutoBuy-STANDALONE-v2.4.7-UNSIGNED.apk" | awk '{print $1}')
+          cat > "$F/RELEASE-NOTES-v2.4.7.txt" <<'EOF'
+          MULTYFI AUTOBUY v2.4.7 — STANDALONE SINGLE-PHONE
+
+          ARCHITECTURE
+          - MASTER/CHILD concept removed from runtime.
+          - No LAN relay, UDP discovery, TCP relay server/client, heartbeat, hotspot gateway logic, or child acknowledgement.
+          - One phone listens directly to Multyfi and trades its own Groww account.
+          - VPN remains solely for Groww/Dedicated-IP readiness; there is no local-network dependency.
+
+          CRITICAL TRADING PATH RETAINED
+          - Flat state: BUY is the critical action.
+          - One live stock: no additional BUY is accepted until the position is closed.
+          - Early-close/save-profit/book-profit wording retains critical MARKET SELL handling.
+          - Eligible known-quantity MIS SELL calls Groww before normal audit logging.
+          - Warm BUY calls Groww order/create before normal audit logging.
+          - BUY and SELL keep equal critical Android scheduling priority; position state determines relevance.
+          - GROSS -₹2,000 emergency protection remains; no daily profit cap.
+
+          SPEED
+          - Relay/network-discovery work is not merely deprioritized; it is absent from runtime.
+          - <=100 ms remains an app-side notification-to-Groww-API dispatch objective on the warm/ready path, not an exchange-fill guarantee.
+
+          SIGNING
+          - CI release APK is unsigned.
+          - Sign with the same permanent certificate used by the installed standalone/master package for an in-place update.
+          EOF
+          cat > "$F/VALIDATION-v2.4.7.json" <<EOF
+          {"version":"2.4.7","version_code":247,"architecture":"standalone-single-phone","master_child_runtime":false,"lan_relay_runtime":false,"hotspot_dependency":false,"one_stock_only":true,"state_driven_buy_sell_priority":true,"app_side_dispatch_objective_ms":100,"fill_sla_ms":"NOT_GUARANTEED","unsigned_sha256":"$SHA","release_signing":"UNSIGNED_IN_CI"}
+          EOF
+          sha256sum "$F"/*.apk > "$F/APK-SHA256-UNSIGNED-v2.4.7.txt"
+          (cd android-stable && zip -qr "v247-release/Multyfi-AutoBuy-v2.4.7-STANDALONE-SOURCE.zip" app/src app/build.gradle ../hotfix)
+
+      - name: Upload v2.4.7 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Multyfi-AutoBuy-v2.4.7-STANDALONE
+          path: |
+            apply-v247.log
+            build-v247.log
+            android-stable/v247-release/
+            android-stable/app/build/reports/tests/testDebugUnitTest/
+            android-stable/app/build/reports/lint-results-debug.html
+          if-no-files-found: error
