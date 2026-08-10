@@ -1,0 +1,162 @@
+name: Multyfi v2.4.5 SINGLE STOCK CRITICAL PATH
+
+on:
+  push:
+    branches: [multyfi-v2.4.5-single-stock-critical-path]
+  workflow_dispatch:
+
+jobs:
+  build-test-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK
+        run: yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Apply v2.4.5 source
+        run: python3 hotfix/run_v245.py | tee apply-v245.log
+
+      - name: Unit tests lint debug and release builds
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --console=plain -p android-stable \
+            :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease \
+            :child:testDebugUnitTest :child:lintDebug :child:assembleDebug :child:assembleRelease \
+            | tee build-v245.log
+
+      - name: Verify v2.4.5 critical contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          M=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable
+          C=android-stable/child/src/main/java/com/suhas/multyfiautobuy/stable
+          grep -q "versionCode 245" android-stable/app/build.gradle
+          grep -q "versionName '2.4.5'" android-stable/app/build.gradle
+          grep -q "versionCode 245" android-stable/child/build.gradle
+          grep -q "versionName '2.4.5'" android-stable/child/build.gradle
+          grep -q 'ENTRY_PRIORITY = -4' "$M/PriorityExecutors.java"
+          grep -q 'EARLY_EXIT_PRIORITY == ENTRY_PRIORITY' "$M/PriorityExecutors.java"
+          grep -q 'liveTradeHint' "$M/ProductionNotificationService.java"
+          grep -q 'containsEarlyExitPhrase(rawText) || liveTradeHint' "$M/ProductionNotificationService.java"
+          grep -Fq 'save|protect|secure|lock|take' "$M/SignalParser.java"
+          grep -q 'findActive(active, earlyExit.eventId)' "$M/ProductionNotificationService.java"
+          grep -q 'memoryToken' "$M/TokenManager.java"
+          grep -q 'NEW ENTRY BLOCKED — ONE STOCK AT A TIME' "$M/ProductionNotificationService.java"
+          grep -q 'GrowwClient.placeEarlyExitMarketSell' "$M/ProductionNotificationService.java"
+          grep -q 'GrowwClient.placeConfirmedEntryLimit' "$M/ProductionNotificationService.java"
+          grep -q 'PriorityExecutors.backgroundSingle("multyfi-relay-broadcast")' "$M/LanMasterRelayService.java"
+          grep -q 'registerNetworkCallback' "$C/LanChildRelayService.java"
+          python3 - <<'PY'
+          from pathlib import Path
+          for module in ('app','child'):
+              p=Path('android-stable')/module/'src/main/java/com/suhas/multyfiautobuy/stable/ProductionNotificationService.java'
+              s=p.read_text()
+              q=s.index('private void queueEarlyExit(')
+              direct=s.index('if (tryDirectEarlyExit(signal, strategy)) return;',q)
+              persist=s.index('StrategyStore.upsert(this, strategy);',direct)
+              assert direct < persist, (module,'SELL persistence before direct dispatch')
+              sell=s.index('GrowwClient.ApiResult sell = GrowwClient.placeEarlyExitMarketSell(')
+              sell_log=s.index('logBackground("MULTYFI EARLY EXIT API DISPATCH"',sell)
+              assert sell < sell_log, (module,'SELL audit before broker call')
+              buy=s.index('GrowwClient.EntryResult mis = GrowwClient.placeConfirmedEntryLimit(')
+              buy_log=s.index('logBackground("BUY API DISPATCH"',buy)
+              assert buy < buy_log, (module,'BUY audit before broker call')
+          PY
+
+      - name: Verify unit-test totals
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          for role in ('app','child'):
+              root=Path('android-stable')/role/'build/test-results/testDebugUnitTest'
+              tests=failures=errors=0
+              for p in root.glob('TEST-*.xml'):
+                  x=ET.parse(p).getroot()
+                  tests += int(x.attrib.get('tests',0))
+                  failures += int(x.attrib.get('failures',0))
+                  errors += int(x.attrib.get('errors',0))
+              print(role, tests, failures, errors)
+              assert tests >= 84, (role,tests)
+              assert failures == 0 and errors == 0, (role,failures,errors)
+          PY
+
+      - name: Stage v2.4.5 release package
+        shell: bash
+        run: |
+          set -euo pipefail
+          F=android-stable/v245-release
+          mkdir -p "$F"
+          cp android-stable/app/build/outputs/apk/debug/app-debug.apk "$F/Multyfi-AutoBuy-MASTER-S24-Android16-v2.4.5-VALIDATION.apk"
+          cp android-stable/child/build/outputs/apk/debug/child-debug.apk "$F/Multyfi-AutoBuy-CHILD-LG-G7-ThinQ-v2.4.5-VALIDATION.apk"
+          MU=$(find android-stable/app/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          CU=$(find android-stable/child/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          test -n "$MU" && test -n "$CU"
+          cp "$MU" "$F/Multyfi-AutoBuy-MASTER-S24-Android16-v2.4.5-UNSIGNED.apk"
+          cp "$CU" "$F/Multyfi-AutoBuy-CHILD-LG-G7-ThinQ-v2.4.5-UNSIGNED.apk"
+          cp hotfix/run_v245.py "$F/"
+          MS=$(sha256sum "$F/Multyfi-AutoBuy-MASTER-S24-Android16-v2.4.5-UNSIGNED.apk" | awk '{print $1}')
+          CS=$(sha256sum "$F/Multyfi-AutoBuy-CHILD-LG-G7-ThinQ-v2.4.5-UNSIGNED.apk" | awk '{print $1}')
+          cat > "$F/RELEASE-NOTES-v2.4.5.txt" <<'EOF'
+          MULTYFI AUTOBUY MASTER + CHILD v2.4.5 — SINGLE STOCK CRITICAL PATH
+
+          STATE PRIORITY
+          - No active stock: BUY is the only primary trading path.
+          - One active stock: every Multyfi update is routed to the SELL-critical worker first.
+          - While that stock remains active, unrelated/new BUY calls are discarded before broker/network work.
+          - BUY and early SELL receive the same critical Android CPU scheduling priority; current trade state decides which path is relevant.
+          - MASTER/CHILD relay, UI and relay diagnostics remain background priority and cannot be awaited by MASTER trading.
+
+          SELL HARDENING
+          - Adds common authoritative wording including close/closing this/stock early, save/protect/secure/lock/take profits, Book Profit(s), target hit and stop loss hit.
+          - Symbol-less exit wording is accepted only when exactly one filled live strategy is active.
+          - Eligible full-known MIS early exits call Groww MARKET SELL before heavy strategy JSON persistence or audit logging.
+          - Direct MARKET SELL still requires exact known filled quantity and no broker-side protection/target handle; the app will not guess quantity and risk an accidental short position.
+          - If direct submission is not safely eligible or fails, the exit request is persisted and the existing deterministic reconciliation/retry path takes over.
+
+          BUY HARDENING
+          - Warm BUY calls reach Groww order/create before audit logging.
+          - Today’s Groww token is cached in memory after secure validation to avoid repeated secure-store work on the hot path.
+          - Existing fast position baseline cache remains.
+
+          RETAINED
+          - v2.4.4 LAN background-priority isolation and self-healing relay are retained.
+          - No +₹5,000 daily profit cap.
+          - GROSS -₹2,000 emergency loss protection retained.
+          - 100 ms is an app-side notification-to-Groww-API dispatch objective on a warm, ready path. Groww/mobile-network/exchange acknowledgement or fill is external and is not guaranteed within 100 ms.
+
+          VALIDATION BOUNDARY
+          - CI validates unit tests, lint, debug/release builds and source-order critical-path contracts.
+          - Physical phones and the next real Multyfi/Groww transaction remain the final live validation.
+          - Release APKs are unsigned in CI; use the existing permanent signing key for in-place installation.
+          EOF
+          cat > "$F/VALIDATION-v2.4.5.json" <<EOF
+          {"version":"2.4.5","version_code":245,"master_package":"com.suhas.multyfiautobuy.stable","child_package":"com.suhas.multyfiautobuy.child","state_priority":"NO_POSITION=BUY_CRITICAL; LIVE_POSITION=SELL_CRITICAL","one_stock_only":true,"unrelated_calls_ignored_while_live":true,"buy_sell_cpu_priority_equal":true,"relay_background_priority":true,"sell_broker_call_before_heavy_persistence":true,"sell_broker_call_before_audit":true,"buy_broker_call_before_audit":true,"token_memory_cache":true,"exact_qty_required_for_direct_sell":true,"app_side_dispatch_objective_ms":100,"fill_sla_ms":"NOT_GUARANTEED","master_unsigned_sha256":"$MS","child_unsigned_sha256":"$CS","release_signing":"UNSIGNED_IN_CI"}
+          EOF
+          sha256sum "$F"/*.apk > "$F/APK-SHA256-UNSIGNED-v2.4.5.txt"
+          (cd android-stable && zip -qr "v245-release/Multyfi-AutoBuy-v2.4.5-COMPLETE-ANDROID-SOURCE.zip" app/src child/src app/build.gradle child/build.gradle ../hotfix)
+
+      - name: Upload v2.4.5 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Multyfi-AutoBuy-v2.4.5-SINGLE-STOCK-CRITICAL-PATH
+          path: |
+            apply-v245.log
+            build-v245.log
+            android-stable/v245-release/
+            android-stable/app/build/reports/tests/testDebugUnitTest/
+            android-stable/child/build/reports/tests/testDebugUnitTest/
+            android-stable/app/build/reports/lint-results-debug.html
+            android-stable/child/build/reports/lint-results-debug.html
+          if-no-files-found: error
