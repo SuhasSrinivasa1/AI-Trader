@@ -1,0 +1,66 @@
+name: Export Multyfi v2.4.3 Complete Android Source
+
+on:
+  push:
+    branches: [multyfi-v2.4.3-critical-exit-speed]
+    paths: ['.github/workflows/export-v243-complete-source.yml']
+  workflow_dispatch:
+
+jobs:
+  export-source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Stage complete build source
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=Multyfi-AutoBuy-v2.4.3-COMPLETE-ANDROID-SOURCE
+          mkdir -p "$OUT"
+
+          # Complete Android/Gradle project used by the v2.4.3 patch chain.
+          cp -R android-stable "$OUT/android-stable"
+          cp -R hotfix "$OUT/hotfix"
+          mkdir -p "$OUT/.github/workflows"
+          cp .github/workflows/multyfi-v243-critical.yml "$OUT/.github/workflows/"
+          cp .github/workflows/export-v243-complete-source.yml "$OUT/.github/workflows/"
+
+          # Remove generated outputs/caches and any local/private signing material.
+          find "$OUT" -type d \( -name build -o -name .gradle -o -name .idea \) -prune -exec rm -rf {} + || true
+          find "$OUT" -type f \( -name '*.p12' -o -name '*.pfx' -o -name '*.jks' -o -name '*.keystore' -o -name 'local.properties' -o -iname '*signing*secret*' \) -delete || true
+
+          cat > "$OUT/README-SOURCE-BASELINE.txt" <<'EOF'
+          Multyfi AutoBuy MASTER + CHILD v2.4.3 complete Android source baseline
+
+          Repository: SuhasSrinivasa1/AI-Trader
+          Branch: multyfi-v2.4.3-critical-exit-speed
+          CI validation run: 31358753006
+
+          Included:
+          - complete android-stable Gradle project
+          - MASTER app module source
+          - CHILD module source
+          - Gradle wrapper/configuration present in android-stable
+          - complete hotfix chain including run_v243.py
+          - v2.4.3 CI workflow
+
+          Intentionally excluded:
+          - build/ and .gradle/ generated output
+          - private signing keys/certificates
+          - local.properties and local machine state
+
+          This is the correct source baseline for producing the next in-place update.
+          Existing signing should be performed by the established signing pipeline/key owner.
+          EOF
+
+          printf 'SOURCE_COMMIT=%s\n' "$GITHUB_SHA" > "$OUT/SOURCE-COMMIT.txt"
+          find "$OUT" -maxdepth 3 -type f | sort > "$OUT/FILE-MANIFEST.txt"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Multyfi-AutoBuy-v2.4.3-COMPLETE-ANDROID-SOURCE
+          path: Multyfi-AutoBuy-v2.4.3-COMPLETE-ANDROID-SOURCE/
+          if-no-files-found: error
