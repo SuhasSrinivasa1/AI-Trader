@@ -1,0 +1,180 @@
+name: Multyfi v2.4.6 PERFECT REBUILD
+
+on:
+  push:
+    branches: [multyfi-v2.4.6-perfect-rebuild]
+  workflow_dispatch:
+
+jobs:
+  build-test-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK
+        run: yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Apply v2.4.6 source
+        run: python3 hotfix/run_v246.py | tee apply-v246.log
+
+      - name: Unit tests lint debug and release builds
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --console=plain -p android-stable \
+            :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease \
+            :child:testDebugUnitTest :child:lintDebug :child:assembleDebug :child:assembleRelease \
+            | tee build-v246.log
+
+      - name: Verify package identity and dynamic UI version
+        shell: bash
+        run: |
+          set -euo pipefail
+          for MOD in app child; do
+            grep -q "versionCode 246" "android-stable/$MOD/build.gradle"
+            grep -q "versionName '2.4.6'" "android-stable/$MOD/build.gradle"
+            ACT="android-stable/$MOD/src/main/java/com/suhas/multyfiautobuy/stable/ProductionActivity.java"
+            grep -q 'BuildConfig.VERSION_NAME' "$ACT"
+            ! grep -q 'release 2.4.4' "$ACT"
+            ! grep -q '• v2.4.4' "$ACT"
+          done
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          "$AAPT" dump badging android-stable/app/build/outputs/apk/debug/app-debug.apk | tee master-badging-v246.txt
+          "$AAPT" dump badging android-stable/child/build/outputs/apk/debug/child-debug.apk | tee child-badging-v246.txt
+          grep -q "versionCode='246'" master-badging-v246.txt
+          grep -q "versionName='2.4.6'" master-badging-v246.txt
+          grep -q "versionCode='246'" child-badging-v246.txt
+          grep -q "versionName='2.4.6'" child-badging-v246.txt
+
+      - name: Verify v2.4.5 critical trading contracts remain unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          for MOD in app child; do
+            M="android-stable/$MOD/src/main/java/com/suhas/multyfiautobuy/stable"
+            grep -q 'ENTRY_PRIORITY = -4' "$M/PriorityExecutors.java"
+            grep -q 'EARLY_EXIT_PRIORITY == ENTRY_PRIORITY' "$M/PriorityExecutors.java"
+            grep -q 'liveTradeHint' "$M/ProductionNotificationService.java"
+            grep -q 'containsEarlyExitPhrase(rawText) || liveTradeHint' "$M/ProductionNotificationService.java"
+            grep -Fq 'save|protect|secure|lock|take' "$M/SignalParser.java"
+            grep -q 'findActive(active, earlyExit.eventId)' "$M/ProductionNotificationService.java"
+            grep -q 'memoryToken' "$M/TokenManager.java"
+            grep -q 'NEW ENTRY BLOCKED — ONE STOCK AT A TIME' "$M/ProductionNotificationService.java"
+            grep -q 'GrowwClient.placeEarlyExitMarketSell' "$M/ProductionNotificationService.java"
+            grep -q 'GrowwClient.placeConfirmedEntryLimit' "$M/ProductionNotificationService.java"
+            grep -q 'Groww MARKET SELL was called before audit logging.' "$M/ProductionNotificationService.java"
+            grep -q 'Groww order/create was called before audit logging.' "$M/ProductionNotificationService.java"
+          done
+          grep -q 'PriorityExecutors.backgroundSingle("multyfi-relay-broadcast")' android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/LanMasterRelayService.java
+          grep -q 'registerNetworkCallback' android-stable/child/src/main/java/com/suhas/multyfiautobuy/stable/LanChildRelayService.java
+          python3 - <<'PY'
+          from pathlib import Path
+          for module in ('app','child'):
+              p=Path('android-stable')/module/'src/main/java/com/suhas/multyfiautobuy/stable/ProductionNotificationService.java'
+              s=p.read_text()
+              q=s.index('private void queueEarlyExit(')
+              direct=s.index('if (tryDirectEarlyExit(signal, strategy)) return;',q)
+              persist=s.index('StrategyStore.upsert(this, strategy);',direct)
+              assert direct < persist, (module,'SELL persistence before direct dispatch')
+              sell=s.index('GrowwClient.ApiResult sell = GrowwClient.placeEarlyExitMarketSell(')
+              sell_log=s.index('logBackground("MULTYFI EARLY EXIT API DISPATCH"',sell)
+              assert sell < sell_log, (module,'SELL audit before broker call')
+              buy=s.index('GrowwClient.EntryResult mis = GrowwClient.placeConfirmedEntryLimit(')
+              buy_log=s.index('logBackground("BUY API DISPATCH"',buy)
+              assert buy < buy_log, (module,'BUY audit before broker call')
+          PY
+
+      - name: Verify unit-test totals
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          for role in ('app','child'):
+              root=Path('android-stable')/role/'build/test-results/testDebugUnitTest'
+              tests=failures=errors=0
+              for p in root.glob('TEST-*.xml'):
+                  x=ET.parse(p).getroot()
+                  tests += int(x.attrib.get('tests',0))
+                  failures += int(x.attrib.get('failures',0))
+                  errors += int(x.attrib.get('errors',0))
+              print(role, tests, failures, errors)
+              assert tests >= 84, (role,tests)
+              assert failures == 0 and errors == 0, (role,failures,errors)
+          PY
+
+      - name: Stage v2.4.6 release package
+        shell: bash
+        run: |
+          set -euo pipefail
+          F=android-stable/v246-release
+          mkdir -p "$F"
+          cp android-stable/app/build/outputs/apk/debug/app-debug.apk "$F/Multyfi-AutoBuy-MASTER-S24-Android16-v2.4.6-VALIDATION.apk"
+          cp android-stable/child/build/outputs/apk/debug/child-debug.apk "$F/Multyfi-AutoBuy-CHILD-LG-G7-ThinQ-v2.4.6-VALIDATION.apk"
+          MU=$(find android-stable/app/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          CU=$(find android-stable/child/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          test -n "$MU" && test -n "$CU"
+          cp "$MU" "$F/Multyfi-AutoBuy-MASTER-S24-Android16-v2.4.6-UNSIGNED.apk"
+          cp "$CU" "$F/Multyfi-AutoBuy-CHILD-LG-G7-ThinQ-v2.4.6-UNSIGNED.apk"
+          cp hotfix/run_v246.py "$F/"
+          cp master-badging-v246.txt child-badging-v246.txt "$F/"
+          MS=$(sha256sum "$F/Multyfi-AutoBuy-MASTER-S24-Android16-v2.4.6-UNSIGNED.apk" | awk '{print $1}')
+          CS=$(sha256sum "$F/Multyfi-AutoBuy-CHILD-LG-G7-ThinQ-v2.4.6-UNSIGNED.apk" | awk '{print $1}')
+          cat > "$F/RELEASE-NOTES-v2.4.6.txt" <<'EOF'
+          MULTYFI AUTOBUY MASTER + CHILD v2.4.6 — PERFECT REBUILD
+
+          PURPOSE
+          - Fix the stale dashboard label that displayed release 2.4.4 even when Android correctly reported v2.4.5.
+          - No trading behavior is intentionally changed from the validated v2.4.5 single-stock critical-path build.
+
+          PERMANENT VERSION FIX
+          - MASTER and CHILD dashboard release labels now use BuildConfig.VERSION_NAME.
+          - Footer version also uses BuildConfig.VERSION_NAME.
+          - Future builds cannot silently show an old hard-coded release label when package metadata changes.
+          - CI validates both Gradle metadata and the versionCode/versionName embedded in each generated APK with aapt.
+
+          RETAINED CRITICAL TRADING BEHAVIOR
+          - Flat account: BUY critical path.
+          - One live stock: SELL/early-exit critical path; unrelated new BUY calls are ignored.
+          - BUY and SELL retain equal critical Android CPU scheduling priority, with state deciding relevance.
+          - Eligible full-known MIS early exits call Groww MARKET SELL before heavy persistence/audit logging.
+          - Warm BUY reaches Groww order/create before audit logging.
+          - MASTER/CHILD relay remains background priority and cannot be awaited by MASTER trading.
+          - Expanded early-exit vocabulary from v2.4.5 is retained.
+          - GROSS -₹2,000 emergency loss protection retained; no daily profit cap.
+
+          LATENCY BOUNDARY
+          - <=100 ms remains an app-side notification-to-Groww-API dispatch objective on a warm, ready path.
+          - Groww/mobile-network/exchange acknowledgement and fills remain external and cannot be guaranteed within 100 ms.
+
+          SIGNING
+          - Release APKs produced by CI are unsigned.
+          - Sign MASTER and CHILD with the same permanent key/certificate used by the installed v2.4.5 package for in-place update.
+          EOF
+          cat > "$F/VALIDATION-v2.4.6.json" <<EOF
+          {"version":"2.4.6","version_code":246,"dynamic_ui_version":true,"stale_244_ui_label_removed":true,"apk_manifest_verified":true,"trading_logic_base":"v2.4.5-single-stock-critical-path","one_stock_only":true,"state_driven_buy_sell_priority":true,"relay_background_priority":true,"app_side_dispatch_objective_ms":100,"fill_sla_ms":"NOT_GUARANTEED","master_unsigned_sha256":"$MS","child_unsigned_sha256":"$CS","release_signing":"UNSIGNED_IN_CI"}
+          EOF
+          sha256sum "$F"/*.apk > "$F/APK-SHA256-UNSIGNED-v2.4.6.txt"
+          (cd android-stable && zip -qr "v246-release/Multyfi-AutoBuy-v2.4.6-COMPLETE-ANDROID-SOURCE.zip" app/src child/src app/build.gradle child/build.gradle ../hotfix)
+
+      - name: Upload v2.4.6 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Multyfi-AutoBuy-v2.4.6-PERFECT-REBUILD
+          path: |
+            apply-v246.log
+            build-v246.log
+            android-stable/v246-release/
+            android-stable/app/build/reports/tests/testDebugUnitTest/
+            android-stable/child/build/reports/tests/testDebugUnitTest/
+            android-stable/app/build/reports/lint-results-debug.html
+            android-stable/child/build/reports/lint-results-debug.html
+          if-no-files-found: error
