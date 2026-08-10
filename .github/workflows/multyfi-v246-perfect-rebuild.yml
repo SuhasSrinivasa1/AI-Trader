@@ -42,7 +42,9 @@ jobs:
             grep -q "versionCode 246" "android-stable/$MOD/build.gradle"
             grep -q "versionName '2.4.6'" "android-stable/$MOD/build.gradle"
             ACT="android-stable/$MOD/src/main/java/com/suhas/multyfiautobuy/stable/ProductionActivity.java"
-            grep -q 'BuildConfig.VERSION_NAME' "$ACT"
+            grep -q 'installedVersionName()' "$ACT"
+            grep -q 'getPackageInfo(getPackageName(), 0).versionName' "$ACT"
+            ! grep -q 'BuildConfig.VERSION_NAME' "$ACT"
             ! grep -q 'release 2.4.4' "$ACT"
             ! grep -q '• v2.4.4' "$ACT"
           done
@@ -136,10 +138,10 @@ jobs:
           - No trading behavior is intentionally changed from the validated v2.4.5 single-stock critical-path build.
 
           PERMANENT VERSION FIX
-          - MASTER and CHILD dashboard release labels now use BuildConfig.VERSION_NAME.
-          - Footer version also uses BuildConfig.VERSION_NAME.
-          - Future builds cannot silently show an old hard-coded release label when package metadata changes.
-          - CI validates both Gradle metadata and the versionCode/versionName embedded in each generated APK with aapt.
+          - MASTER and CHILD dashboard release labels now read the installed APK versionName through Android PackageManager.
+          - Footer uses the same runtime version value.
+          - The visible version is therefore tied to the APK Android is actually running instead of a hard-coded string.
+          - CI validates Gradle metadata and the versionCode/versionName embedded in each generated APK with aapt.
 
           RETAINED CRITICAL TRADING BEHAVIOR
           - Flat account: BUY critical path.
@@ -160,7 +162,7 @@ jobs:
           - Sign MASTER and CHILD with the same permanent key/certificate used by the installed v2.4.5 package for in-place update.
           EOF
           cat > "$F/VALIDATION-v2.4.6.json" <<EOF
-          {"version":"2.4.6","version_code":246,"dynamic_ui_version":true,"stale_244_ui_label_removed":true,"apk_manifest_verified":true,"trading_logic_base":"v2.4.5-single-stock-critical-path","one_stock_only":true,"state_driven_buy_sell_priority":true,"relay_background_priority":true,"app_side_dispatch_objective_ms":100,"fill_sla_ms":"NOT_GUARANTEED","master_unsigned_sha256":"$MS","child_unsigned_sha256":"$CS","release_signing":"UNSIGNED_IN_CI"}
+          {"version":"2.4.6","version_code":246,"dynamic_ui_version":"ANDROID_PACKAGE_MANAGER","stale_244_ui_label_removed":true,"apk_manifest_verified":true,"trading_logic_base":"v2.4.5-single-stock-critical-path","one_stock_only":true,"state_driven_buy_sell_priority":true,"relay_background_priority":true,"app_side_dispatch_objective_ms":100,"fill_sla_ms":"NOT_GUARANTEED","master_unsigned_sha256":"$MS","child_unsigned_sha256":"$CS","release_signing":"UNSIGNED_IN_CI"}
           EOF
           sha256sum "$F"/*.apk > "$F/APK-SHA256-UNSIGNED-v2.4.6.txt"
           (cd android-stable && zip -qr "v246-release/Multyfi-AutoBuy-v2.4.6-COMPLETE-ANDROID-SOURCE.zip" app/src child/src app/build.gradle child/build.gradle ../hotfix)
