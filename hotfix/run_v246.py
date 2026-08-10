@@ -4,7 +4,7 @@ import runpy
 
 # Build directly on the validated v2.4.5 single-stock critical-path release.
 # Trading logic is intentionally unchanged in v2.4.6. This rebuild fixes release
-# identity presentation permanently by deriving UI labels from BuildConfig.
+# identity presentation permanently by reading the version embedded in the installed APK.
 runpy.run_path('hotfix/run_v245.py', run_name='__main__')
 
 ROOT = Path('android-stable')
@@ -36,12 +36,12 @@ for module in ('app', 'child'):
 
     activity = ROOT / module / 'src/main/java/com/suhas/multyfiautobuy/stable/ProductionActivity.java'
 
-    # Never hard-code the release number again. The dashboard now always renders
-    # the versionName embedded in the APK being executed.
+    # Never hard-code the release number again. The dashboard reads the versionName
+    # from PackageManager, i.e. from the APK Android is actually executing.
     replace_once(
         activity,
         '        TextView subtitle = label(AppRole.isChild(this) ? "LG G7 ThinQ • local-LAN child • release 2.4.4" : "Galaxy S24 Ultra • local-LAN master • release 2.4.4", 14, MUTED, false);',
-        '        String release = BuildConfig.VERSION_NAME;\n'
+        '        String release = installedVersionName();\n'
         '        TextView subtitle = label(AppRole.isChild(this)\n'
         '                ? "LG G7 ThinQ • local-LAN child • release " + release\n'
         '                : "Galaxy S24 Ultra • local-LAN master • release " + release,\n'
@@ -52,7 +52,15 @@ for module in ('app', 'child'):
         activity,
         '                "Auto-Buy OFF by default • GROSS loss -₹2,000 • no daily profit cap • local LAN relay • v2.4.4",',
         '                "Auto-Buy OFF by default • GROSS loss -₹2,000 • no daily profit cap • local LAN relay • v"\n'
-        '                        + BuildConfig.VERSION_NAME,'
+        '                        + release,'
+    )
+
+    # Central runtime version reader. This avoids generated BuildConfig dependencies
+    # and guarantees the visible label follows the package metadata installed by Android.
+    replace_once(
+        activity,
+        '    private void loadSavedState() {',
+        '''    private String installedVersionName() {\n        try {\n            String value = getPackageManager()\n                    .getPackageInfo(getPackageName(), 0).versionName;\n            return value == null || value.trim().isEmpty() ? "unknown" : value.trim();\n        } catch (Exception ignored) {\n            return "unknown";\n        }\n    }\n\n    private void loadSavedState() {'''
     )
 
 # Build-time contracts: package metadata and visible UI must agree, and no stale
@@ -62,9 +70,11 @@ for module in ('app', 'child'):
     activity = read(ROOT / module / 'src/main/java/com/suhas/multyfiautobuy/stable/ProductionActivity.java')
     assert 'versionCode 246' in gradle
     assert "versionName '2.4.6'" in gradle
-    assert 'BuildConfig.VERSION_NAME' in activity
+    assert 'installedVersionName()' in activity
+    assert 'getPackageInfo(getPackageName(), 0).versionName' in activity
     assert 'release 2.4.4' not in activity
     assert '• v2.4.4' not in activity
+    assert 'BuildConfig.VERSION_NAME' not in activity
 
 # Preserve the v2.4.5 critical-path contracts unchanged.
 for module in ('app', 'child'):
@@ -77,4 +87,4 @@ for module in ('app', 'child'):
     assert 'EARLY_EXIT_PRIORITY == ENTRY_PRIORITY' in priority
     assert 'save|protect|secure|lock|take' in parser
 
-print('Applied Multyfi AutoBuy v2.4.6 perfect rebuild: dynamic UI version + v2.4.5 critical path preserved')
+print('Applied Multyfi AutoBuy v2.4.6 perfect rebuild: APK-derived UI version + v2.4.5 critical path preserved')
