@@ -1,0 +1,153 @@
+name: Multyfi v2.4.4 PRIMARY PRIORITY LAN RECOVERY
+
+on:
+  push:
+    branches: [multyfi-v2.4.4-primary-priority-lan-recovery]
+  workflow_dispatch:
+
+jobs:
+  build-test-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK
+        run: yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Apply v2.4.4 source
+        run: python3 hotfix/run_v244.py | tee apply-v244.log
+
+      - name: Unit tests lint debug and release builds
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --console=plain -p android-stable \
+            :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease \
+            :child:testDebugUnitTest :child:lintDebug :child:assembleDebug :child:assembleRelease \
+            | tee build-v244.log
+
+      - name: Verify v2.4.4 critical contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          M=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable
+          C=android-stable/child/src/main/java/com/suhas/multyfiautobuy/stable
+          grep -q "versionCode 244" android-stable/app/build.gradle
+          grep -q "versionName '2.4.4'" android-stable/app/build.gradle
+          grep -q "versionCode 244" android-stable/child/build.gradle
+          grep -q "versionName '2.4.4'" android-stable/child/build.gradle
+          grep -q 'PriorityExecutors.earlyExitSingle' "$M/ProductionNotificationService.java"
+          grep -q 'PriorityExecutors.entrySingle' "$M/ProductionNotificationService.java"
+          grep -q 'PriorityExecutors.backgroundSingle("multyfi-relay-broadcast")' "$M/LanMasterRelayService.java"
+          grep -q 'FALLBACK.execute(() -> publishAsync' "$M/LanMasterRelayService.java"
+          grep -q 'MASTER LAN DISCOVERY RETRY' "$M/LanMasterRelayService.java"
+          grep -q 'registerNetworkCallback' "$C/LanChildRelayService.java"
+          grep -q 'onLinkPropertiesChanged' "$C/LanChildRelayService.java"
+          grep -q 'enqueueRelayedMultyfi(sig.rawText,sig.sourcePostTime);' "$C/LanChildRelayService.java"
+          grep -q 'PING|' "$C/LanChildRelayService.java"
+          ! grep -q 'AppPrefs.log' "$M/LanMasterRelayService.java"
+          ! grep -q 'AppPrefs.log' "$C/LanChildRelayService.java"
+          grep -q 'MULTYFI EARLY EXIT DIRECT SUBMITTED' "$M/ProductionNotificationService.java"
+          grep -q 'MULTYFI EARLY EXIT API DISPATCH' "$M/ProductionNotificationService.java"
+          grep -q 'BUY API DISPATCH' "$M/ProductionNotificationService.java"
+          grep -q 'FastPositionCache.lookup' "$M/ProductionNotificationService.java"
+          grep -q 'NET_PROFIT_TARGET = 0d' "$M/DailyRiskPolicy.java"
+          grep -q 'GROSS_LOSS_LIMIT = 2000d' "$M/DailyRiskPolicy.java"
+
+      - name: Verify unit-test totals
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          for role in ('app','child'):
+              root=Path('android-stable')/role/'build/test-results/testDebugUnitTest'
+              tests=failures=errors=0
+              for p in root.glob('TEST-*.xml'):
+                  x=ET.parse(p).getroot()
+                  tests += int(x.attrib.get('tests',0))
+                  failures += int(x.attrib.get('failures',0))
+                  errors += int(x.attrib.get('errors',0))
+              print(role, tests, failures, errors)
+              assert tests >= 81, (role, tests)
+              assert failures == 0 and errors == 0, (role, failures, errors)
+          PY
+
+      - name: Stage v2.4.4 release package
+        shell: bash
+        run: |
+          set -euo pipefail
+          F=android-stable/v244-release
+          mkdir -p "$F"
+          cp android-stable/app/build/outputs/apk/debug/app-debug.apk "$F/Multyfi-AutoBuy-MASTER-S24-Android16-v2.4.4-VALIDATION.apk"
+          cp android-stable/child/build/outputs/apk/debug/child-debug.apk "$F/Multyfi-AutoBuy-CHILD-LG-G7-ThinQ-v2.4.4-VALIDATION.apk"
+          MU=$(find android-stable/app/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          CU=$(find android-stable/child/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          test -n "$MU" && test -n "$CU"
+          cp "$MU" "$F/Multyfi-AutoBuy-MASTER-S24-Android16-v2.4.4-UNSIGNED.apk"
+          cp "$CU" "$F/Multyfi-AutoBuy-CHILD-LG-G7-ThinQ-v2.4.4-UNSIGNED.apk"
+          cp -R android-stable/app/src/main "$F/master-source"
+          cp -R android-stable/app/src/test "$F/master-tests"
+          cp -R android-stable/child/src/main "$F/child-source"
+          cp -R android-stable/child/src/test "$F/child-tests"
+          cp hotfix/run_v244.py "$F/"
+          MS=$(sha256sum "$F/Multyfi-AutoBuy-MASTER-S24-Android16-v2.4.4-UNSIGNED.apk" | awk '{print $1}')
+          CS=$(sha256sum "$F/Multyfi-AutoBuy-CHILD-LG-G7-ThinQ-v2.4.4-UNSIGNED.apk" | awk '{print $1}')
+          cat > "$F/RELEASE-NOTES-v2.4.4.txt" <<'EOF'
+          MULTYFI AUTOBUY MASTER + CHILD v2.4.4 — PRIMARY EXECUTION PRIORITY + SELF-HEALING LAN
+
+          PRIMARY EXECUTION CONTRACT
+          - P0 Multyfi early/pre-closer SELL uses a dedicated favorable-priority executor.
+          - P1 Multyfi BUY uses its own favorable-priority executor.
+          - MASTER schedules broker work before local relay publication.
+          - MASTER relay, discovery, broadcasts, heartbeats, UI status and relay diagnostics run on background-priority workers.
+          - Relay diagnostics no longer use the synchronized AppPrefs audit-log lock, preventing LAN logging from blocking BUY/SELL dispatch.
+          - If the MASTER relay service is temporarily unavailable, even the relay service-start fallback runs asynchronously at background priority.
+          - CHILD queues authenticated relayed Multyfi trading work before ACK/UI/relay diagnostics.
+
+          LAN RECOVERY
+          - MASTER TCP listener and UDP discovery now self-retry after transient socket/bind/interface errors instead of terminating until a manual re-arm.
+          - CHILD registers a physical-Wi-Fi NetworkCallback. Hotspot/Wi-Fi changes close stale relay sockets and immediately wake gateway rediscovery.
+          - CHILD keeps relay TCP/UDP sockets pinned to physical Wi-Fi; Groww remains on the normal VPN/static-IP route.
+          - Lightweight CHILD heartbeat lets MASTER discard stale child sockets and recover automatically.
+
+          RETAINED FROM v2.4.3
+          - ₹5,000 profit cap remains removed.
+          - GROSS -₹2,000 emergency loss protection remains.
+          - 'closing early', 'close early', 'Book Profit' and 'Book Profits' remain authoritative early-exit triggers.
+          - Fully confirmed MIS early exit with no broker-side protection uses direct MARKET SELL without a pre-status GET on the first attempt.
+          - Fresh position baseline cache can avoid the pre-BUY position GET.
+          - 100 ms remains an app-side notification-to-Groww-API dispatch objective only on an already-ready/warm path; broker/exchange acknowledgement or fill is not guaranteed within 100 ms.
+
+          VALIDATION BOUNDARY
+          - CI runs MASTER and CHILD unit tests, lint, debug builds, release builds and source contracts.
+          - Physical S24-to-LG hotspot recovery and the next live Groww pre-closer transaction still require monitored real-device confirmation.
+          - Release APKs in this CI artifact are UNSIGNED because the private permanent signing key is intentionally not stored in this repository.
+          EOF
+          cat > "$F/VALIDATION-v2.4.4.json" <<EOF
+          {"version":"2.4.4","version_code":244,"master_package":"com.suhas.multyfiautobuy.stable","child_package":"com.suhas.multyfiautobuy.child","primary_priority":"early_exit > entry > relay","relay_background_priority":true,"master_tcp_self_heal":true,"master_udp_self_heal":true,"child_wifi_network_callback":true,"child_gateway_rediscovery":true,"child_queues_trade_before_ack":true,"relay_app_prefs_log_lock_removed":true,"v243_direct_early_exit_retained":true,"daily_profit_cap_5000":"REMOVED","gross_loss_limit_2000":"RETAINED","app_side_dispatch_objective_ms":100,"broker_exchange_fill_sla_ms":"NOT GUARANTEED","release_signing":"UNSIGNED_IN_CI","master_unsigned_sha256":"$MS","child_unsigned_sha256":"$CS"}
+          EOF
+          sha256sum "$F"/*.apk > "$F/APK-SHA256-UNSIGNED-v2.4.4.txt"
+          (cd android-stable && zip -qr "v244-release/Multyfi-AutoBuy-v2.4.4-COMPLETE-ANDROID-SOURCE.zip" app child ../hotfix)
+
+      - name: Upload v2.4.4 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Multyfi-AutoBuy-v2.4.4-PRIMARY-PRIORITY-LAN-RECOVERY
+          path: |
+            apply-v244.log
+            build-v244.log
+            android-stable/v244-release/
+            android-stable/app/build/reports/tests/testDebugUnitTest/
+            android-stable/child/build/reports/tests/testDebugUnitTest/
+            android-stable/app/build/reports/lint-results-debug.html
+            android-stable/child/build/reports/lint-results-debug.html
+          if-no-files-found: error
