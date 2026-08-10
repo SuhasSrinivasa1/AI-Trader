@@ -1,0 +1,79 @@
+name: Multyfi v2.4.2 RELEASE PACKAGE
+
+on:
+  push:
+    branches: [multyfi-v2.4.2-hotspot-gateway-relay]
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - uses: android-actions/setup-android@v3
+      - run: yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '8.13'}
+      - name: Apply corrected v2.4.2
+        run: python3 hotfix/run_v242_fix.py | tee apply-v242-release.log
+      - name: Tests lint and release APKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --console=plain -p android-stable \
+            :app:testDebugUnitTest :app:lintDebug :app:assembleRelease \
+            :child:testDebugUnitTest :child:lintDebug :child:assembleRelease \
+            | tee build-v242-release.log
+      - name: Verify contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          M=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable
+          C=android-stable/child/src/main/java/com/suhas/multyfiautobuy/stable
+          grep -q "versionCode 242" android-stable/app/build.gradle
+          grep -q "versionCode 242" android-stable/child/build.gradle
+          grep -q "wifi.bindSocket(d)" "$C/LanChildRelayService.java"
+          grep -q "wifi.bindSocket(s)" "$C/LanChildRelayService.java"
+          grep -q "targets.add(gateway)" "$C/LanChildRelayService.java"
+          grep -q "Groww remains on VPN" "$C/LanChildRelayService.java"
+          grep -q "NET_PROFIT_TARGET = 5000d" "$M/DailyRiskPolicy.java"
+          grep -q "GROSS_LOSS_LIMIT = 2000d" "$M/DailyRiskPolicy.java"
+          grep -q "AppRuntimeControl.deactivate(this)" "$M/ProductionActivity.java"
+      - name: Stage release
+        shell: bash
+        run: |
+          set -euo pipefail
+          F=android-stable/v242-release
+          mkdir -p "$F"
+          MU=$(find android-stable/app/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          CU=$(find android-stable/child/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          cp "$MU" "$F/Multyfi-AutoBuy-MASTER-S24-Android16-v2.4.2-UNSIGNED.apk"
+          cp "$CU" "$F/Multyfi-AutoBuy-CHILD-LG-G7-ThinQ-v2.4.2-UNSIGNED.apk"
+          cp -R android-stable/app/src/main "$F/master-source"
+          cp -R android-stable/child/src/main "$F/child-source"
+          sha256sum "$F"/*.apk > "$F/SHA256-UNSIGNED.txt"
+          cat > "$F/RELEASE-NOTES-v2.4.2.txt" <<'EOF'
+          Multyfi AutoBuy MASTER + CHILD v2.4.2
+          - Fixes CHILD discovery when connected to MASTER Android hotspot while Surfshark VPN is active.
+          - Only local relay UDP/TCP sockets are pinned to physical Wi-Fi.
+          - CHILD probes Wi-Fi DHCP/default gateway first, then authenticated broadcast fallback.
+          - Groww traffic remains on the normal VPN/static-IP route.
+          - Hard OFF behavior unchanged.
+          - Daily +₹5,000 target remains estimated NET after charges.
+          - Daily -₹2,000 emergency threshold remains GROSS with immediate MARKET exit/day lock.
+          - Multyfi early-sell behavior retained.
+          - Physical S24 hotspot to LG G7 connection requires real-device confirmation after install.
+          EOF
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Multyfi-AutoBuy-v2.4.2-HOTSPOT-RELAY-RELEASE-UNSIGNED
+          path: |
+            android-stable/v242-release/
+            apply-v242-release.log
+            build-v242-release.log
+            android-stable/app/build/reports/tests/testDebugUnitTest/
+            android-stable/child/build/reports/tests/testDebugUnitTest/
+          if-no-files-found: error
