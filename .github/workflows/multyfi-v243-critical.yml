@@ -44,7 +44,7 @@ jobs:
           grep -q "GROSS_LOSS_LIMIT = 2000d" "$M/DailyRiskPolicy.java"
           grep -q "return false;" "$M/AppPrefs.java"
           grep -q 'clos(?:e|ing).*early' "$M/SignalParser.java"
-          grep -q 'book\\s+profits?' "$M/SignalParser.java"
+          grep -Fq 'book\\s+profits?' "$M/SignalParser.java"
           grep -q "MULTYFI EARLY EXIT DIRECT SUBMITTED" "$M/ProductionNotificationService.java"
           grep -q "earlyExitExecutor" "$M/ProductionNotificationService.java"
           grep -q "FastExitSubmissionGate.begin" "$M/ProductionNotificationService.java"
