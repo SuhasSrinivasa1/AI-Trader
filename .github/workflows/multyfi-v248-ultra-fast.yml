@@ -1,0 +1,178 @@
+name: Multyfi v2.4.8 ULTRA FAST STANDALONE
+
+on:
+  push:
+    branches: [multyfi-v2.4.8-ultra-fast]
+  workflow_dispatch:
+
+jobs:
+  build-test-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK
+        run: yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Apply v2.4.8 ultra-fast source
+        run: python3 hotfix/run_v248.py | tee apply-v248.log
+
+      - name: Unit tests lint debug and release build
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --console=plain -p android-stable \
+            :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease \
+            | tee build-v248.log
+
+      - name: Verify standalone architecture remains minimal
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(grep -c 'include(\":app\")' android-stable/settings.gradle)" -eq 1
+          ! grep -q 'include(":child")' android-stable/settings.gradle
+          M=android-stable/app/src/main
+          ! grep -R -E 'LanMasterRelayService|LanChildRelayService|RelayState|AppRole\.isChild|local-LAN|MASTER/CHILD' "$M"
+          ! grep -q 'ACCESS_WIFI_STATE' "$M/AndroidManifest.xml"
+          ! grep -q 'CHANGE_WIFI_MULTICAST_STATE' "$M/AndroidManifest.xml"
+
+      - name: Verify package identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'versionCode 248' android-stable/app/build.gradle
+          grep -q "versionName '2.4.8'" android-stable/app/build.gradle
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          "$AAPT" dump badging android-stable/app/build/outputs/apk/debug/app-debug.apk | tee badging-v248.txt
+          grep -q "versionCode='248'" badging-v248.txt
+          grep -q "versionName='2.4.8'" badging-v248.txt
+
+      - name: Verify ultra-fast critical-path contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          M=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable
+          S="$M/ProductionNotificationService.java"
+          grep -q 'EARLY_EXIT_PRIORITY = -4' "$M/PriorityExecutors.java"
+          grep -q 'ENTRY_PRIORITY = -4' "$M/PriorityExecutors.java"
+          grep -q 'BACKGROUND_PRIORITY = 10' "$M/PriorityExecutors.java"
+          grep -q 'prestartCoreThread()' "$M/PriorityExecutors.java"
+          grep -q 'StrategyStore.warm(this)' "$S"
+          grep -q 'StrategyStore.activeFast(this)' "$S"
+          grep -q 'TokenManager.hotTokenOrEmpty()' "$S"
+          grep -q 'Android callback age' "$S"
+          grep -q 'critical queue' "$S"
+          grep -q 'app pre-dispatch' "$S"
+          grep -q 'FastExitSubmissionGate.begin' "$S"
+          grep -q 'DirectEarlyExitPolicy.canDirectMarketSell' "$S"
+          grep -q 'AppPrefs.isIpRecentlyVerified(this)' "$S"
+          grep -q 'AppPrefs.isAuthVerifiedToday(this)' "$S"
+          grep -q 'GrowwClient.placeEarlyExitMarketSell' "$S"
+          grep -q 'GrowwClient.placeConfirmedEntryLimit' "$S"
+          grep -q 'Groww MARKET SELL was called before audit logging.' "$S"
+          grep -q 'Groww order/create was called before audit logging.' "$S"
+          grep -q 'refreshHot(activeFrom(values))' "$M/StrategyStore.java"
+          grep -q 'hotTokenOrEmpty' "$M/TokenManager.java"
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/ProductionNotificationService.java').read_text()
+          sell=s.index('GrowwClient.ApiResult sell = GrowwClient.placeEarlyExitMarketSell(')
+          sell_log=s.index('logBackground("MULTYFI EARLY EXIT API DISPATCH"',sell)
+          assert sell < sell_log, 'SELL telemetry/logging must remain after broker call'
+          buy=s.index('GrowwClient.EntryResult mis = GrowwClient.placeConfirmedEntryLimit(')
+          buy_log=s.index('logBackground("BUY API DISPATCH"',buy)
+          assert buy < buy_log, 'BUY logging must remain after broker call'
+          direct=s.index('DirectEarlyExitPolicy.canDirectMarketSell')
+          gate=s.index('FastExitSubmissionGate.begin', direct)
+          order=s.index('GrowwClient.ApiResult sell = GrowwClient.placeEarlyExitMarketSell(', gate)
+          assert direct < gate < order
+          PY
+
+      - name: Verify unit tests
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          root=Path('android-stable/app/build/test-results/testDebugUnitTest')
+          tests=failures=errors=0
+          for p in root.glob('TEST-*.xml'):
+              x=ET.parse(p).getroot()
+              tests += int(x.attrib.get('tests',0))
+              failures += int(x.attrib.get('failures',0))
+              errors += int(x.attrib.get('errors',0))
+          print('v2.4.8 standalone',tests,failures,errors)
+          assert tests >= 84
+          assert failures == 0 and errors == 0
+          PY
+
+      - name: Stage v2.4.8 release
+        shell: bash
+        run: |
+          set -euo pipefail
+          F=android-stable/v248-release
+          mkdir -p "$F"
+          cp android-stable/app/build/outputs/apk/debug/app-debug.apk "$F/Multyfi-AutoBuy-STANDALONE-v2.4.8-VALIDATION.apk"
+          U=$(find android-stable/app/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          test -n "$U"
+          cp "$U" "$F/Multyfi-AutoBuy-STANDALONE-v2.4.8-UNSIGNED.apk"
+          cp hotfix/run_v248.py "$F/"
+          cp badging-v248.txt "$F/"
+          S=$(sha256sum "$F/Multyfi-AutoBuy-STANDALONE-v2.4.8-UNSIGNED.apk" | awk '{print $1}')
+          cat > "$F/RELEASE-NOTES-v2.4.8.txt" <<'EOF'
+          MULTYFI AUTOBUY v2.4.8 — ULTRA FAST STANDALONE
+
+          PURPOSE
+          - Preserve the live-proven v2.4.7 standalone BUY/SELL behavior.
+          - Reduce avoidable app-side latency before Groww BUY/SELL dispatch.
+
+          SPEED CHANGES
+          - BUY and SELL critical workers are prestarted instead of created lazily on first use.
+          - The exactly-one active strategy is held in a coherent in-process hot cache.
+          - StrategyStore upsert/closure refreshes that cache so a later Book Profit cannot use stale closed state.
+          - Groww daily token has a lock-free hot read; secure-store/TOTP path remains the fallback.
+          - Listener connection warms strategy state and token before market notifications.
+          - SELL telemetry now separates Android callback age, critical-executor queue delay, and app pre-dispatch time.
+          - All telemetry/audit work remains after the Groww broker call.
+
+          SAFETY RETAINED
+          - One stock at a time.
+          - Flat => BUY critical path. One live stock => SELL critical path.
+          - Direct SELL still requires DirectEarlyExitPolicy eligibility, market session, armed state, network, VPN, recently verified dedicated IP, daily Groww auth, valid token, and duplicate-submission gate.
+          - No safety gate was removed to chase latency.
+          - GROSS -₹2,000 emergency-loss protection retained.
+
+          LATENCY INTERPRETATION
+          - The source-age number includes Multyfi -> Android notification delivery before AutoBuy is invoked.
+          - v2.4.8 additionally reports Android callback age, queue delay, and app pre-dispatch time so remaining latency can be attributed correctly.
+          - <=100 ms remains an optimization objective for notification post -> broker dispatch on a warm path, not a hard real-time SLA.
+          - Groww/network/exchange acknowledgement and fill remain external.
+
+          SIGNING
+          - CI release APK is unsigned. Sign with the same permanent certificate as the installed app for in-place update.
+          EOF
+          cat > "$F/VALIDATION-v2.4.8.json" <<EOF
+          {"version":"2.4.8","version_code":248,"architecture":"STANDALONE_ONLY","critical_workers_prestarted":true,"hot_strategy_cache":true,"hot_token_read":true,"post_dispatch_latency_telemetry":true,"one_stock_only":true,"safety_gates_retained":true,"app_side_dispatch_objective_ms":100,"fill_sla_ms":"NOT_GUARANTEED","unsigned_sha256":"$S","release_signing":"UNSIGNED_IN_CI"}
+          EOF
+          sha256sum "$F"/*.apk > "$F/APK-SHA256-UNSIGNED-v2.4.8.txt"
+          (cd android-stable && zip -qr "v248-release/Multyfi-AutoBuy-v2.4.8-ULTRA-FAST-SOURCE.zip" app/src app/build.gradle settings.gradle ../hotfix/run_v248.py)
+
+      - name: Upload v2.4.8 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Multyfi-AutoBuy-v2.4.8-ULTRA-FAST-STANDALONE
+          path: |
+            apply-v248.log
+            build-v248.log
+            android-stable/v248-release/
+            android-stable/app/build/reports/tests/testDebugUnitTest/
+            android-stable/app/build/reports/lint-results-debug.html
+          if-no-files-found: error
