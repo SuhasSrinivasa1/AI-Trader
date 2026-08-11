@@ -1,0 +1,142 @@
+name: Multyfi v2.4.8 RELAY INSTALL SAFE
+
+on:
+  push:
+    branches: [multyfi-v2.4.8-relay-install-safe]
+  workflow_dispatch:
+
+jobs:
+  build-test-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK
+        run: yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Apply v2.4.8 relay install-safe source
+        run: python3 hotfix/run_v248_relay_safe.py | tee apply-v248.log
+
+      - name: Unit tests lint debug and release builds
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --console=plain -p android-stable \
+            :app:testDebugUnitTest :child:testDebugUnitTest \
+            :app:lintDebug :child:lintDebug \
+            :app:assembleDebug :child:assembleDebug \
+            :app:assembleRelease :child:assembleRelease \
+            | tee build-v248.log
+
+      - name: Verify package identities and sensitive-permission split
+        shell: bash
+        run: |
+          set -euo pipefail
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          MASTER=android-stable/app/build/outputs/apk/debug/app-debug.apk
+          CHILD=android-stable/child/build/outputs/apk/debug/child-debug.apk
+          "$AAPT" dump badging "$MASTER" | tee master-badging-v248.txt
+          "$AAPT" dump badging "$CHILD" | tee child-badging-v248.txt
+          "$AAPT" dump xmltree "$MASTER" AndroidManifest.xml | tee master-manifest-v248.txt
+          "$AAPT" dump xmltree "$CHILD" AndroidManifest.xml | tee child-manifest-v248.txt
+          grep -q "package: name='com.suhas.multyfiautobuy.stable'" master-badging-v248.txt
+          grep -q "package: name='com.suhas.multyfiautobuy.child'" child-badging-v248.txt
+          grep -q "versionCode='248'" master-badging-v248.txt
+          grep -q "versionCode='248'" child-badging-v248.txt
+          grep -q "versionName='2.4.8'" master-badging-v248.txt
+          grep -q "versionName='2.4.8'" child-badging-v248.txt
+          grep -q 'BIND_NOTIFICATION_LISTENER_SERVICE' master-manifest-v248.txt
+          ! grep -q 'BIND_NOTIFICATION_LISTENER_SERVICE' child-manifest-v248.txt
+          grep -q 'LanMasterRelayService' master-manifest-v248.txt
+          grep -q 'LanChildRelayService' child-manifest-v248.txt
+
+      - name: Verify trading contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          for M in app child; do
+            J=android-stable/$M/src/main/java/com/suhas/multyfiautobuy/stable
+            grep -q 'GrowwClient.placeEarlyExitMarketSell' "$J/ProductionNotificationService.java"
+            grep -q 'GrowwClient.placeConfirmedEntryLimit' "$J/ProductionNotificationService.java"
+            grep -q 'NEW ENTRY BLOCKED — ONE STOCK AT A TIME' "$J/ProductionNotificationService.java"
+            grep -q 'EARLY_EXIT_PRIORITY == ENTRY_PRIORITY' "$J/PriorityExecutors.java"
+          done
+
+      - name: Verify unit tests
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          for module in ('app','child'):
+              root=Path(f'android-stable/{module}/build/test-results/testDebugUnitTest')
+              tests=failures=errors=0
+              for p in root.glob('TEST-*.xml'):
+                  x=ET.parse(p).getroot()
+                  tests += int(x.attrib.get('tests',0))
+                  failures += int(x.attrib.get('failures',0))
+                  errors += int(x.attrib.get('errors',0))
+              print(module,tests,failures,errors)
+              assert tests >= 80
+              assert failures == 0 and errors == 0
+          PY
+
+      - name: Android 10 CHILD installation smoke
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 29
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: |
+            adb install -r android-stable/child/build/outputs/apk/debug/child-debug.apk
+            adb shell pm path com.suhas.multyfiautobuy.child
+            adb shell am start -W -n com.suhas.multyfiautobuy.child/com.suhas.multyfiautobuy.stable.MainActivity
+
+      - name: Stage v2.4.8 release
+        shell: bash
+        run: |
+          set -euo pipefail
+          F=android-stable/v248-release
+          mkdir -p "$F"
+          MU=$(find android-stable/app/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          CU=$(find android-stable/child/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          test -n "$MU" && test -n "$CU"
+          cp "$MU" "$F/Multyfi-AutoBuy-MASTER-S24-Android16-v2.4.8-UNSIGNED.apk"
+          cp "$CU" "$F/Multyfi-AutoBuy-CHILD-LG-G7-ThinQ-v2.4.8-UNSIGNED.apk"
+          cp master-badging-v248.txt child-badging-v248.txt master-manifest-v248.txt child-manifest-v248.txt "$F/"
+          cp hotfix/run_v248_relay_safe.py "$F/"
+          sha256sum "$F"/*.apk > "$F/APK-SHA256-UNSIGNED-v2.4.8.txt"
+          cat > "$F/VALIDATION-v2.4.8.txt" <<'EOF'
+          MULTYFI AUTOBUY v2.4.8 — RELAY INSTALL SAFE
+          MASTER package=com.suhas.multyfiautobuy.stable
+          CHILD package=com.suhas.multyfiautobuy.child
+          CHILD minSdk=26
+          MASTER owns Notification Listener intake
+          CHILD Notification Listener permission/service=ABSENT
+          MASTER/CHILD authenticated local LAN/hotspot relay=RETAINED
+          CHILD local Groww execution=RETAINED
+          one-stock-only and critical BUY/SELL path=RETAINED
+          Android 10 CHILD install/launch smoke=PASS when artifact upload is reached
+          release signing=UNSIGNED_IN_CI; sign with permanent Multyfi certificate for in-place update
+          EOF
+
+      - name: Upload v2.4.8 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Multyfi-AutoBuy-v2.4.8-RELAY-INSTALL-SAFE
+          path: |
+            apply-v248.log
+            build-v248.log
+            android-stable/v248-release/
+            android-stable/app/build/reports/lint-results-debug.html
+            android-stable/child/build/reports/lint-results-debug.html
+          if-no-files-found: error
