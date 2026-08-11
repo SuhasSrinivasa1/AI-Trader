@@ -82,6 +82,18 @@ jobs:
           assert failures == 0 and errors == 0
           PY
 
+      - name: Android 10 installation smoke
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 29
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: |
+            adb install -r android-stable/app/build/outputs/apk/debug/app-debug.apk
+            adb shell pm path com.suhas.multyfiautobuy.child
+            adb shell am start -W -n com.suhas.multyfiautobuy.child/com.suhas.multyfiautobuy.stable.MainActivity
+
       - name: Stage LG G7 direct release
         shell: bash
         run: |
@@ -103,6 +115,7 @@ jobs:
           versionCode=247
           architecture=standalone local notification listener + local Groww execution
           LAN/master-child relay=removed
+          Android 10/API29 install smoke=PASS when this artifact is uploaded
           signing=unsigned in CI; must be signed with permanent Multyfi certificate
           EOF
 
