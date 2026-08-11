@@ -1,0 +1,119 @@
+name: Multyfi v2.4.7 LG G7 DIRECT STANDALONE
+
+on:
+  push:
+    branches: [multyfi-v2.4.7-g7-direct-standalone]
+  workflow_dispatch:
+
+jobs:
+  build-test-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK
+        run: yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Apply v2.4.7 LG G7 direct standalone source
+        run: python3 hotfix/run_v247_g7_direct.py | tee apply-v247-g7.log
+
+      - name: Unit tests lint debug and release build
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --console=plain -p android-stable \
+            :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease \
+            | tee build-v247-g7.log
+
+      - name: Verify G7 package and standalone contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          G=android-stable/app/build.gradle
+          M=android-stable/app/src/main
+          grep -q "applicationId 'com.suhas.multyfiautobuy.child'" "$G"
+          grep -q 'minSdk 26' "$G"
+          grep -q 'versionCode 247' "$G"
+          grep -q "versionName '2.4.7'" "$G"
+          grep -q 'MultyfiNotificationService' "$M/AndroidManifest.xml"
+          ! grep -R -E 'LanMasterRelayService|LanChildRelayService|RelayState|AppRole\.isChild|local-LAN|MASTER/CHILD' "$M"
+          grep -q 'LG G7 ThinQ • standalone local execution' "$M/java/com/suhas/multyfiautobuy/stable/ProductionActivity.java"
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          "$AAPT" dump badging android-stable/app/build/outputs/apk/debug/app-debug.apk | tee badging-v247-g7.txt
+          grep -q "package: name='com.suhas.multyfiautobuy.child'" badging-v247-g7.txt
+          grep -q "sdkVersion:'26'" badging-v247-g7.txt
+          grep -q "versionCode='247'" badging-v247-g7.txt
+          grep -q "versionName='2.4.7'" badging-v247-g7.txt
+
+      - name: Verify critical trading contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          J=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable
+          grep -q 'EARLY_EXIT_PRIORITY=-4' "$J/PriorityExecutors.java"
+          grep -q 'ENTRY_PRIORITY=-4' "$J/PriorityExecutors.java"
+          grep -q 'GrowwClient.placeEarlyExitMarketSell' "$J/ProductionNotificationService.java"
+          grep -q 'GrowwClient.placeConfirmedEntryLimit' "$J/ProductionNotificationService.java"
+          grep -q 'NEW ENTRY BLOCKED — ONE STOCK AT A TIME' "$J/ProductionNotificationService.java"
+
+      - name: Verify unit tests
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          root=Path('android-stable/app/build/test-results/testDebugUnitTest')
+          tests=failures=errors=0
+          for p in root.glob('TEST-*.xml'):
+              x=ET.parse(p).getroot()
+              tests += int(x.attrib.get('tests',0))
+              failures += int(x.attrib.get('failures',0))
+              errors += int(x.attrib.get('errors',0))
+          print('g7 standalone',tests,failures,errors)
+          assert tests >= 82
+          assert failures == 0 and errors == 0
+          PY
+
+      - name: Stage LG G7 direct release
+        shell: bash
+        run: |
+          set -euo pipefail
+          F=android-stable/v247-g7-release
+          mkdir -p "$F"
+          cp android-stable/app/build/outputs/apk/debug/app-debug.apk "$F/Multyfi-AutoBuy-LG-G7-ThinQ-v2.4.7-VALIDATION.apk"
+          U=$(find android-stable/app/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          test -n "$U"
+          cp "$U" "$F/Multyfi-AutoBuy-LG-G7-ThinQ-v2.4.7-UNSIGNED.apk"
+          cp badging-v247-g7.txt "$F/"
+          cp hotfix/run_v247_g7_direct.py "$F/"
+          sha256sum "$F"/*.apk > "$F/APK-SHA256-UNSIGNED-v2.4.7-G7.txt"
+          cat > "$F/VALIDATION-v2.4.7-G7.txt" <<'EOF'
+          LG G7 DIRECT STANDALONE BUILD
+          package=com.suhas.multyfiautobuy.child
+          minSdk=26
+          versionName=2.4.7
+          versionCode=247
+          architecture=standalone local notification listener + local Groww execution
+          LAN/master-child relay=removed
+          signing=unsigned in CI; must be signed with permanent Multyfi certificate
+          EOF
+
+      - name: Upload LG G7 direct artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Multyfi-AutoBuy-v2.4.7-LG-G7-DIRECT-STANDALONE
+          path: |
+            apply-v247-g7.log
+            build-v247-g7.log
+            android-stable/v247-g7-release/
+            android-stable/app/build/reports/tests/testDebugUnitTest/
+            android-stable/app/build/reports/lint-results-debug.html
+          if-no-files-found: error
