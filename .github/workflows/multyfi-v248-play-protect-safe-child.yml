@@ -1,0 +1,96 @@
+name: Multyfi v2.4.8 Play Protect Safe CHILD
+
+on:
+  push:
+    branches: [multyfi-v2.4.8-play-protect-safe-child]
+  workflow_dispatch:
+
+jobs:
+  build-test-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK
+        run: yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Apply v2.4.8
+        run: python3 hotfix/run_v248.py | tee apply-v248.log
+
+      - name: Test lint and build MASTER + CHILD
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --console=plain -p android-stable \
+            :app:testDebugUnitTest :app:lintDebug :app:assembleRelease \
+            :child:testDebugUnitTest :child:lintDebug :child:assembleRelease \
+            | tee build-v248.log
+
+      - name: Verify package and Play Protect sensitive-permission split
+        shell: bash
+        run: |
+          set -euo pipefail
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          MASTER=$(find android-stable/app/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          CHILD=$(find android-stable/child/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          test -n "$MASTER"; test -n "$CHILD"
+          "$AAPT" dump badging "$MASTER" > master-badging.txt
+          "$AAPT" dump badging "$CHILD" > child-badging.txt
+          "$AAPT" dump permissions "$MASTER" > master-permissions.txt
+          "$AAPT" dump permissions "$CHILD" > child-permissions.txt
+          grep -q "package: name='com.suhas.multyfiautobuy.stable'" master-badging.txt
+          grep -q "package: name='com.suhas.multyfiautobuy.child'" child-badging.txt
+          grep -q "versionCode='248'" master-badging.txt
+          grep -q "versionCode='248'" child-badging.txt
+          grep -q "versionName='2.4.8'" master-badging.txt
+          grep -q "versionName='2.4.8'" child-badging.txt
+          grep -q 'BIND_NOTIFICATION_LISTENER_SERVICE' master-permissions.txt || true
+          ! grep -E 'BIND_NOTIFICATION_LISTENER_SERVICE|READ_SMS|RECEIVE_SMS|BIND_ACCESSIBILITY_SERVICE' child-permissions.txt
+          grep -q 'LanChildRelayService' android-stable/child/src/main/AndroidManifest.xml
+          ! grep -q 'MultyfiNotificationService' android-stable/child/src/main/AndroidManifest.xml
+
+      - name: Stage release
+        shell: bash
+        run: |
+          set -euo pipefail
+          F=android-stable/v248-release
+          mkdir -p "$F"
+          MASTER=$(find android-stable/app/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          CHILD=$(find android-stable/child/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          cp "$MASTER" "$F/Multyfi-AutoBuy-MASTER-S24-Android16-v2.4.8-UNSIGNED.apk"
+          cp "$CHILD" "$F/Multyfi-AutoBuy-CHILD-LG-G7-ThinQ-v2.4.8-UNSIGNED.apk"
+          cp master-badging.txt child-badging.txt master-permissions.txt child-permissions.txt "$F/"
+          sha256sum "$F"/*.apk > "$F/APK-SHA256-UNSIGNED-v2.4.8.txt"
+          cat > "$F/VALIDATION-v2.4.8.txt" <<'EOF'
+          versionName=2.4.8
+          versionCode=248
+          MASTER package=com.suhas.multyfiautobuy.stable
+          CHILD package=com.suhas.multyfiautobuy.child
+          CHILD minSdk=26
+          CHILD Notification Listener=ABSENT
+          CHILD SMS permissions=ABSENT
+          CHILD Accessibility service=ABSENT
+          CHILD signal source=authenticated local MASTER relay
+          MASTER Notification Listener=RETAINED
+          signing=unsigned in CI; sign with permanent Multyfi certificate
+          EOF
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Multyfi-AutoBuy-v2.4.8-PLAY-PROTECT-SAFE-CHILD
+          path: |
+            apply-v248.log
+            build-v248.log
+            android-stable/v248-release/
+            android-stable/app/build/reports/tests/testDebugUnitTest/
+            android-stable/child/build/reports/tests/testDebugUnitTest/
+          if-no-files-found: error
