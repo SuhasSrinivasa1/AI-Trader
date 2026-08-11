@@ -29,6 +29,34 @@ replace_once(S, '<string name="app_name">Multyfi AutoBuy MASTER</string>', '<str
 replace_once(A, 'TextView subtitle = label("Standalone local execution • release " + release, 14, MUTED, false);',
              'TextView subtitle = label("LG G7 ThinQ • standalone local execution • release " + release, 14, MUTED, false);')
 
+# Android API 26 does not provide NotificationManager.isNotificationListenerAccessGranted.
+# Use the modern API on API 27+, and the Android secure enabled-listener setting on API 26.
+# This keeps the standalone listener/readiness gate functional on older LG firmware instead
+# of merely suppressing lint or raising the minSdk again.
+replace_once(A,
+'''    private boolean hasNotificationAccess() {
+        NotificationManager manager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+        return manager != null && manager.isNotificationListenerAccessGranted(
+                new ComponentName(this, MultyfiNotificationService.class));
+    }
+''',
+'''    private boolean hasNotificationAccess() {
+        ComponentName listener = new ComponentName(this, MultyfiNotificationService.class);
+        if (Build.VERSION.SDK_INT >= 27) {
+            NotificationManager manager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+            return manager != null && manager.isNotificationListenerAccessGranted(listener);
+        }
+        String enabled = Settings.Secure.getString(
+                getContentResolver(), "enabled_notification_listeners");
+        if (enabled == null || enabled.isEmpty()) return false;
+        String target = listener.flattenToString();
+        for (String item : enabled.split(":")) {
+            if (target.equals(item)) return true;
+        }
+        return false;
+    }
+''')
+
 # Contracts: standalone behavior stays intact; only Android packaging/compatibility
 # changes for the G7 direct-install variant.
 gradle = G.read_text(encoding='utf-8')
@@ -39,8 +67,10 @@ assert 'minSdk 26' in gradle
 assert 'versionCode 247' in gradle
 assert "versionName '2.4.7'" in gradle
 assert 'LG G7 ThinQ • standalone local execution' in activity
+assert 'Build.VERSION.SDK_INT >= 27' in activity
+assert 'enabled_notification_listeners' in activity
 assert '.MultyfiNotificationService' in manifest
 for banned in ('LanMasterRelayService', 'LanChildRelayService', 'RelayState', 'AppRole.isChild'):
     assert banned not in activity
 
-print('Applied v2.4.7 LG G7 DIRECT STANDALONE packaging: child app identity + minSdk26, standalone trading engine retained')
+print('Applied v2.4.7 LG G7 DIRECT STANDALONE packaging: child app identity + minSdk26 + API26-safe notification listener check; standalone trading engine retained')
