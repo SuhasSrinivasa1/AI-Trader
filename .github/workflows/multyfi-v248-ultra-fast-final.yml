@@ -1,0 +1,159 @@
+name: Multyfi v2.4.8 ULTRA FAST FINAL
+
+on:
+  push:
+    branches: [multyfi-v2.4.8-ultra-fast-final]
+  workflow_dispatch:
+
+jobs:
+  build-test-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK
+        run: yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Apply final v2.4.8 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 hotfix/run_v248_final.py | tee apply-v248-final.log
+
+      - name: Build test and lint
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --console=plain -p android-stable \
+            :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease \
+            | tee build-v248-final.log
+
+      - name: Verify standalone and version
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(grep -c 'include(\":app\")' android-stable/settings.gradle)" -eq 1
+          ! grep -q 'include(":child")' android-stable/settings.gradle
+          M=android-stable/app/src/main
+          ! grep -R -E 'LanMasterRelayService|LanChildRelayService|RelayState|AppRole\.isChild|local-LAN|MASTER/CHILD' "$M"
+          ! grep -q 'ACCESS_WIFI_STATE' "$M/AndroidManifest.xml"
+          ! grep -q 'CHANGE_WIFI_MULTICAST_STATE' "$M/AndroidManifest.xml"
+          grep -q 'versionCode 248' android-stable/app/build.gradle
+          grep -q "versionName '2.4.8'" android-stable/app/build.gradle
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          "$AAPT" dump badging android-stable/app/build/outputs/apk/debug/app-debug.apk | tee badging-v248-final.txt
+          grep -q "versionCode='248'" badging-v248-final.txt
+          grep -q "versionName='2.4.8'" badging-v248-final.txt
+          grep -q "application-label:'Multyfi AutoBuy'" badging-v248-final.txt
+
+      - name: Verify critical latency contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          M=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable
+          S="$M/ProductionNotificationService.java"
+          grep -q 'EARLY_EXIT_PRIORITY = -4' "$M/PriorityExecutors.java"
+          grep -q 'ENTRY_PRIORITY = -4' "$M/PriorityExecutors.java"
+          grep -q 'BACKGROUND_PRIORITY = 10' "$M/PriorityExecutors.java"
+          grep -q 'prestartCoreThread()' "$M/PriorityExecutors.java"
+          grep -q 'StrategyStore.warm(this)' "$S"
+          grep -q 'StrategyStore.activeFast(this)' "$S"
+          grep -q 'TokenManager.hotTokenOrEmpty()' "$S"
+          grep -q 'FastExitSubmissionGate.begin' "$S"
+          grep -q 'DirectEarlyExitPolicy.canDirectMarketSell' "$S"
+          grep -q 'AppPrefs.isIpRecentlyVerified(this)' "$S"
+          grep -q 'AppPrefs.isAuthVerifiedToday(this)' "$S"
+          grep -q 'GrowwClient.placeEarlyExitMarketSell' "$S"
+          grep -q 'GrowwClient.placeConfirmedEntryLimit' "$S"
+          grep -q 'Groww MARKET SELL was called before audit logging.' "$S"
+          grep -q 'Groww order/create was called before audit logging.' "$S"
+          grep -q 'Android callback age' "$S"
+          grep -q 'critical queue' "$S"
+          grep -q 'app pre-dispatch' "$S"
+          grep -q 'refreshHot(activeFrom(values))' "$M/StrategyStore.java"
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/ProductionNotificationService.java').read_text()
+          sell=s.index('GrowwClient.ApiResult sell = GrowwClient.placeEarlyExitMarketSell(')
+          sell_log=s.index('logBackground("MULTYFI EARLY EXIT API DISPATCH"', sell)
+          buy=s.index('GrowwClient.EntryResult mis = GrowwClient.placeConfirmedEntryLimit(')
+          buy_log=s.index('logBackground("BUY API DISPATCH"', buy)
+          assert sell < sell_log
+          assert buy < buy_log
+          PY
+
+      - name: Verify unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          root=Path('android-stable/app/build/test-results/testDebugUnitTest')
+          tests=failures=errors=0
+          for p in root.glob('TEST-*.xml'):
+              x=ET.parse(p).getroot()
+              tests += int(x.attrib.get('tests',0))
+              failures += int(x.attrib.get('failures',0))
+              errors += int(x.attrib.get('errors',0))
+          print('v2.4.8',tests,failures,errors)
+          assert tests >= 84
+          assert failures == 0 and errors == 0
+          PY
+
+      - name: Stage release
+        shell: bash
+        run: |
+          set -euo pipefail
+          F=android-stable/v248-final
+          mkdir -p "$F"
+          U=$(find android-stable/app/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          test -n "$U"
+          cp "$U" "$F/Multyfi-AutoBuy-STANDALONE-v2.4.8-UNSIGNED.apk"
+          cp android-stable/app/build/outputs/apk/debug/app-debug.apk "$F/Multyfi-AutoBuy-STANDALONE-v2.4.8-VALIDATION.apk"
+          cp badging-v248-final.txt "$F/"
+          cp hotfix/run_v248.py hotfix/run_v248_final.py "$F/"
+          SHA=$(sha256sum "$F/Multyfi-AutoBuy-STANDALONE-v2.4.8-UNSIGNED.apk" | awk '{print $1}')
+          cat > "$F/RELEASE-NOTES-v2.4.8.txt" <<'EOF'
+          MULTYFI AUTOBUY v2.4.8 — ULTRA FAST STANDALONE
+
+          - Based on the live-proven v2.4.7 standalone trading behavior.
+          - Prestarts BUY and SELL critical workers while the listener is alive.
+          - Keeps the exactly-one active strategy hot in process memory, refreshed on every persisted strategy update/closure.
+          - Keeps the current-day Groww token on a lock-free hot read for eligible direct early exit, with normal secure fallback retained.
+          - Warms strategy state and token before market notifications.
+          - Preserves one-stock-only behavior and the direct eligible MIS MARKET SELL path.
+          - Preserves dedicated-IP, VPN, authentication, duplicate-submission and direct-exit eligibility gates.
+          - BUY/SELL broker calls remain before normal audit logging.
+          - Adds post-dispatch timing split: Android callback age, critical queue delay, app pre-dispatch time, and total source age.
+          - No MASTER/CHILD/LAN relay exists in the shipping app.
+          - The launcher label is now simply Multyfi AutoBuy.
+
+          <=100 ms is an app-side optimization objective on a warm path, not a guaranteed broker/exchange fill SLA.
+          Sign the release APK with the same permanent certificate used by the installed app for an in-place update.
+          EOF
+          printf '%s  %s\n' "$SHA" 'Multyfi-AutoBuy-STANDALONE-v2.4.8-UNSIGNED.apk' > "$F/APK-SHA256-UNSIGNED-v2.4.8.txt"
+          cat > "$F/VALIDATION-v2.4.8.json" <<EOF
+          {"version":"2.4.8","version_code":248,"architecture":"STANDALONE_ONLY","critical_workers_prestarted":true,"hot_strategy_cache":true,"hot_token_read":true,"latency_breakdown":true,"one_stock_only":true,"safety_gates_retained":true,"app_side_dispatch_objective_ms":100,"unsigned_sha256":"$SHA","release_signing":"UNSIGNED_IN_CI"}
+          EOF
+          (cd android-stable && zip -qr "v248-final/Multyfi-AutoBuy-v2.4.8-ULTRA-FAST-SOURCE.zip" app/src app/build.gradle settings.gradle ../hotfix/run_v248.py ../hotfix/run_v248_final.py)
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Multyfi-AutoBuy-v2.4.8-ULTRA-FAST-FINAL
+          path: |
+            apply-v248-final.log
+            build-v248-final.log
+            android-stable/v248-final/
+            android-stable/app/build/reports/tests/testDebugUnitTest/
+            android-stable/app/build/reports/lint-results-debug.html
+          if-no-files-found: error
