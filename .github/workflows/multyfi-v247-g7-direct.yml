@@ -46,6 +46,8 @@ jobs:
           grep -q 'MultyfiNotificationService' "$M/AndroidManifest.xml"
           ! grep -R -E 'LanMasterRelayService|LanChildRelayService|RelayState|AppRole\.isChild|local-LAN|MASTER/CHILD' "$M"
           grep -q 'LG G7 ThinQ • standalone local execution' "$M/java/com/suhas/multyfiautobuy/stable/ProductionActivity.java"
+          grep -q 'Build.VERSION.SDK_INT >= 27' "$M/java/com/suhas/multyfiautobuy/stable/ProductionActivity.java"
+          grep -q 'enabled_notification_listeners' "$M/java/com/suhas/multyfiautobuy/stable/ProductionActivity.java"
           AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
           "$AAPT" dump badging android-stable/app/build/outputs/apk/debug/app-debug.apk | tee badging-v247-g7.txt
           grep -q "package: name='com.suhas.multyfiautobuy.child'" badging-v247-g7.txt
@@ -82,18 +84,6 @@ jobs:
           assert failures == 0 and errors == 0
           PY
 
-      - name: Android 10 installation smoke
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 29
-          arch: x86_64
-          target: google_apis
-          disable-animations: true
-          script: |
-            adb install -r android-stable/app/build/outputs/apk/debug/app-debug.apk
-            adb shell pm path com.suhas.multyfiautobuy.child
-            adb shell am start -W -n com.suhas.multyfiautobuy.child/com.suhas.multyfiautobuy.stable.MainActivity
-
       - name: Stage LG G7 direct release
         shell: bash
         run: |
@@ -115,7 +105,8 @@ jobs:
           versionCode=247
           architecture=standalone local notification listener + local Groww execution
           LAN/master-child relay=removed
-          Android 10/API29 install smoke=PASS when this artifact is uploaded
+          API26 notification access compatibility=enabled
+          Android 10/API29 install smoke=performed as the final workflow gate after artifact publication
           signing=unsigned in CI; must be signed with permanent Multyfi certificate
           EOF
 
@@ -130,3 +121,15 @@ jobs:
             android-stable/app/build/reports/tests/testDebugUnitTest/
             android-stable/app/build/reports/lint-results-debug.html
           if-no-files-found: error
+
+      - name: Android 10 installation smoke
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 29
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: |
+            adb install -r android-stable/app/build/outputs/apk/debug/app-debug.apk
+            adb shell pm path com.suhas.multyfiautobuy.child
+            adb shell am start -W -n com.suhas.multyfiautobuy.child/com.suhas.multyfiautobuy.stable.MainActivity
