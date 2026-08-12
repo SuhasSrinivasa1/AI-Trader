@@ -1,0 +1,140 @@
+name: Multyfi v2.4.9 RELIABILITY PROTECTION FINAL
+
+on:
+  push:
+    branches: [multyfi-v2.4.9-reliability-protection]
+  workflow_dispatch:
+
+jobs:
+  build-test-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK
+        run: yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Apply final v2.4.9 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 hotfix/run_v249_final.py | tee apply-v249-final.log
+
+      - name: Build test lint release
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --console=plain -p android-stable \
+            :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease \
+            | tee build-v249-final.log
+
+      - name: Verify v2.4.9 contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          M=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable
+          S="$M/ProductionNotificationService.java"
+          MON="$M/StrategyMonitorService.java"
+          grep -q 'versionCode 249' android-stable/app/build.gradle
+          grep -q "versionName '2.4.9'" android-stable/app/build.gradle
+          ! grep -q 'include(":child")' android-stable/settings.gradle
+          test -f "$M/NotificationListenerHealth.java"
+          grep -q 'NotificationListenerHealth.markConnected(this)' "$S"
+          grep -q 'NotificationListenerHealth.markCallback(this)' "$S"
+          grep -q 'NotificationListenerHealth.ensureBound(this)' "$MON"
+          grep -q 'REBIND_RETRY_MS = 5_000L' "$M/NotificationListenerHealth.java"
+          grep -q 'STALE EARLY EXIT CLEARED — GROWW FLAT' "$S"
+          grep -q 'BrokerFlatCleanupPolicy.canClear' "$S"
+          grep -q 'IntradayProtectionPolicy.multyfiStopHit' "$MON"
+          grep -q 'IntradayProtectionPolicy.targetHit' "$MON"
+          grep -q 'MULTYFI TARGET + STOP WATCH ARMED' "$MON"
+          grep -q 'placeMultyfiStopMarketSell' "$M/GrowwClient.java"
+          grep -q 'GrowwClient.placeEarlyExitMarketSell' "$S"
+          grep -q 'Groww MARKET SELL was called before audit logging.' "$S"
+          grep -q 'Groww order/create was called before audit logging.' "$S"
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/ProductionNotificationService.java').read_text()
+          sell=s.index('GrowwClient.ApiResult sell = GrowwClient.placeEarlyExitMarketSell(')
+          sell_log=s.index('logBackground("MULTYFI EARLY EXIT API DISPATCH"', sell)
+          buy=s.index('GrowwClient.EntryResult mis = GrowwClient.placeConfirmedEntryLimit(')
+          buy_log=s.index('logBackground("BUY API DISPATCH"', buy)
+          assert sell < sell_log
+          assert buy < buy_log
+          PY
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          "$AAPT" dump badging android-stable/app/build/outputs/apk/debug/app-debug.apk | tee badging-v249-final.txt
+          grep -q "versionCode='249'" badging-v249-final.txt
+          grep -q "versionName='2.4.9'" badging-v249-final.txt
+          grep -q "application-label:'Multyfi AutoBuy'" badging-v249-final.txt
+
+      - name: Verify unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          root=Path('android-stable/app/build/test-results/testDebugUnitTest')
+          tests=failures=errors=0
+          for p in root.glob('TEST-*.xml'):
+              x=ET.parse(p).getroot()
+              tests += int(x.attrib.get('tests',0))
+              failures += int(x.attrib.get('failures',0))
+              errors += int(x.attrib.get('errors',0))
+          print('v2.4.9', tests, failures, errors)
+          assert tests >= 87
+          assert failures == 0 and errors == 0
+          PY
+
+      - name: Stage release
+        shell: bash
+        run: |
+          set -euo pipefail
+          F=android-stable/v249-release
+          mkdir -p "$F"
+          U=$(find android-stable/app/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          test -n "$U"
+          cp "$U" "$F/Multyfi-AutoBuy-STANDALONE-v2.4.9-UNSIGNED.apk"
+          cp android-stable/app/build/outputs/apk/debug/app-debug.apk "$F/Multyfi-AutoBuy-STANDALONE-v2.4.9-VALIDATION.apk"
+          cp badging-v249-final.txt "$F/"
+          cp hotfix/run_v249.py hotfix/run_v249_final.py "$F/"
+          SHA=$(sha256sum "$F/Multyfi-AutoBuy-STANDALONE-v2.4.9-UNSIGNED.apk" | awk '{print $1}')
+          printf '%s  %s\n' "$SHA" 'Multyfi-AutoBuy-STANDALONE-v2.4.9-UNSIGNED.apk' > "$F/APK-SHA256-UNSIGNED-v2.4.9.txt"
+          cat > "$F/VALIDATION-v2.4.9.json" <<EOF
+          {"version":"2.4.9","version_code":249,"standalone":true,"listener_watchdog":true,"listener_rebind_retry_ms":5000,"broker_flat_stale_exit_cleanup":true,"target_watch":true,"stop_loss_watch":true,"price_watch_interval_ms":250,"gross_loss_guard_rupees":2000,"broker_native_oco":false,"direct_early_sell_preserved":true,"unsigned_sha256":"$SHA"}
+          EOF
+          cat > "$F/RELEASE-NOTES-v2.4.9.txt" <<'EOF'
+          MULTYFI AUTOBUY v2.4.9 — RELIABILITY + PROTECTION
+
+          - Tracks actual Android NotificationListenerService connection and auto-rebinds every 5 seconds while armed if disconnected.
+          - Keeps NEW ENTRY BLOCKED — EARLY EXIT PENDING as a safety gate, but clears stale local state only after Groww confirms zero strategy quantity and the old entry cannot fill later.
+          - After confirmed MIS fill, the 250 ms app-side watcher now enforces both the Multyfi target and Multyfi stop-loss with full-position MARKET SELL attempts.
+          - The independent gross -₹2,000 emergency loss guard remains.
+          - Target/stop protection is app-side monitoring, not broker-native resting OCO/SL orders; this avoids adding protective-order cancellation latency to the proven direct Multyfi early-exit MARKET SELL path.
+          - Eligible full-known MIS Multyfi early exits still call Groww MARKET SELL before normal audit persistence/logging.
+          - Prestarted critical workers, hot strategy cache and hot token path remain.
+          - Offline routing test remains a persistent setup test; it is not a daily requirement.
+          - Sign the release APK with the same permanent certificate used by v2.4.8 for an in-place update.
+          EOF
+          (cd android-stable && zip -qr "v249-release/Multyfi-AutoBuy-v2.4.9-SOURCE.zip" app/src app/build.gradle settings.gradle ../hotfix/run_v248.py ../hotfix/run_v248_final.py ../hotfix/run_v249.py ../hotfix/run_v249_final.py)
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Multyfi-AutoBuy-v2.4.9-RELIABILITY-PROTECTION
+          path: |
+            apply-v249-final.log
+            build-v249-final.log
+            android-stable/v249-release/
+            android-stable/app/build/reports/tests/testDebugUnitTest/
+            android-stable/app/build/reports/lint-results-debug.html
+          if-no-files-found: error
