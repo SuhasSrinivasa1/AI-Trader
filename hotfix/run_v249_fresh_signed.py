@@ -2,8 +2,8 @@
 from pathlib import Path
 import runpy
 
-# Build the exact validated v2.4.9 reliability/protection source first.
-runpy.run_path('hotfix/run_v249.py', run_name='__main__')
+# Build the exact final validated v2.4.9 reliability/protection source first.
+runpy.run_path('hotfix/run_v249_final.py', run_name='__main__')
 
 ROOT = Path('android-stable')
 APP = ROOT / 'app'
