@@ -1,0 +1,125 @@
+name: Multyfi v2.4.11 EXIT RECONCILIATION FRESH SIGNED APK
+
+on:
+  push:
+    branches: [multyfi-v2.4.11-exit-reconciliation-fresh]
+  workflow_dispatch:
+
+jobs:
+  build-sign-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK
+        run: yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Apply validated v2.4.10 plus v2.4.11 reconciliation fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 hotfix/run_v2411_exit_reconciliation_fresh.py | tee apply-v2411.log
+
+      - name: Build test lint release
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --console=plain -p android-stable \
+            :app:testDebugUnitTest :app:lintDebug :app:assembleRelease \
+            | tee build-v2411.log
+
+      - name: Verify v2.4.11 contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          M=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable
+          S="$M/ProductionNotificationService.java"
+          MON="$M/StrategyMonitorService.java"
+          grep -q "applicationId 'com.suhas.multyfiautobuy.v2411fresh'" android-stable/app/build.gradle
+          grep -q 'versionCode 251' android-stable/app/build.gradle
+          grep -q "versionName '2.4.11'" android-stable/app/build.gradle
+          grep -q 'EARLY EXIT FULL POSITION CONFIRMED' "$MON"
+          grep -q 'automatic or manual early exit completed and stale local state was cleared' "$MON"
+          grep -q 'MULTYFI TARGET + STOP WATCH ARMED' "$MON"
+          grep -q 'active app-side protection' "$S"
+          grep -q 'GrowwClient.placeEarlyExitMarketSell' "$S"
+          grep -q 'Groww MARKET SELL was called before audit logging.' "$S"
+          grep -q 'NotificationListenerHealth.ensureBound(this)' "$MON"
+
+      - name: Generate one-time signing key and sign APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEYSTORE="$RUNNER_TEMP/multyfi-v2411-fresh.jks"
+          PASS='MultyfiV2411Fresh_2026!'
+          keytool -genkeypair -v \
+            -keystore "$KEYSTORE" \
+            -storepass "$PASS" \
+            -keypass "$PASS" \
+            -alias multyfi-v2411-fresh \
+            -keyalg RSA -keysize 4096 -validity 3650 \
+            -dname 'CN=Multyfi AutoBuy v2.4.11 Fresh, OU=Private Build, O=Multyfi AutoBuy, L=Bengaluru, ST=Karnataka, C=IN'
+
+          UNSIGNED=$(find android-stable/app/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          test -n "$UNSIGNED"
+          OUTDIR=android-stable/v2411-fresh-signed
+          mkdir -p "$OUTDIR"
+          ALIGNED="$OUTDIR/Multyfi-AutoBuy-v2.4.11-FRESH-ALIGNED.apk"
+          FINAL="$OUTDIR/Multyfi-AutoBuy-v2.4.11-EXIT-RECONCILIATION-FRESH-SIGNED.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$UNSIGNED" "$ALIGNED"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign \
+            --ks "$KEYSTORE" \
+            --ks-key-alias multyfi-v2411-fresh \
+            --ks-pass "pass:$PASS" \
+            --key-pass "pass:$PASS" \
+            --v1-signing-enabled true \
+            --v2-signing-enabled true \
+            --v3-signing-enabled true \
+            --out "$FINAL" "$ALIGNED"
+          rm -f "$ALIGNED" "$KEYSTORE"
+
+      - name: Verify signed APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          FINAL=android-stable/v2411-fresh-signed/Multyfi-AutoBuy-v2.4.11-EXIT-RECONCILIATION-FRESH-SIGNED.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$FINAL" | tee android-stable/v2411-fresh-signed/SIGNATURE-VERIFY.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$FINAL" | tee android-stable/v2411-fresh-signed/BADGING.txt
+          grep -q "package: name='com.suhas.multyfiautobuy.v2411fresh'" android-stable/v2411-fresh-signed/BADGING.txt
+          grep -q "versionCode='251'" android-stable/v2411-fresh-signed/BADGING.txt
+          grep -q "versionName='2.4.11'" android-stable/v2411-fresh-signed/BADGING.txt
+          sha256sum "$FINAL" | tee android-stable/v2411-fresh-signed/SHA256.txt
+
+      - name: Verify unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          root=Path('android-stable/app/build/test-results/testDebugUnitTest')
+          tests=failures=errors=0
+          for p in root.glob('TEST-*.xml'):
+              x=ET.parse(p).getroot()
+              tests += int(x.attrib.get('tests',0))
+              failures += int(x.attrib.get('failures',0))
+              errors += int(x.attrib.get('errors',0))
+          print('v2.4.11', tests, failures, errors)
+          assert tests >= 89
+          assert failures == 0 and errors == 0
+          PY
+
+      - name: Upload signed APK only
+        uses: actions/upload-artifact@v4
+        with:
+          name: Multyfi-AutoBuy-v2.4.11-EXIT-RECONCILIATION-FRESH-SIGNED
+          path: android-stable/v2411-fresh-signed/Multyfi-AutoBuy-v2.4.11-EXIT-RECONCILIATION-FRESH-SIGNED.apk
+          if-no-files-found: error
