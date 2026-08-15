@@ -1,0 +1,24 @@
+name: Stage2 Inspect Generated Source
+
+on:
+  push:
+    branches: [multyfi-stage2-inspect]
+  workflow_dispatch:
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate exact v2.4.11 source
+        run: python3 hotfix/run_v2411_exit_reconciliation_fresh.py
+      - name: Upload generated Android source
+        uses: actions/upload-artifact@v4
+        with:
+          name: v2411-generated-source
+          path: |
+            android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable
+            android-stable/app/src/test/java/com/suhas/multyfiautobuy/stable
+            android-stable/app/build.gradle
+            android-stable/app/src/main/AndroidManifest.xml
+          if-no-files-found: error
