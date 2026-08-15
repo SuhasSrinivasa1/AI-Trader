@@ -1,0 +1,127 @@
+name: Multyfi v2.7.0 FINAL Repaired3 APK
+
+on:
+  push:
+    branches: [multyfi-v2.7.0-work]
+  workflow_dispatch:
+
+jobs:
+  final-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install SDK
+        run: yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Generate Stage2 baseline and apply v2.7 engine
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 hotfix/run_v2411_exit_reconciliation_fresh.py
+          cat stage2/patch.* > /tmp/stage2.b64
+          echo '367e021e4a6978e96fa9ec0df22b7a510f938b8fc7bcdf3ac9dae26cc844b9b4  /tmp/stage2.b64' | sha256sum -c -
+          base64 -d /tmp/stage2.b64 | gzip -dc > /tmp/stage2.patch
+          echo '4cd2f7e1144b58e7adc4522ea6aee6f3dccdc65715743672273ae7973d49119b  /tmp/stage2.patch' | sha256sum -c -
+          git apply --check /tmp/stage2.patch
+          git apply /tmp/stage2.patch
+          cat v270/override.00 v270/override.01 v270/override.02 v270/override.03 \
+              v270/override.04.00.00 v270/override.04.00.01 v270/override.04.00.02 v270/override.04.00.03 \
+              v270/override.04.01 v270/override.04.02 v270/override.05 \
+              v270/override.06.00 v270/override.06.01 v270/override.06.02 > /tmp/v270.b64
+          base64 -d /tmp/v270.b64 > /tmp/v270-overrides.tgz
+          echo '3b1e85a0b17901916640d89e694878319bb6cce0eeb5c16e59980a99456d6403  /tmp/v270-overrides.tgz' | sha256sum -c -
+          tar -xzf /tmp/v270-overrides.tgz -C android-stable
+          cp v270/fixes/Stage2DecisionPolicy.java android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/Stage2DecisionPolicy.java
+
+      - name: Identity and contract verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          sed -i "s/applicationId 'com.suhas.multyfiautobuy.v2411fresh'/applicationId 'com.suhas.multyfiautobuy.v270final'/" android-stable/app/build.gradle
+          sed -i "s/versionCode 251/versionCode 270/" android-stable/app/build.gradle
+          sed -i "s/versionName '2.4.11'/versionName '2.7.0'/" android-stable/app/build.gradle
+          M=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable
+          grep -q 'PROFIT_TRAIL_ARM_NET_RATE = 0.005' "$M/Stage2Policy.java"
+          grep -q 'REENTRY_MIN_NET_RATE = 0.005' "$M/Stage2Policy.java"
+          grep -q 'PER_CALL_NET_LOSS_LIMIT = 1000' "$M/Stage2Policy.java"
+          grep -q 'DAILY_NET_LOSS_LIMIT = 2000' "$M/Stage2Policy.java"
+          grep -q 'POSITION_CACHE_POLL_MS = 750' "$M/Stage2Policy.java"
+          grep -q 'ENTRY_CUTOFF_MINUTE = 14 \* 60' "$M/Stage2Policy.java"
+          grep -q 'FORCE_EXIT_MINUTE = 14 \* 60 + 59' "$M/Stage2Policy.java"
+          grep -q 'canDirectKnownRemaining' "$M/DirectEarlyExitPolicy.java"
+          grep -q 'exitEntryFence' "$M/StrategyMonitorService.java"
+          grep -q 'reentryEconomicsPass' "$M/StrategyMonitorService.java"
+          grep -q 'GrowwClient.placeEarlyExitMarketSell' "$M/ProductionNotificationService.java"
+          grep -q 'P0 SELL ≤100 ms app-dispatch target' "$M/ProductionActivity.java"
+          grep -q 'Multyfi AutoBuy 2.7.0 FINAL' android-stable/app/src/main/res/values/strings.xml
+          ! grep -q 'SLOT_FRACTION' "$M/Stage2Policy.java"
+
+      - name: Test lint and release build
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --console=plain -p android-stable :app:testDebugUnitTest :app:lintDebug :app:assembleRelease | tee build.log
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          t=f=e=0
+          for p in Path('android-stable/app/build/test-results/testDebugUnitTest').glob('TEST-*.xml'):
+              x=ET.parse(p).getroot(); t+=int(x.attrib.get('tests',0)); f+=int(x.attrib.get('failures',0)); e+=int(x.attrib.get('errors',0))
+          print(f'Tests={t} Failures={f} Errors={e}')
+          assert t>=102 and f==0 and e==0
+          Path('/tmp/tests.txt').write_text(f'Tests: {t}\nFailures: {f}\nErrors: {e}\n')
+          PY
+
+      - name: Fresh sign validate and package
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=android-stable/v270-final; mkdir -p "$OUT"
+          KS="$RUNNER_TEMP/v270-final.jks"; PASS='MultyfiV270Final_2026!'
+          keytool -genkeypair -keystore "$KS" -storepass "$PASS" -keypass "$PASS" -alias multyfi-v270-final -keyalg RSA -keysize 4096 -validity 3650 -dname 'CN=Multyfi AutoBuy v2.7.0 FINAL, OU=Private Build, O=Multyfi AutoBuy, L=Bengaluru, ST=Karnataka, C=IN'
+          UNSIGNED=$(find android-stable/app/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          FINAL="$OUT/Multyfi-AutoBuy-v2.7.0-FINAL-PROFIT-TRAIL-REENTRY-FRESH-SIGNED.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$UNSIGNED" "$OUT/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KS" --ks-key-alias multyfi-v270-final --ks-pass "pass:$PASS" --key-pass "pass:$PASS" --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --out "$FINAL" "$OUT/aligned.apk"
+          rm -f "$OUT/aligned.apk" "$KS"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$FINAL" | tee "$OUT/SIGNATURE-VERIFY.txt"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$FINAL" | tee "$OUT/BADGING.txt"
+          grep -q "package: name='com.suhas.multyfiautobuy.v270final'" "$OUT/BADGING.txt"
+          grep -q "versionCode='270'" "$OUT/BADGING.txt"
+          grep -q "versionName='2.7.0'" "$OUT/BADGING.txt"
+          sha256sum "$FINAL" | tee "$OUT/SHA256.txt"
+          {
+            echo 'Multyfi AutoBuy v2.7.0 FINAL — CI Validation'
+            echo '============================================='
+            echo 'Fresh package: com.suhas.multyfiautobuy.v270final'
+            cat /tmp/tests.txt
+            echo 'Lint: passed'
+            echo 'Release assemble: passed'
+            echo 'APK signing/badging: passed'
+            echo 'v2.7 policy contracts: passed'
+            echo 'First eligible call: full configured available notional; no fixed 32% reservation.'
+            echo '+0.50% estimated NET arms adaptive trailing-profit protection; no upside cap.'
+            echo 'Re-entry: >=0.50% projected NET after costs/slippage; max 2/symbol/day; before 14:00 IST.'
+            echo 'P0 Multyfi SELL: exact fresh broker-known remaining MIS quantity; fresh zero cache suppresses duplicates.'
+            echo 'Partial-entry P0 exit: outstanding BUY remainder is fenced/cancelled/reconciled and any late fill is re-sold.'
+            echo 'Per-call all-in loss objective: INR 1,000. Daily all-in net loss objective: INR 2,000.'
+            echo 'LTP supervision target: 500 ms. Position-cache refresh target: 750 ms. Forced MIS exit: 14:59 IST.'
+            echo '<=100 ms is app-side callback-to-Groww SELL-dispatch target when hot/ready; broker/exchange acknowledgement/fill is not guaranteed.'
+            echo 'Not CI-validated: physical-device install, live Groww auth/fills, slippage, profitability.'
+            cat "$OUT/SHA256.txt"
+          } | tee "$OUT/VALIDATION.txt"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Multyfi-AutoBuy-v2.7.0-FINAL-REPAIRED3
+          path: android-stable/v270-final/*
+          if-no-files-found: error
