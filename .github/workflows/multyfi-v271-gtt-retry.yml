@@ -1,0 +1,213 @@
+name: Multyfi v2.7.1 GTT Retry APK
+
+on:
+  push:
+    branches: [multyfi-v2.7.0-work]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install SDK
+        run: yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Rebuild v2.7.0 baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 hotfix/run_v2411_exit_reconciliation_fresh.py
+          cat stage2/patch.* > /tmp/stage2.b64
+          echo '367e021e4a6978e96fa9ec0df22b7a510f938b8fc7bcdf3ac9dae26cc844b9b4  /tmp/stage2.b64' | sha256sum -c -
+          base64 -d /tmp/stage2.b64 | gzip -dc > /tmp/stage2.patch
+          echo '4cd2f7e1144b58e7adc4522ea6aee6f3dccdc65715743672273ae7973d49119b  /tmp/stage2.patch' | sha256sum -c -
+          git apply --check /tmp/stage2.patch
+          git apply /tmp/stage2.patch
+          cat v270/override.00 v270/override.01 v270/override.02 v270/override.03 \
+              v270/override.04.00.00 v270/override.04.00.01 v270/override.04.00.02 v270/override.04.00.03 \
+              v270/override.04.01 v270/override.04.02 v270/override.05 \
+              v270/override.06.00 v270/override.06.01 v270/override.06.02 > /tmp/v270.b64
+          base64 -d /tmp/v270.b64 > /tmp/v270-overrides.tgz
+          echo '3b1e85a0b17901916640d89e694878319bb6cce0eeb5c16e59980a99456d6403  /tmp/v270-overrides.tgz' | sha256sum -c -
+          tar -xzf /tmp/v270-overrides.tgz -C android-stable
+
+      - name: Apply v2.7.1 Groww Smart Order retry fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/GrowwClient.java')
+          s = p.read_text()
+
+          base = '    private static final String API_BASE = "https://api.groww.in/v1";\n'
+          assert base in s
+          s = s.replace(base, base + '    private static final int SMART_CREATE_MAX_ATTEMPTS = 3;\n', 1)
+
+          old = 'HttpResult http = request("POST", API_BASE + "/order-advance/create",\n                    accessToken, body);'
+          count = s.count(old)
+          assert count == 2, f'expected 2 smart-order create calls, got {count}'
+          s = s.replace(old, 'HttpResult http = createSmartOrderWithRetry(accessToken, body);')
+
+          old_failure = 'HttpResult http = createSmartOrderWithRetry(accessToken, body);\n            if (!http.isSuccess()) return apiFailure(http);'
+          count = s.count(old_failure)
+          assert count == 2, f'expected 2 smart-order failure handlers, got {count}'
+          s = s.replace(old_failure,
+              'HttpResult http = createSmartOrderWithRetry(accessToken, body);\n            if (!http.isSuccess()) return smartCreateFailure(http);')
+
+          marker = '    private static JSONObject gttBase(String reference, String symbol, int quantity,\n'
+          assert marker in s
+          helper = '''    static boolean isTransientSmartCreateHttpCode(int code) {
+              return code == 429 || code == 500 || code == 502 || code == 503 || code == 504;
+          }
+
+          private static HttpResult createSmartOrderWithRetry(String accessToken,
+                                                               JSONObject body) throws Exception {
+              HttpResult last = null;
+              long[] backoffMs = new long[]{0L, 250L, 750L};
+              for (int attempt = 0; attempt < SMART_CREATE_MAX_ATTEMPTS; attempt++) {
+                  if (backoffMs[attempt] > 0L) {
+                      try {
+                          Thread.sleep(backoffMs[attempt]);
+                      } catch (InterruptedException e) {
+                          Thread.currentThread().interrupt();
+                          break;
+                      }
+                  }
+                  // The exact same body/reference_id is retried. Groww documents reference_id
+                  // as the idempotency key for Smart Orders, preventing accidental duplicates.
+                  last = request("POST", API_BASE + "/order-advance/create", accessToken, body);
+                  if (!isTransientSmartCreateHttpCode(last.code)) return last;
+              }
+              return last == null
+                      ? new HttpResult(0, "Smart-order create was not attempted.") : last;
+          }
+
+          private static ApiResult smartCreateFailure(HttpResult http) {
+              ApiResult baseFailure = apiFailure(http);
+              if (!isTransientSmartCreateHttpCode(http.code)) return baseFailure;
+              return ApiResult.failure(baseFailure.errorCode,
+                      "Groww Smart Order service remained unavailable after "
+                              + SMART_CREATE_MAX_ATTEMPTS
+                              + " safe idempotent attempts (HTTP " + http.code + "). "
+                              + baseFailure.message,
+                      http.code);
+          }
+
+          '''
+          s = s.replace(marker, helper + marker, 1)
+          p.write_text(s)
+
+          t = Path('android-stable/app/src/test/java/com/suhas/multyfiautobuy/stable/GrowwSmartOrderRetryPolicyTest.java')
+          t.write_text('''package com.suhas.multyfiautobuy.stable;
+
+          import org.junit.Test;
+          import static org.junit.Assert.*;
+
+          public class GrowwSmartOrderRetryPolicyTest {
+              @Test public void server5xxCodesAreTransient() {
+                  assertTrue(GrowwClient.isTransientSmartCreateHttpCode(500));
+                  assertTrue(GrowwClient.isTransientSmartCreateHttpCode(502));
+                  assertTrue(GrowwClient.isTransientSmartCreateHttpCode(503));
+                  assertTrue(GrowwClient.isTransientSmartCreateHttpCode(504));
+              }
+
+              @Test public void rateLimitIsTransient() {
+                  assertTrue(GrowwClient.isTransientSmartCreateHttpCode(429));
+              }
+
+              @Test public void clientAndAuthErrorsAreNotBlindlyRetried() {
+                  assertFalse(GrowwClient.isTransientSmartCreateHttpCode(400));
+                  assertFalse(GrowwClient.isTransientSmartCreateHttpCode(401));
+                  assertFalse(GrowwClient.isTransientSmartCreateHttpCode(403));
+                  assertFalse(GrowwClient.isTransientSmartCreateHttpCode(422));
+              }
+          }
+          ''')
+          PY
+
+      - name: Set v2.7.1 identity and verify contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          sed -i "s/applicationId 'com.suhas.multyfiautobuy.v2411fresh'/applicationId 'com.suhas.multyfiautobuy.v271fresh'/" android-stable/app/build.gradle
+          sed -i "s/versionCode 251/versionCode 271/" android-stable/app/build.gradle
+          sed -i "s/versionName '2.4.11'/versionName '2.7.1'/" android-stable/app/build.gradle
+          sed -i 's/Multyfi AutoBuy 2.7.0 FINAL/Multyfi AutoBuy 2.7.1 GTT RETRY/g' android-stable/app/src/main/res/values/strings.xml
+          M=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable
+          grep -q 'SMART_CREATE_MAX_ATTEMPTS = 3' "$M/GrowwClient.java"
+          grep -q 'isTransientSmartCreateHttpCode' "$M/GrowwClient.java"
+          test "$(grep -c 'createSmartOrderWithRetry(accessToken, body)' "$M/GrowwClient.java")" -eq 2
+          grep -q 'PROFIT_TRAIL_ARM_NET_RATE = 0.005' "$M/Stage2Policy.java"
+          grep -q 'PER_CALL_NET_LOSS_LIMIT = 1000' "$M/Stage2Policy.java"
+          grep -q 'DAILY_NET_LOSS_LIMIT = 2000' "$M/Stage2Policy.java"
+          grep -q 'GrowwClient.placeEarlyExitMarketSell' "$M/ProductionNotificationService.java"
+          grep -q 'P0 SELL ≤100 ms app-dispatch target' "$M/ProductionActivity.java"
+
+      - name: Test lint and release build
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --console=plain -p android-stable :app:testDebugUnitTest :app:lintDebug :app:assembleRelease | tee build.log
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          t=f=e=0
+          for p in Path('android-stable/app/build/test-results/testDebugUnitTest').glob('TEST-*.xml'):
+              x=ET.parse(p).getroot(); t+=int(x.attrib.get('tests',0)); f+=int(x.attrib.get('failures',0)); e+=int(x.attrib.get('errors',0))
+          print(f'Tests={t} Failures={f} Errors={e}')
+          assert t>=105 and f==0 and e==0
+          Path('/tmp/tests.txt').write_text(f'Tests: {t}\nFailures: {f}\nErrors: {e}\n')
+          PY
+
+      - name: Fresh sign validate and package
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=android-stable/v271-final; mkdir -p "$OUT"
+          KS="$RUNNER_TEMP/v271-fresh.jks"; PASS='MultyfiV271Fresh_2026!'
+          keytool -genkeypair -keystore "$KS" -storepass "$PASS" -keypass "$PASS" -alias multyfi-v271-fresh -keyalg RSA -keysize 4096 -validity 3650 -dname 'CN=Multyfi AutoBuy v2.7.1 GTT Retry, OU=Private Build, O=Multyfi AutoBuy, L=Bengaluru, ST=Karnataka, C=IN'
+          UNSIGNED=$(find android-stable/app/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          FINAL="$OUT/Multyfi-AutoBuy-v2.7.1-GTT-RETRY-FRESH-SIGNED.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$UNSIGNED" "$OUT/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KS" --ks-key-alias multyfi-v271-fresh --ks-pass "pass:$PASS" --key-pass "pass:$PASS" --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --out "$FINAL" "$OUT/aligned.apk"
+          rm -f "$OUT/aligned.apk" "$KS"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$FINAL" | tee "$OUT/SIGNATURE-VERIFY.txt"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$FINAL" | tee "$OUT/BADGING.txt"
+          grep -q "package: name='com.suhas.multyfiautobuy.v271fresh'" "$OUT/BADGING.txt"
+          grep -q "versionCode='271'" "$OUT/BADGING.txt"
+          grep -q "versionName='2.7.1'" "$OUT/BADGING.txt"
+          sha256sum "$FINAL" | tee "$OUT/SHA256.txt"
+          {
+            echo 'Multyfi AutoBuy v2.7.1 — Groww Smart Order 5xx/429 Retry Fix'
+            echo '=============================================================='
+            echo 'Fix: GTT create retries HTTP 429/500/502/503/504 up to 3 attempts.'
+            echo 'Safety: every retry reuses the exact same Groww reference_id idempotency key.'
+            echo 'No blind retries for HTTP 400/401/403/422 client/auth/validation failures.'
+            echo 'Failure log now reports that Groww Smart Order service remained unavailable after safe retries.'
+            echo 'P0 Multyfi SELL direct MARKET path unchanged.'
+            echo 'Profit trail/re-entry/risk policy from v2.7.0 unchanged.'
+            cat /tmp/tests.txt
+            echo 'Lint: passed'
+            echo 'Release assemble: passed'
+            echo 'APK signing/badging: passed'
+            echo 'Physical-device Groww create/cancel still requires user-side live test.'
+            cat "$OUT/SHA256.txt"
+          } | tee "$OUT/VALIDATION.txt"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Multyfi-AutoBuy-v2.7.1-GTT-RETRY
+          path: android-stable/v271-final/*
+          if-no-files-found: error
