@@ -1,0 +1,31 @@
+name: Export v2.6.0 Stage2 Generated Source
+
+on:
+  push:
+    branches: [multyfi-v2.7.0-work]
+  workflow_dispatch:
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate baseline and apply Stage2
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 hotfix/run_v2411_exit_reconciliation_fresh.py
+          cat stage2/patch.* > /tmp/stage2.b64
+          base64 -d /tmp/stage2.b64 | gzip -dc > /tmp/stage2.patch
+          git apply --check /tmp/stage2.patch
+          git apply /tmp/stage2.patch
+      - name: Archive generated source
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -czf /tmp/v260-stage2-generated-source.tgz android-stable
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v260-stage2-generated-source
+          path: /tmp/v260-stage2-generated-source.tgz
+          if-no-files-found: error
