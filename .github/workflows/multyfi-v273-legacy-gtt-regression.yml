@@ -1,0 +1,144 @@
+name: Multyfi v2.7.3 Legacy GTT Regression Restore
+
+on:
+  push:
+    branches: [multyfi-v2.7.0-work]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install SDK
+        run: yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Rebuild v2.7.0 source baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 hotfix/run_v2411_exit_reconciliation_fresh.py
+          cat stage2/patch.* > /tmp/stage2.b64
+          echo '367e021e4a6978e96fa9ec0df22b7a510f938b8fc7bcdf3ac9dae26cc844b9b4  /tmp/stage2.b64' | sha256sum -c -
+          base64 -d /tmp/stage2.b64 | gzip -dc > /tmp/stage2.patch
+          echo '4cd2f7e1144b58e7adc4522ea6aee6f3dccdc65715743672273ae7973d49119b  /tmp/stage2.patch' | sha256sum -c -
+          git apply --check /tmp/stage2.patch
+          git apply /tmp/stage2.patch
+          cat v270/override.00 v270/override.01 v270/override.02 v270/override.03 \
+              v270/override.04.00.00 v270/override.04.00.01 v270/override.04.00.02 v270/override.04.00.03 \
+              v270/override.04.01 v270/override.04.02 v270/override.05 \
+              v270/override.06.00 v270/override.06.01 v270/override.06.02 > /tmp/v270.b64
+          base64 -d /tmp/v270.b64 > /tmp/v270-overrides.tgz
+          echo '3b1e85a0b17901916640d89e694878319bb6cce0eeb5c16e59980a99456d6403  /tmp/v270-overrides.tgz' | sha256sum -c -
+          tar -xzf /tmp/v270-overrides.tgz -C android-stable
+
+      - name: Apply v2.7.1, v2.7.2 and legacy-test regression restore
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 v271/apply_v271_gtt_fix.py
+          python3 v272/apply_v272_duplicate_reconcile.py
+          python3 v272/repair_v272_host_tests.py
+          python3 v273/apply_v273_legacy_gtt_test.py
+
+      - name: Set v2.7.3 identity and verify regression contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          sed -i "s/applicationId 'com.suhas.multyfiautobuy.v2411fresh'/applicationId 'com.suhas.multyfiautobuy.v271fresh'/" android-stable/app/build.gradle
+          sed -i "s/versionCode 251/versionCode 273/" android-stable/app/build.gradle
+          sed -i "s/versionName '2.4.11'/versionName '2.7.3'/" android-stable/app/build.gradle
+          sed -i 's/Multyfi AutoBuy 2.7.0 FINAL/Multyfi AutoBuy 2.7.3 LEGACY GTT TEST/g' android-stable/app/src/main/res/values/strings.xml
+          M=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable
+          grep -q 'CONTROLLED_TEST_TICK = 0.05d' "$M/GrowwClient.java"
+          grep -q 'createControlledTestGtt' "$M/GrowwClient.java"
+          grep -q '"ACTIVE", "TRIGGERED", "COMPLETED", "FAILED", "CANCELLED", "EXPIRED"' "$M/GrowwClient.java"
+          grep -q 'GrowwClient.createControlledTestGtt' "$M/ProductionActivity.java"
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/GrowwClient.java').read_text()
+          a=s.index('static ApiResult createControlledTestGtt(')
+          b=s.index('private static JSONObject findMatchingControlledTestGtt(', a)
+          body=s[a:b]
+          assert body.count('request("POST", API_BASE + "/order-advance/create"') == 1
+          assert 'createSmartOrderWithRetry' not in body
+          assert 'CONTROLLED_TEST_TICK' in body
+          print('Controlled test contract: one create POST, no retry helper, legacy 0.05 tick')
+          PY
+          grep -q 'protectedNetFloor' "$M/Stage2DecisionPolicy.java"
+          grep -q 'PROFIT_TRAIL_ARM_NET_RATE = 0.005' "$M/Stage2Policy.java"
+          grep -q 'REENTRY_MIN_NET_RATE = 0.005' "$M/Stage2Policy.java"
+          grep -q 'PER_CALL_NET_LOSS_LIMIT = 1000' "$M/Stage2Policy.java"
+          grep -q 'DAILY_NET_LOSS_LIMIT = 2000' "$M/Stage2Policy.java"
+          grep -q 'ENTRY_CUTOFF_MINUTE = 14 \* 60' "$M/Stage2Policy.java"
+          grep -q 'FORCE_EXIT_MINUTE = 14 \* 60 + 59' "$M/Stage2Policy.java"
+          grep -q 'GrowwClient.placeEarlyExitMarketSell' "$M/ProductionNotificationService.java"
+          grep -q 'P0 SELL ≤100 ms app-dispatch target' "$M/ProductionActivity.java"
+
+      - name: Test lint and release build
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --console=plain -p android-stable :app:testDebugUnitTest :app:lintDebug :app:assembleRelease | tee build.log
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          t=f=e=0
+          for p in Path('android-stable/app/build/test-results/testDebugUnitTest').glob('TEST-*.xml'):
+              x=ET.parse(p).getroot(); t+=int(x.attrib.get('tests',0)); f+=int(x.attrib.get('failures',0)); e+=int(x.attrib.get('errors',0))
+          print(f'Tests={t} Failures={f} Errors={e}')
+          assert t>=109 and f==0 and e==0
+          Path('/tmp/tests.txt').write_text(f'Tests: {t}\nFailures: {f}\nErrors: {e}\n')
+          PY
+
+      - name: Fresh sign validate and package
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=android-stable/v273-final; mkdir -p "$OUT"
+          KS="$RUNNER_TEMP/v273-fresh.jks"; PASS='MultyfiV273Fresh_2026!'
+          keytool -genkeypair -keystore "$KS" -storepass "$PASS" -keypass "$PASS" -alias multyfi-v273-fresh -keyalg RSA -keysize 4096 -validity 3650 -dname 'CN=Multyfi AutoBuy v2.7.3 Legacy GTT Test, OU=Private Build, O=Multyfi AutoBuy, L=Bengaluru, ST=Karnataka, C=IN'
+          UNSIGNED=$(find android-stable/app/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          FINAL="$OUT/Multyfi-AutoBuy-v2.7.3-LEGACY-GTT-REGRESSION-FRESH-SIGNED.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$UNSIGNED" "$OUT/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KS" --ks-key-alias multyfi-v273-fresh --ks-pass "pass:$PASS" --key-pass "pass:$PASS" --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --out "$FINAL" "$OUT/aligned.apk"
+          rm -f "$OUT/aligned.apk" "$KS"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$FINAL" | tee "$OUT/SIGNATURE-VERIFY.txt"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$FINAL" | tee "$OUT/BADGING.txt"
+          grep -q "package: name='com.suhas.multyfiautobuy.v271fresh'" "$OUT/BADGING.txt"
+          grep -q "versionCode='273'" "$OUT/BADGING.txt"
+          grep -q "versionName='2.7.3'" "$OUT/BADGING.txt"
+          sha256sum "$FINAL" | tee "$OUT/SHA256.txt"
+          {
+            echo 'Multyfi AutoBuy v2.7.3 — legacy controlled GTT regression restore'
+            echo '================================================================='
+            echo 'The one-share acceptance test is restored to the source-built v2.0.0 create semantics: 0.05 tick and exactly one Smart Order POST.'
+            echo 'The controlled test bypasses v2.7.1/v2.7.2 Smart Order create retries.'
+            echo 'After an ambiguous broker response, only read-only reconciliation is performed.'
+            echo 'Reconciliation now checks all documented statuses: ACTIVE, TRIGGERED, COMPLETED, FAILED, CANCELLED and EXPIRED.'
+            echo 'If Groww created a live GTT despite a failed HTTP response, its broker ID is recovered so the test can cancel it.'
+            echo 'If Groww records FAILED/CANCELLED/EXPIRED, the exact HTTP/error/reference/trigger/limit context is reported and no second create is sent.'
+            echo 'P0 Multyfi SELL direct MARKET path unchanged.'
+            echo 'v2.7.0 trading strategy/risk/time behavior otherwise unchanged.'
+            cat /tmp/tests.txt
+            echo 'Lint: passed'
+            echo 'Release assemble: passed'
+            echo 'APK signing/badging: passed'
+            echo 'Physical-device Groww create/cancel remains user-side live validation.'
+            cat "$OUT/SHA256.txt"
+          } | tee "$OUT/VALIDATION.txt"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Multyfi-AutoBuy-v2.7.3-LEGACY-GTT-REGRESSION
+          path: android-stable/v273-final/*
+          if-no-files-found: error
