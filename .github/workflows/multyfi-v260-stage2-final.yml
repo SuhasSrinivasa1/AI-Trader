@@ -1,0 +1,139 @@
+name: Multyfi v2.6.0 Stage2 Final APK
+
+on:
+  push:
+    branches: [multyfi-v2.6.0-stage2-full]
+  workflow_dispatch:
+
+jobs:
+  final-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install SDK
+        run: yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Generate baseline and apply Stage2
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 hotfix/run_v2411_exit_reconciliation_fresh.py
+          cat stage2/patch.* > /tmp/stage2.b64
+          echo '367e021e4a6978e96fa9ec0df22b7a510f938b8fc7bcdf3ac9dae26cc844b9b4  /tmp/stage2.b64' | sha256sum -c -
+          base64 -d /tmp/stage2.b64 | gzip -dc > /tmp/stage2.patch
+          echo '4cd2f7e1144b58e7adc4522ea6aee6f3dccdc65715743672273ae7973d49119b  /tmp/stage2.patch' | sha256sum -c -
+          git apply --check /tmp/stage2.patch
+          git apply /tmp/stage2.patch
+
+      - name: Set fresh Stage2 identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('android-stable/app/build.gradle'); s=p.read_text()
+          for old,new in {
+            "applicationId 'com.suhas.multyfiautobuy.v2411fresh'":"applicationId 'com.suhas.multyfiautobuy.v260stage2'",
+            'versionCode 251':'versionCode 260',
+            "versionName '2.4.11'":"versionName '2.6.0'",
+          }.items():
+            if s.count(old)!=1: raise SystemExit('identity mismatch: '+old)
+            s=s.replace(old,new,1)
+          p.write_text(s)
+          p=Path('android-stable/app/src/main/res/values/strings.xml'); s=p.read_text()
+          old='<string name="app_name">Multyfi AutoBuy 2.4.11</string>'
+          if s.count(old)!=1: raise SystemExit('app name mismatch')
+          p.write_text(s.replace(old,'<string name="app_name">Multyfi AutoBuy 2.6.0 Stage2</string>',1))
+          PY
+
+      - name: Verify Stage2 contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          M=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable
+          grep -q 'MAX_ACTIVE_POSITIONS = 3' "$M/Stage2Policy.java"
+          grep -q 'ENTRY_CUTOFF_MINUTE = 14 \* 60' "$M/Stage2Policy.java"
+          grep -q 'FORCE_EXIT_MINUTE = 14 \* 60 + 59' "$M/Stage2Policy.java"
+          grep -q 'candleImpulse' "$M/Stage2Engine.java"
+          grep -q 'pulledBackSincePeak' "$M/Stage2Engine.java"
+          grep -q 'getMarketQuote' "$M/GrowwClient.java"
+          grep -q 'getAvailableMisMargin' "$M/GrowwClient.java"
+          grep -q 'getRequiredMisMargin' "$M/GrowwClient.java"
+          grep -q 'STAGE2 AUTONOMOUS EXIT TRIGGERED' "$M/StrategyMonitorService.java"
+          grep -q 'STAGE2 REENTRY ACCEPTED' "$M/StrategyMonitorService.java"
+          grep -q 'STAGE2 PORTFOLIO LOSS FLOOR HIT' "$M/StrategyMonitorService.java"
+          grep -q 'GrowwClient.placeEarlyExitMarketSell' "$M/ProductionNotificationService.java"
+          grep -q 'EARLY EXIT FULL POSITION CONFIRMED' "$M/StrategyMonitorService.java"
+          ! grep -q 'NEW ENTRY BLOCKED — ONE STOCK AT A TIME' "$M/ProductionNotificationService.java"
+          ! grep -q 'IntradayProtectionPolicy.targetHit' "$M/StrategyMonitorService.java"
+
+      - name: Test lint and release build
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --console=plain -p android-stable :app:testDebugUnitTest :app:lintDebug :app:assembleRelease | tee build.log
+
+      - name: Validate tests
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          t=f=e=0
+          for p in Path('android-stable/app/build/test-results/testDebugUnitTest').glob('TEST-*.xml'):
+            x=ET.parse(p).getroot(); t+=int(x.attrib.get('tests',0)); f+=int(x.attrib.get('failures',0)); e+=int(x.attrib.get('errors',0))
+          print(f'Tests={t} Failures={f} Errors={e}')
+          assert t>=93 and f==0 and e==0
+          Path('/tmp/tests.txt').write_text(f'Tests: {t}\nFailures: {f}\nErrors: {e}\n')
+          PY
+
+      - name: Fresh sign and verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=android-stable/v260-stage2-final; mkdir -p "$OUT"
+          KS="$RUNNER_TEMP/v260-stage2.jks"; PASS='MultyfiV260Stage2_2026!'
+          keytool -genkeypair -keystore "$KS" -storepass "$PASS" -keypass "$PASS" -alias multyfi-v260-stage2 -keyalg RSA -keysize 4096 -validity 3650 -dname 'CN=Multyfi AutoBuy v2.6.0 Stage2, OU=Private Build, O=Multyfi AutoBuy, L=Bengaluru, ST=Karnataka, C=IN'
+          UNSIGNED=$(find android-stable/app/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          FINAL="$OUT/Multyfi-AutoBuy-v2.6.0-STAGE2-FULL-FRESH-SIGNED.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$UNSIGNED" "$OUT/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KS" --ks-key-alias multyfi-v260-stage2 --ks-pass "pass:$PASS" --key-pass "pass:$PASS" --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --out "$FINAL" "$OUT/aligned.apk"
+          rm -f "$OUT/aligned.apk" "$KS"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$FINAL" | tee "$OUT/SIGNATURE-VERIFY.txt"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$FINAL" | tee "$OUT/BADGING.txt"
+          grep -q "package: name='com.suhas.multyfiautobuy.v260stage2'" "$OUT/BADGING.txt"
+          grep -q "versionCode='260'" "$OUT/BADGING.txt"
+          grep -q "versionName='2.6.0'" "$OUT/BADGING.txt"
+          sha256sum "$FINAL" | tee "$OUT/SHA256.txt"
+          {
+            echo 'Multyfi AutoBuy v2.6.0 Stage2 — Final CI Validation'
+            echo '======================================================='
+            echo 'Fresh package: com.suhas.multyfiautobuy.v260stage2'
+            cat /tmp/tests.txt
+            echo 'Lint: passed'
+            echo 'Release assemble: passed'
+            echo 'APK signing and badging verification: passed'
+            echo 'Stage2 contracts: passed'
+            echo
+            echo 'Implemented: up to 3 MIS slots; 32% configured portfolio per slot; 14:00 new-entry/re-entry cutoff; 14:59 forced MIS exit; 500 ms batched LTP supervision; sampled market-depth/volume quote analysis; RUNNER/RANGE/BREAKDOWN regime engine; 5-second micro-candle impulse; adaptive soft-to-hard protected-profit floors; pullback and breakout re-entry; re-entry quality score; daily high-water tightening; max 2 re-entries per symbol/day; live MIS available/required margin validation; aggregate realised+open gross -INR 2,000 portfolio loss guard; authoritative Multyfi early SELL retained; persisted heuristic outcome learning; no fixed daily profit cap; no fixed Multyfi target profit-taking exit.'
+            echo 'Partial-profit splitting is not enabled by default.'
+            echo 'Learning is heuristic adaptation, not a trained ML model.'
+            echo 'Not CI-validated: physical-device install, live Groww authentication/fills, exchange slippage, or profitability.'
+            echo
+            cat "$OUT/SHA256.txt"
+          } | tee "$OUT/VALIDATION.txt"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Multyfi-AutoBuy-v2.6.0-STAGE2-FINAL
+          path: android-stable/v260-stage2-final/*
+          if-no-files-found: error
