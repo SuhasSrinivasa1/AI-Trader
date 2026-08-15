@@ -57,12 +57,12 @@ jobs:
 
           old = 'HttpResult http = request("POST", API_BASE + "/order-advance/create",\n                    accessToken, body);'
           count = s.count(old)
-          assert count == 2, f'expected 2 smart-order create calls, got {count}'
+          assert count == 3, f'expected 3 smart-order create calls, got {count}'
           s = s.replace(old, 'HttpResult http = createSmartOrderWithRetry(accessToken, body);')
 
           old_failure = 'HttpResult http = createSmartOrderWithRetry(accessToken, body);\n            if (!http.isSuccess()) return apiFailure(http);'
           count = s.count(old_failure)
-          assert count == 2, f'expected 2 smart-order failure handlers, got {count}'
+          assert count == 3, f'expected 3 smart-order failure handlers, got {count}'
           s = s.replace(old_failure,
               'HttpResult http = createSmartOrderWithRetry(accessToken, body);\n            if (!http.isSuccess()) return smartCreateFailure(http);')
 
@@ -85,8 +85,8 @@ jobs:
                           break;
                       }
                   }
-                  // The exact same body/reference_id is retried. Groww documents reference_id
-                  // as the idempotency key for Smart Orders, preventing accidental duplicates.
+                  // Reuse the exact same body and Groww reference_id on retry.
+                  // This prevents a transient create failure from becoming duplicate intent.
                   last = request("POST", API_BASE + "/order-advance/create", accessToken, body);
                   if (!isTransientSmartCreateHttpCode(last.code)) return last;
               }
@@ -100,7 +100,7 @@ jobs:
               return ApiResult.failure(baseFailure.errorCode,
                       "Groww Smart Order service remained unavailable after "
                               + SMART_CREATE_MAX_ATTEMPTS
-                              + " safe idempotent attempts (HTTP " + http.code + "). "
+                              + " safe same-reference attempts (HTTP " + http.code + "). "
                               + baseFailure.message,
                       http.code);
           }
@@ -148,7 +148,8 @@ jobs:
           M=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable
           grep -q 'SMART_CREATE_MAX_ATTEMPTS = 3' "$M/GrowwClient.java"
           grep -q 'isTransientSmartCreateHttpCode' "$M/GrowwClient.java"
-          test "$(grep -c 'createSmartOrderWithRetry(accessToken, body)' "$M/GrowwClient.java")" -eq 2
+          test "$(grep -c 'HttpResult http = createSmartOrderWithRetry(accessToken, body);' "$M/GrowwClient.java")" -eq 3
+          test "$(grep -c 'return smartCreateFailure(http);' "$M/GrowwClient.java")" -eq 3
           grep -q 'PROFIT_TRAIL_ARM_NET_RATE = 0.005' "$M/Stage2Policy.java"
           grep -q 'PER_CALL_NET_LOSS_LIMIT = 1000' "$M/Stage2Policy.java"
           grep -q 'DAILY_NET_LOSS_LIMIT = 2000' "$M/Stage2Policy.java"
@@ -192,8 +193,8 @@ jobs:
           {
             echo 'Multyfi AutoBuy v2.7.1 — Groww Smart Order 5xx/429 Retry Fix'
             echo '=============================================================='
-            echo 'Fix: GTT create retries HTTP 429/500/502/503/504 up to 3 attempts.'
-            echo 'Safety: every retry reuses the exact same Groww reference_id idempotency key.'
+            echo 'Fix: every Smart Order create path retries HTTP 429/500/502/503/504 up to 3 attempts.'
+            echo 'Safety: each retry reuses the exact same Groww reference_id and JSON body.'
             echo 'No blind retries for HTTP 400/401/403/422 client/auth/validation failures.'
             echo 'Failure log now reports that Groww Smart Order service remained unavailable after safe retries.'
             echo 'P0 Multyfi SELL direct MARKET path unchanged.'
