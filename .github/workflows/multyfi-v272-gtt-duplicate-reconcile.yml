@@ -47,6 +47,7 @@ jobs:
           set -euo pipefail
           python3 v271/apply_v271_gtt_fix.py
           python3 v272/apply_v272_duplicate_reconcile.py
+          python3 v272/repair_v272_host_tests.py
 
       - name: Set v2.7.2 identity and verify safety contracts
         shell: bash
