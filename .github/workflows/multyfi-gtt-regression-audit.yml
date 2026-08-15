@@ -1,0 +1,52 @@
+name: Multyfi GTT Regression Audit
+
+on:
+  push:
+    branches: [multyfi-v2.7.0-work]
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preserve original v2.0.0 Groww path
+        run: |
+          cp android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/GrowwClient.java /tmp/GrowwClient.v200.java
+          cp android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/ProductionActivity.java /tmp/ProductionActivity.v200.java
+      - name: Reconstruct v2.7.0 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 hotfix/run_v2411_exit_reconciliation_fresh.py
+          cat stage2/patch.* > /tmp/stage2.b64
+          base64 -d /tmp/stage2.b64 | gzip -dc > /tmp/stage2.patch
+          git apply /tmp/stage2.patch
+          cat v270/override.00 v270/override.01 v270/override.02 v270/override.03 \
+              v270/override.04.00.00 v270/override.04.00.01 v270/override.04.00.02 v270/override.04.00.03 \
+              v270/override.04.01 v270/override.04.02 v270/override.05 \
+              v270/override.06.00 v270/override.06.01 v270/override.06.02 > /tmp/v270.b64
+          base64 -d /tmp/v270.b64 > /tmp/v270-overrides.tgz
+          tar -xzf /tmp/v270-overrides.tgz -C android-stable
+          cp v270/fixes/Stage2DecisionPolicy.java android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/Stage2DecisionPolicy.java
+      - name: Print exact GTT regression diff
+        shell: bash
+        run: |
+          set +e
+          echo '===== GrowwClient v2.0.0 -> v2.7.0 ====='
+          diff -u /tmp/GrowwClient.v200.java android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/GrowwClient.java | grep -E -C 18 'createEntryGtt|gttBase|order-advance/create|reference|duration|trigger_price|trigger_direction|X-API-VERSION|Content-Type|cancelGtt|getGtt|price\(' || true
+          echo '===== ProductionActivity v2.0.0 -> v2.7.0 ====='
+          diff -u /tmp/ProductionActivity.v200.java android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/ProductionActivity.java | grep -E -C 18 'executeOneShareGttTest|testPrice|target|stop|reference|createEntryGtt|1-SHARE' || true
+          echo '===== v2.7.0 canonical method snippets ====='
+          python3 - <<'PY'
+          from pathlib import Path
+          for fn,names in [
+            ('android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/GrowwClient.java',['createEntryGtt','gttBase','cancelGtt','getGtt']),
+            ('android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/ProductionActivity.java',['executeOneShareGttTest'])]:
+              s=Path(fn).read_text()
+              print('\nFILE',fn)
+              for name in names:
+                  pos=s.find(name)
+                  print('\n---',name,'---')
+                  print(s[max(0,pos-300):pos+3500] if pos>=0 else 'NOT FOUND')
+          PY
