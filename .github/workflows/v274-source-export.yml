@@ -1,0 +1,40 @@
+name: v2.7.4 Source Export
+
+on:
+  push:
+    branches: [multyfi-v2.7.4-final-stable]
+  workflow_dispatch:
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconstruct v2.7.3 generated source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 hotfix/run_v2411_exit_reconciliation_fresh.py
+          cat stage2/patch.* > /tmp/stage2.b64
+          echo '367e021e4a6978e96fa9ec0df22b7a510f938b8fc7bcdf3ac9dae26cc844b9b4  /tmp/stage2.b64' | sha256sum -c -
+          base64 -d /tmp/stage2.b64 | gzip -dc > /tmp/stage2.patch
+          echo '4cd2f7e1144b58e7adc4522ea6aee6f3dccdc65715743672273ae7973d49119b  /tmp/stage2.patch' | sha256sum -c -
+          git apply /tmp/stage2.patch
+          cat v270/override.00 v270/override.01 v270/override.02 v270/override.03 \
+              v270/override.04.00.00 v270/override.04.00.01 v270/override.04.00.02 v270/override.04.00.03 \
+              v270/override.04.01 v270/override.04.02 v270/override.05 \
+              v270/override.06.00 v270/override.06.01 v270/override.06.02 > /tmp/v270.b64
+          base64 -d /tmp/v270.b64 > /tmp/v270-overrides.tgz
+          echo '3b1e85a0b17901916640d89e694878319bb6cce0eeb5c16e59980a99456d6403  /tmp/v270-overrides.tgz' | sha256sum -c -
+          tar -xzf /tmp/v270-overrides.tgz -C android-stable
+          python3 v271/apply_v271_gtt_fix.py
+          python3 v272/apply_v272_duplicate_reconcile.py
+          python3 v272/repair_v272_host_tests.py
+          python3 v273/apply_v273_legacy_gtt_test.py
+          tar -czf /tmp/v273-generated-source.tgz android-stable/app android-stable/build.gradle android-stable/settings.gradle android-stable/gradle.properties
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v273-generated-source-for-v274
+          path: /tmp/v273-generated-source.tgz
+          if-no-files-found: error
