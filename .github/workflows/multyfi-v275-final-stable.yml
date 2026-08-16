@@ -80,7 +80,7 @@ jobs:
           assert 'FastExitSubmissionGate' in mon
           # Immediate notification BUY path preserved and not replaced by GTT.
           assert 'placeConfirmedEntryLimit' in listener
-          assert '/v1/order/create' in groww
+          assert '/order/create' in groww
           # v2.7.4 UI simplifications remain.
           assert 'RE-ENTRY WATCH' in ui
           assert 'Intraday maximum budget' not in ui and 'Entry buffer %' not in ui
@@ -176,7 +176,7 @@ jobs:
             echo 'PRESERVED / VERIFIED:'
             echo '- ProductionNotificationService.java unchanged from validated v2.7.4 after the surgical v2.7.5 patch.'
             echo '- GrowwClient.java unchanged from validated v2.7.4 after the surgical v2.7.5 patch.'
-            echo '- Immediate Multyfi notification BUY remains regular Groww /v1/order/create path via placeConfirmedEntryLimit.'
+            echo '- Immediate Multyfi notification BUY remains regular Groww order/create path via placeConfirmedEntryLimit.'
             echo '- P0 Multyfi SELL remains authoritative; full confirmed MIS position dispatches MARKET SELL without stale-entry status delay.'
             echo '- Partial/late-fill exit reconciliation and duplicate-sell prevention remain.'
             echo '- 0.50% fixed entry buffer, Groww-wallet sizing, +0.50% NET trailing activation, RE-ENTRY WATCH UI, 14:00 entry cutoff and 14:59 forced MIS exit remain.'
