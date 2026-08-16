@@ -1,0 +1,198 @@
+name: Multyfi v2.7.5 Final Stable
+
+on:
+  push:
+    branches: [multyfi-v2.7.4-final-stable]
+  workflow_dispatch:
+
+jobs:
+  final:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install SDK
+        run: yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Reconstruct validated v2.7.4 source and apply v2.7.5 surgical fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 hotfix/run_v2411_exit_reconciliation_fresh.py
+          cat stage2/patch.* > /tmp/stage2.b64
+          echo '367e021e4a6978e96fa9ec0df22b7a510f938b8fc7bcdf3ac9dae26cc844b9b4  /tmp/stage2.b64' | sha256sum -c -
+          base64 -d /tmp/stage2.b64 | gzip -dc > /tmp/stage2.patch
+          echo '4cd2f7e1144b58e7adc4522ea6aee6f3dccdc65715743672273ae7973d49119b  /tmp/stage2.patch' | sha256sum -c -
+          git apply /tmp/stage2.patch
+          cat v270/override.00 v270/override.01 v270/override.02 v270/override.03 \
+              v270/override.04.00.00 v270/override.04.00.01 v270/override.04.00.02 v270/override.04.00.03 \
+              v270/override.04.01 v270/override.04.02 v270/override.05 \
+              v270/override.06.00 v270/override.06.01 v270/override.06.02 > /tmp/v270.b64
+          base64 -d /tmp/v270.b64 > /tmp/v270-overrides.tgz
+          tar -xzf /tmp/v270-overrides.tgz -C android-stable
+          python3 v271/apply_v271_gtt_fix.py
+          python3 v272/apply_v272_duplicate_reconcile.py
+          python3 v272/repair_v272_host_tests.py
+          python3 v273/apply_v273_legacy_gtt_test.py
+          base64 -d v274/apply_v274_final_stable.py.gz.b64 | gzip -dc > /tmp/apply_v274.py
+          python3 /tmp/apply_v274.py
+          python3 v274/sync_v274_tests.py
+
+          J=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable
+          sha256sum "$J/ProductionNotificationService.java" > /tmp/listener.before
+          sha256sum "$J/GrowwClient.java" > /tmp/groww.before
+          python3 v275/apply_v275_manual_exit_reentry.py
+          sha256sum -c /tmp/listener.before
+          sha256sum -c /tmp/groww.before
+
+      - name: Verify v2.7.5 contracts and set S24 identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          sed -i "s/applicationId 'com.suhas.multyfiautobuy.v2411fresh'/applicationId 'com.suhas.multyfiautobuy.v275s24'/" android-stable/app/build.gradle
+          sed -i "s/versionCode 251/versionCode 275/" android-stable/app/build.gradle
+          sed -i "s/versionName '2.4.11'/versionName '2.7.5'/" android-stable/app/build.gradle
+          sed -i 's/Multyfi AutoBuy 2.7.0 FINAL/Multyfi AutoBuy 2.7.5 S24 FINAL/g' android-stable/app/src/main/res/values/strings.xml
+          python3 - <<'PY'
+          from pathlib import Path
+          J=Path('android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable')
+          mon=(J/'StrategyMonitorService.java').read_text(); listener=(J/'ProductionNotificationService.java').read_text(); groww=(J/'GrowwClient.java').read_text(); policy=(J/'Stage2Policy.java').read_text(); ui=(J/'ProductionActivity.java').read_text()
+          # New manual/broker-flat behavior.
+          assert 'armReentryAfterBrokerFlat(token, strategy, "manual/broker exit")' in mon
+          assert 'V2.7.5 MANUAL EXIT REENTRY WATCH ARMED' in mon
+          assert 'Stage2Engine.armReentry(this, strategy, reference);' in mon
+          assert 'Stage2Engine.reentriesToday(this, strategy.symbol) >= Stage2Policy.MAX_REENTRIES_PER_SYMBOL' in mon
+          # Existing re-entry economics and time/risk gates remain.
+          for x in ['REENTRY_MIN_NET_RATE = 0.005d','ENTRY_CUTOFF_MINUTE = 14 * 60','FORCE_EXIT_MINUTE = 14 * 60 + 59','DAILY_NET_LOSS_LIMIT = 2000d']:
+              assert x in policy, x
+          # P0 immediate SELL architecture preserved.
+          assert 'EARLY EXIT FULL POSITION CONFIRMED' in mon
+          assert 'executeExit(token, strategy, true, EXIT_MULTYFI_EARLY);' in mon
+          assert 'GrowwClient.placeEarlyExitMarketSell' in listener
+          assert 'FastExitSubmissionGate' in mon
+          # Immediate notification BUY path preserved and not replaced by GTT.
+          assert 'placeConfirmedEntryLimit' in listener
+          assert '/v1/order/create' in groww
+          # v2.7.4 UI simplifications remain.
+          assert 'RE-ENTRY WATCH' in ui
+          assert 'Intraday maximum budget' not in ui and 'Entry buffer %' not in ui
+          src='\n'.join(p.read_text(errors='ignore') for p in Path('android-stable/app/src').rglob('*') if p.is_file())
+          for bad in ['UPLOAD ORDER-LIST IMAGE','ACTION_OPEN_DOCUMENT','ImageOrderParser','ImageBatchExecutor']:
+              assert bad not in src, bad
+          print('v2.7.5 contracts passed: manual exit re-entry added; immediate BUY/P0 SELL preserved')
+          PY
+
+      - name: Unit tests lint and build S24
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --console=plain -p android-stable :app:testDebugUnitTest :app:lintDebug :app:assembleRelease | tee build-s24.log
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          t=f=e=0
+          for p in Path('android-stable/app/build/test-results/testDebugUnitTest').glob('TEST-*.xml'):
+              r=ET.parse(p).getroot(); t+=int(r.attrib.get('tests',0)); f+=int(r.attrib.get('failures',0)); e+=int(r.attrib.get('errors',0))
+          print(t,f,e); assert t >= 107 and f == 0 and e == 0
+          Path('/tmp/tests.txt').write_text(f'Tests: {t}\nFailures: {f}\nErrors: {e}\n')
+          PY
+
+      - name: Sign S24
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=android-stable/v275-final; mkdir -p "$OUT"
+          KS="$RUNNER_TEMP/s24.jks"; PASS='MultyfiV275S24_2026!'
+          keytool -genkeypair -keystore "$KS" -storepass "$PASS" -keypass "$PASS" -alias v275s24 -keyalg RSA -keysize 4096 -validity 3650 -dname 'CN=Multyfi AutoBuy v2.7.5 S24, OU=Private Build, O=Multyfi AutoBuy, L=Bengaluru, ST=Karnataka, C=IN'
+          U=$(find android-stable/app/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          F="$OUT/Multyfi-AutoBuy-v2.7.5-FINAL-S24-ANDROID16-FRESH-SIGNED.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$U" "$OUT/a.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KS" --ks-key-alias v275s24 --ks-pass "pass:$PASS" --key-pass "pass:$PASS" --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --out "$F" "$OUT/a.apk"
+          rm -f "$OUT/a.apk" "$KS"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$F" | tee "$OUT/S24-SIGNATURE-VERIFY.txt"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$F" | tee "$OUT/S24-BADGING.txt"
+          grep -q "package: name='com.suhas.multyfiautobuy.v275s24'" "$OUT/S24-BADGING.txt"
+          grep -q "versionCode='275'" "$OUT/S24-BADGING.txt"
+          grep -q "versionName='2.7.5'" "$OUT/S24-BADGING.txt"
+          grep -q "sdkVersion:'28'" "$OUT/S24-BADGING.txt"
+          grep -q "targetSdkVersion:'36'" "$OUT/S24-BADGING.txt"
+          sha256sum "$F" | tee "$OUT/S24-SHA256.txt"
+
+      - name: Build and sign LG G7 Android 10 variant
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=android-stable/v275-final
+          sed -i "s/applicationId 'com.suhas.multyfiautobuy.v275s24'/applicationId 'com.suhas.multyfiautobuy.v275lg'/" android-stable/app/build.gradle
+          sed -i 's/Multyfi AutoBuy 2.7.5 S24 FINAL/Multyfi AutoBuy 2.7.5 LG FINAL/g' android-stable/app/src/main/res/values/strings.xml
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('android-stable/app/src/main/AndroidManifest.xml'); s=p.read_text()
+          s=s.replace('    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />\n','')
+          s=s.replace('\n            android:foregroundServiceType="specialUse"','')
+          start=s.find('            <property\n                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"')
+          if start >= 0:
+              end=s.find('/>',start); assert end >= 0; s=s[:start]+s[end+2:]
+          p.write_text(s)
+          PY
+          gradle --no-daemon --console=plain -p android-stable :app:clean :app:assembleRelease | tee build-lg.log
+          KS="$RUNNER_TEMP/lg.jks"; PASS='MultyfiV275LG_2026!'
+          keytool -genkeypair -keystore "$KS" -storepass "$PASS" -keypass "$PASS" -alias v275lg -keyalg RSA -keysize 4096 -validity 3650 -dname 'CN=Multyfi AutoBuy v2.7.5 LG G7, OU=Private Build, O=Multyfi AutoBuy, L=Bengaluru, ST=Karnataka, C=IN'
+          U=$(find android-stable/app/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          F="$OUT/Multyfi-AutoBuy-v2.7.5-FINAL-LG-G7-ANDROID10-FRESH-SIGNED.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$U" "$OUT/a.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KS" --ks-key-alias v275lg --ks-pass "pass:$PASS" --key-pass "pass:$PASS" --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --out "$F" "$OUT/a.apk"
+          rm -f "$OUT/a.apk" "$KS"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$F" | tee "$OUT/LG-SIGNATURE-VERIFY.txt"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$F" | tee "$OUT/LG-BADGING.txt"
+          grep -q "package: name='com.suhas.multyfiautobuy.v275lg'" "$OUT/LG-BADGING.txt"
+          grep -q "versionCode='275'" "$OUT/LG-BADGING.txt"
+          grep -q "versionName='2.7.5'" "$OUT/LG-BADGING.txt"
+          grep -q "sdkVersion:'28'" "$OUT/LG-BADGING.txt"
+          sha256sum "$F" | tee "$OUT/LG-SHA256.txt"
+
+      - name: Validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=android-stable/v275-final
+          {
+            echo 'Multyfi AutoBuy v2.7.5 FINAL STABLE'
+            echo '=================================='
+            cat /tmp/tests.txt
+            echo
+            echo 'CHANGE IN v2.7.5:'
+            echo '- Broker-confirmed flat after a previously filled MIS position (including manual Groww Exit) now arms the existing Stage2 RE-ENTRY WATCH when eligible.'
+            echo '- The helper itself never places a BUY; existing quality, >=0.50% projected NET, wallet/margin, max-reentry, daily-loss and before-14:00 gates remain mandatory.'
+            echo
+            echo 'PRESERVED / VERIFIED:'
+            echo '- ProductionNotificationService.java unchanged from validated v2.7.4 after the surgical v2.7.5 patch.'
+            echo '- GrowwClient.java unchanged from validated v2.7.4 after the surgical v2.7.5 patch.'
+            echo '- Immediate Multyfi notification BUY remains regular Groww /v1/order/create path via placeConfirmedEntryLimit.'
+            echo '- P0 Multyfi SELL remains authoritative; full confirmed MIS position dispatches MARKET SELL without stale-entry status delay.'
+            echo '- Partial/late-fill exit reconciliation and duplicate-sell prevention remain.'
+            echo '- 0.50% fixed entry buffer, Groww-wallet sizing, +0.50% NET trailing activation, RE-ENTRY WATCH UI, 14:00 entry cutoff and 14:59 forced MIS exit remain.'
+            echo '- File/image upload trading functionality remains removed.'
+            echo
+            echo 'DEVICE PACKAGES:'
+            echo '- S24: com.suhas.multyfiautobuy.v275s24 • minSdk 28 • targetSdk 36'
+            echo '- LG G7: com.suhas.multyfiautobuy.v275lg • minSdk 28; Android 10/API29 compatible build variant'
+            echo
+            echo 'LIMITS:'
+            echo '- CI validates source contracts, tests, lint, release assembly, signing and badging. It does not prove live Groww fills or physical-device latency.'
+            echo '- <=100 ms remains an app-side dispatch objective under hot/ready conditions, never an exchange-fill guarantee.'
+          } | tee "$OUT/Multyfi-AutoBuy-v2.7.5-FINAL-VALIDATION.txt"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Multyfi-AutoBuy-v2.7.5-FINAL-STABLE-S24-LG
+          path: android-stable/v275-final/*
+          if-no-files-found: error
