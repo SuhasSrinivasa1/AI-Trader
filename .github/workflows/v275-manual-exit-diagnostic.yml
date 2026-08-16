@@ -1,0 +1,60 @@
+name: v2.7.5 Manual Exit Diagnostic
+
+on:
+  push:
+    branches: [multyfi-v2.7.4-final-stable]
+  workflow_dispatch:
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconstruct v2.7.4 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 hotfix/run_v2411_exit_reconciliation_fresh.py
+          cat stage2/patch.* > /tmp/stage2.b64
+          base64 -d /tmp/stage2.b64 | gzip -dc > /tmp/stage2.patch
+          git apply /tmp/stage2.patch
+          cat v270/override.00 v270/override.01 v270/override.02 v270/override.03 \
+              v270/override.04.00.00 v270/override.04.00.01 v270/override.04.00.02 v270/override.04.00.03 \
+              v270/override.04.01 v270/override.04.02 v270/override.05 \
+              v270/override.06.00 v270/override.06.01 v270/override.06.02 > /tmp/v270.b64
+          base64 -d /tmp/v270.b64 > /tmp/v270-overrides.tgz
+          tar -xzf /tmp/v270-overrides.tgz -C android-stable
+          python3 v271/apply_v271_gtt_fix.py
+          python3 v272/apply_v272_duplicate_reconcile.py
+          python3 v272/repair_v272_host_tests.py
+          python3 v273/apply_v273_legacy_gtt_test.py
+          base64 -d v274/apply_v274_final_stable.py.gz.b64 | gzip -dc > /tmp/apply_v274.py
+          python3 /tmp/apply_v274.py
+          python3 v274/sync_v274_tests.py
+      - name: Print manual exit and re-entry contexts
+        shell: bash
+        run: |
+          set -euo pipefail
+          F=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/StrategyMonitorService.java
+          echo '=== ZERO / CLOSED / REENTRY references ==='
+          grep -n -E 'position is zero|POSITION.*ZERO|STRATEGY CLOSED|manual|armReentry|reentry|Reentry|candidate' "$F" || true
+          echo '=== Context around netQty == 0 / <= 0 ==='
+          grep -n -E 'netQty|positionQty|quantity.*0|qty.*0' "$F" | head -80 || true
+          echo '=== Full relevant blocks ==='
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/StrategyMonitorService.java')
+          s=p.read_text().splitlines()
+          keys=['position is zero','STRATEGY CLOSED','manual','armReentry','armCandidate','registerCandidate','candidate','reentry']
+          hits=[]
+          for i,line in enumerate(s):
+              if any(k.lower() in line.lower() for k in keys): hits.append(i)
+          seen=set()
+          for i in hits:
+              a=max(0,i-15); b=min(len(s),i+25)
+              key=(a,b)
+              if key in seen: continue
+              seen.add(key)
+              print(f'--- lines {a+1}-{b} ---')
+              for j in range(a,b): print(f'{j+1:05d}: {s[j]}')
+          PY
