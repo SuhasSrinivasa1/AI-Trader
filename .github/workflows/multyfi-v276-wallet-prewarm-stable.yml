@@ -1,0 +1,213 @@
+name: Multyfi v2.7.6 Wallet Prewarm Stable
+
+on:
+  push:
+    branches: [multyfi-v2.7.4-final-stable]
+    paths:
+      - 'v276/apply_v276_wallet_prewarm.py'
+      - '.github/workflows/multyfi-v276-wallet-prewarm-stable.yml'
+  workflow_dispatch:
+
+jobs:
+  final:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install SDK
+        run: yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Reconstruct validated v2.7.5 and apply v2.7.6 wallet-only fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 hotfix/run_v2411_exit_reconciliation_fresh.py
+          cat stage2/patch.* > /tmp/stage2.b64
+          echo '367e021e4a6978e96fa9ec0df22b7a510f938b8fc7bcdf3ac9dae26cc844b9b4  /tmp/stage2.b64' | sha256sum -c -
+          base64 -d /tmp/stage2.b64 | gzip -dc > /tmp/stage2.patch
+          echo '4cd2f7e1144b58e7adc4522ea6aee6f3dccdc65715743672273ae7973d49119b  /tmp/stage2.patch' | sha256sum -c -
+          git apply /tmp/stage2.patch
+          cat v270/override.00 v270/override.01 v270/override.02 v270/override.03 \
+              v270/override.04.00.00 v270/override.04.00.01 v270/override.04.00.02 v270/override.04.00.03 \
+              v270/override.04.01 v270/override.04.02 v270/override.05 \
+              v270/override.06.00 v270/override.06.01 v270/override.06.02 > /tmp/v270.b64
+          base64 -d /tmp/v270.b64 > /tmp/v270-overrides.tgz
+          tar -xzf /tmp/v270-overrides.tgz -C android-stable
+          python3 v271/apply_v271_gtt_fix.py
+          python3 v272/apply_v272_duplicate_reconcile.py
+          python3 v272/repair_v272_host_tests.py
+          python3 v273/apply_v273_legacy_gtt_test.py
+          base64 -d v274/apply_v274_final_stable.py.gz.b64 | gzip -dc > /tmp/apply_v274.py
+          python3 /tmp/apply_v274.py
+          python3 v274/sync_v274_tests.py
+          python3 v275/apply_v275_manual_exit_reentry.py
+
+          J=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable
+          sha256sum "$J/ProductionNotificationService.java" > /tmp/listener.before
+          sha256sum "$J/GrowwClient.java" > /tmp/groww.before
+          python3 v276/apply_v276_wallet_prewarm.py
+          # Critical notification BUY/P0 SELL and Groww order client are intentionally untouched.
+          sha256sum -c /tmp/listener.before
+          sha256sum -c /tmp/groww.before
+
+      - name: Verify v2.7.6 contracts and set S24 identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          sed -i "s/applicationId 'com.suhas.multyfiautobuy.v2411fresh'/applicationId 'com.suhas.multyfiautobuy.v276s24'/" android-stable/app/build.gradle
+          sed -i "s/versionCode 251/versionCode 276/" android-stable/app/build.gradle
+          sed -i "s/versionName '2.4.11'/versionName '2.7.6'/" android-stable/app/build.gradle
+          sed -i 's/Multyfi AutoBuy 2.7.0 FINAL/Multyfi AutoBuy 2.7.6 S24 FINAL/g' android-stable/app/src/main/res/values/strings.xml
+          python3 - <<'PY'
+          from pathlib import Path
+          J=Path('android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable')
+          mon=(J/'StrategyMonitorService.java').read_text(); listener=(J/'ProductionNotificationService.java').read_text(); groww=(J/'GrowwClient.java').read_text(); policy=(J/'Stage2Policy.java').read_text(); ui=(J/'ProductionActivity.java').read_text()
+          # Wallet prewarm must happen before the market-session gate.
+          method=mon[mon.index('private void safePositionCacheTick'):mon.index('private void safeTick')]
+          assert method.index('GrowwClient.getWalletMargin(token)') < method.index('if (!isMarketSession()) return;')
+          assert 'WALLET_REFRESH_INTERVAL_MS = 2_000L' in policy
+          assert 'WALLET_CACHE_MAX_AGE_MS = 6_000L' in policy
+          assert 'WALLET READY • Clear cash ₹' in ui and 'WALLET WARMING' in ui
+          assert 'WALLET PREWARM WAIT' in mon
+          # v2.7.5 manual/broker-flat re-entry remains.
+          assert 'armReentryAfterBrokerFlat(token, strategy, "manual/broker exit")' in mon
+          assert 'V2.7.5 MANUAL EXIT REENTRY WATCH ARMED' in mon
+          # Existing risk/re-entry/end-of-day contracts remain.
+          for x in ['REENTRY_MIN_NET_RATE = 0.005d','ENTRY_CUTOFF_MINUTE = 14 * 60','FORCE_EXIT_MINUTE = 14 * 60 + 59','DAILY_NET_LOSS_LIMIT = 2000d']:
+              assert x in policy, x
+          # P0 immediate SELL architecture preserved.
+          assert 'EARLY EXIT FULL POSITION CONFIRMED' in mon
+          assert 'executeExit(token, strategy, true, EXIT_MULTYFI_EARLY);' in mon
+          assert 'GrowwClient.placeEarlyExitMarketSell' in listener
+          assert 'FastExitSubmissionGate' in mon
+          # Immediate notification BUY architecture preserved.
+          assert 'placeConfirmedEntryLimit' in listener
+          assert '/order/create' in groww
+          # UI simplifications remain.
+          assert 'RE-ENTRY WATCH' in ui
+          assert 'Intraday maximum budget' not in ui and 'Entry buffer %' not in ui
+          src='\n'.join(p.read_text(errors='ignore') for p in Path('android-stable/app/src').rglob('*') if p.is_file())
+          for bad in ['UPLOAD ORDER-LIST IMAGE','ACTION_OPEN_DOCUMENT','ImageOrderParser','ImageBatchExecutor']:
+              assert bad not in src, bad
+          print('v2.7.6 contracts passed: pre-market wallet hot; immediate BUY/P0 SELL untouched')
+          PY
+
+      - name: Unit tests lint and build S24
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --console=plain -p android-stable :app:testDebugUnitTest :app:lintDebug :app:assembleRelease | tee build-s24.log
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          t=f=e=0
+          for p in Path('android-stable/app/build/test-results/testDebugUnitTest').glob('TEST-*.xml'):
+              r=ET.parse(p).getroot(); t+=int(r.attrib.get('tests',0)); f+=int(r.attrib.get('failures',0)); e+=int(r.attrib.get('errors',0))
+          print(t,f,e); assert t >= 107 and f == 0 and e == 0
+          Path('/tmp/tests.txt').write_text(f'Tests: {t}\nFailures: {f}\nErrors: {e}\n')
+          PY
+
+      - name: Sign S24
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=android-stable/v276-final; mkdir -p "$OUT"
+          KS="$RUNNER_TEMP/s24.jks"; PASS='MultyfiV276S24_2026!'
+          keytool -genkeypair -keystore "$KS" -storepass "$PASS" -keypass "$PASS" -alias v276s24 -keyalg RSA -keysize 4096 -validity 3650 -dname 'CN=Multyfi AutoBuy v2.7.6 S24, OU=Private Build, O=Multyfi AutoBuy, L=Bengaluru, ST=Karnataka, C=IN'
+          U=$(find android-stable/app/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          F="$OUT/Multyfi-AutoBuy-v2.7.6-FINAL-S24-ANDROID16-WALLET-PREWARM-FRESH-SIGNED.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$U" "$OUT/a.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KS" --ks-key-alias v276s24 --ks-pass "pass:$PASS" --key-pass "pass:$PASS" --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --out "$F" "$OUT/a.apk"
+          rm -f "$OUT/a.apk" "$KS"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$F" | tee "$OUT/S24-SIGNATURE-VERIFY.txt"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$F" | tee "$OUT/S24-BADGING.txt"
+          grep -q "package: name='com.suhas.multyfiautobuy.v276s24'" "$OUT/S24-BADGING.txt"
+          grep -q "versionCode='276'" "$OUT/S24-BADGING.txt"
+          grep -q "versionName='2.7.6'" "$OUT/S24-BADGING.txt"
+          grep -q "sdkVersion:'28'" "$OUT/S24-BADGING.txt"
+          grep -q "targetSdkVersion:'36'" "$OUT/S24-BADGING.txt"
+          sha256sum "$F" | tee "$OUT/S24-SHA256.txt"
+
+      - name: Build and sign LG G7 Android 10 variant
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=android-stable/v276-final
+          sed -i "s/applicationId 'com.suhas.multyfiautobuy.v276s24'/applicationId 'com.suhas.multyfiautobuy.v276lg'/" android-stable/app/build.gradle
+          sed -i 's/Multyfi AutoBuy 2.7.6 S24 FINAL/Multyfi AutoBuy 2.7.6 LG FINAL/g' android-stable/app/src/main/res/values/strings.xml
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('android-stable/app/src/main/AndroidManifest.xml'); s=p.read_text()
+          s=s.replace('    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />\n','')
+          s=s.replace('\n            android:foregroundServiceType="specialUse"','')
+          start=s.find('            <property\n                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"')
+          if start >= 0:
+              end=s.find('/>',start); assert end >= 0; s=s[:start]+s[end+2:]
+          p.write_text(s)
+          PY
+          gradle --no-daemon --console=plain -p android-stable :app:clean :app:assembleRelease | tee build-lg.log
+          KS="$RUNNER_TEMP/lg.jks"; PASS='MultyfiV276LG_2026!'
+          keytool -genkeypair -keystore "$KS" -storepass "$PASS" -keypass "$PASS" -alias v276lg -keyalg RSA -keysize 4096 -validity 3650 -dname 'CN=Multyfi AutoBuy v2.7.6 LG G7, OU=Private Build, O=Multyfi AutoBuy, L=Bengaluru, ST=Karnataka, C=IN'
+          U=$(find android-stable/app/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          F="$OUT/Multyfi-AutoBuy-v2.7.6-FINAL-LG-G7-ANDROID10-WALLET-PREWARM-FRESH-SIGNED.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$U" "$OUT/a.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KS" --ks-key-alias v276lg --ks-pass "pass:$PASS" --key-pass "pass:$PASS" --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --out "$F" "$OUT/a.apk"
+          rm -f "$OUT/a.apk" "$KS"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$F" | tee "$OUT/LG-SIGNATURE-VERIFY.txt"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$F" | tee "$OUT/LG-BADGING.txt"
+          grep -q "package: name='com.suhas.multyfiautobuy.v276lg'" "$OUT/LG-BADGING.txt"
+          grep -q "versionCode='276'" "$OUT/LG-BADGING.txt"
+          grep -q "versionName='2.7.6'" "$OUT/LG-BADGING.txt"
+          grep -q "sdkVersion:'28'" "$OUT/LG-BADGING.txt"
+          sha256sum "$F" | tee "$OUT/LG-SHA256.txt"
+
+      - name: Validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=android-stable/v276-final
+          {
+            echo 'Multyfi AutoBuy v2.7.6 FINAL — WALLET PREWARM'
+            echo '============================================='
+            cat /tmp/tests.txt
+            echo
+            echo 'ROOT CAUSE FIXED:'
+            echo '- v2.7.5 wallet refresh shared the position-prewarm routine and returned when outside the 09:15–15:30 market session.'
+            echo '- Therefore an armed READY device at 08:58/09:03 could remain amber until market open even with valid Groww auth/VPN/IP.'
+            echo '- v2.7.6 refreshes Groww wallet/margin before the market-session position gate.'
+            echo '- Wallet refresh target while armed: every 2 seconds; cache freshness window: 6 seconds.'
+            echo '- Position-book polling remains market-session-only.'
+            echo '- UI explicitly shows WALLET READY with clear cash / MIS available / deployable cash when fresh.'
+            echo
+            echo 'PRESERVED / VERIFIED:'
+            echo '- ProductionNotificationService.java checksum unchanged by the v2.7.6 patch.'
+            echo '- GrowwClient.java checksum unchanged by the v2.7.6 patch.'
+            echo '- Immediate Multyfi notification BUY remains regular Groww order/create via placeConfirmedEntryLimit.'
+            echo '- P0 Multyfi SELL remains authoritative MARKET SELL and its direct execution architecture is unchanged.'
+            echo '- Manual Groww full exit still arms Stage2 RE-ENTRY WATCH when eligible.'
+            echo '- >=0.50% projected NET re-entry gate, max 2 reentries/symbol/day, +0.50% NET trail, wallet sizing and fixed +0.50% entry buffer remain.'
+            echo '- 14:00 new-entry cutoff and 14:59 forced MIS square-off remain.'
+            echo '- File/image upload trading functionality remains removed.'
+            echo
+            echo 'DEVICE PACKAGES:'
+            echo '- S24: com.suhas.multyfiautobuy.v276s24 • minSdk 28 • targetSdk 36'
+            echo '- LG G7: com.suhas.multyfiautobuy.v276lg • minSdk 28 • Android 10/API29 compatible variant'
+            echo
+            echo 'LIMITS:'
+            echo '- CI validates source contracts, tests, lint, release assembly, signing and badging. Live Groww responses, physical-device behavior and broker/exchange fills still require device testing.'
+            echo '- <=100 ms remains an app-side dispatch objective under hot/ready conditions, never a Groww/exchange fill guarantee.'
+          } | tee "$OUT/Multyfi-AutoBuy-v2.7.6-FINAL-VALIDATION.txt"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Multyfi-AutoBuy-v2.7.6-FINAL-WALLET-PREWARM-S24-LG
+          path: android-stable/v276-final/*
+          if-no-files-found: error
