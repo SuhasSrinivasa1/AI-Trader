@@ -4,12 +4,12 @@ on:
   push:
     branches: [unified-nse-scanner-v1]
     paths:
-      - 'unified-scanner-src.tgz.b64'
+      - 'unified-scanner-src.part*'
       - '.github/workflows/unified-scanner-build.yml'
   pull_request:
     branches: [main]
     paths:
-      - 'unified-scanner-src.tgz.b64'
+      - 'unified-scanner-src.part*'
       - '.github/workflows/unified-scanner-build.yml'
   workflow_dispatch:
 
@@ -22,7 +22,7 @@ jobs:
 
       - name: Expand scanner source
         run: |
-          base64 -d unified-scanner-src.tgz.b64 > /tmp/unified-scanner-src.tgz
+          cat unified-scanner-src.part* | base64 -d > /tmp/unified-scanner-src.tgz
           tar -xzf /tmp/unified-scanner-src.tgz
 
       - uses: actions/setup-java@v4
