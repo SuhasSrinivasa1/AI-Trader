@@ -1,0 +1,50 @@
+name: v276 Wallet Diagnostic
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [multyfi-v2.7.4-final-stable]
+    paths: ['.github/workflows/v276-wallet-diagnostic.yml']
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconstruct v2.7.5 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 hotfix/run_v2411_exit_reconciliation_fresh.py
+          cat stage2/patch.* > /tmp/stage2.b64
+          base64 -d /tmp/stage2.b64 | gzip -dc > /tmp/stage2.patch
+          git apply /tmp/stage2.patch
+          cat v270/override.00 v270/override.01 v270/override.02 v270/override.03 \
+              v270/override.04.00.00 v270/override.04.00.01 v270/override.04.00.02 v270/override.04.00.03 \
+              v270/override.04.01 v270/override.04.02 v270/override.05 \
+              v270/override.06.00 v270/override.06.01 v270/override.06.02 > /tmp/v270.b64
+          base64 -d /tmp/v270.b64 > /tmp/v270-overrides.tgz
+          tar -xzf /tmp/v270-overrides.tgz -C android-stable
+          python3 v271/apply_v271_gtt_fix.py
+          python3 v272/apply_v272_duplicate_reconcile.py
+          python3 v272/repair_v272_host_tests.py
+          python3 v273/apply_v273_legacy_gtt_test.py
+          base64 -d v274/apply_v274_final_stable.py.gz.b64 | gzip -dc > /tmp/apply_v274.py
+          python3 /tmp/apply_v274.py
+          python3 v274/sync_v274_tests.py
+          python3 v275/apply_v275_manual_exit_reentry.py
+      - name: Show wallet-related source
+        shell: bash
+        run: |
+          set -euo pipefail
+          J=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable
+          echo '=== FILES / SYMBOLS ==='
+          grep -RniE 'wallet|clear_cash|clearCash|mis_balance|misBalance|margin.*cache|Wallet.*Cache|refresh.*wallet|available.*margin' "$J" | head -n 400 || true
+          echo '=== ACTIVITY CONTEXT ==='
+          grep -n -C 12 -E 'Wallet cache|wallet cache|clear cash|MIS balance' "$J/ProductionActivity.java" || true
+          echo '=== MONITOR CONTEXT ==='
+          grep -n -C 12 -E 'wallet|margin' "$J/StrategyMonitorService.java" | head -n 300 || true
+          echo '=== LISTENER CONTEXT ==='
+          grep -n -C 12 -E 'wallet|margin' "$J/ProductionNotificationService.java" | head -n 300 || true
+          echo '=== GROWW CLIENT MARGIN ==='
+          grep -n -C 15 -E 'margin|clear_cash|mis_balance' "$J/GrowwClient.java" | head -n 300 || true
