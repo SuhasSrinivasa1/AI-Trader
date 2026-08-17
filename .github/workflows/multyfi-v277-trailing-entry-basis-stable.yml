@@ -1,0 +1,251 @@
+name: Multyfi v2.7.7 Trailing Entry Basis Stable
+
+on:
+  push:
+    branches: [multyfi-v2.7.4-final-stable]
+    paths:
+      - 'v277/**'
+      - '.github/workflows/multyfi-v277-trailing-entry-basis-stable.yml'
+  workflow_dispatch:
+
+jobs:
+  final:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install SDK
+        run: yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Reconstruct v2.7.6 baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 hotfix/run_v2411_exit_reconciliation_fresh.py
+          cat stage2/patch.* > /tmp/stage2.b64
+          echo '367e021e4a6978e96fa9ec0df22b7a510f938b8fc7bcdf3ac9dae26cc844b9b4  /tmp/stage2.b64' | sha256sum -c -
+          base64 -d /tmp/stage2.b64 | gzip -dc > /tmp/stage2.patch
+          echo '4cd2f7e1144b58e7adc4522ea6aee6f3dccdc65715743672273ae7973d49119b  /tmp/stage2.patch' | sha256sum -c -
+          git apply /tmp/stage2.patch
+          cat v270/override.00 v270/override.01 v270/override.02 v270/override.03 \
+              v270/override.04.00.00 v270/override.04.00.01 v270/override.04.00.02 v270/override.04.00.03 \
+              v270/override.04.01 v270/override.04.02 v270/override.05 \
+              v270/override.06.00 v270/override.06.01 v270/override.06.02 > /tmp/v270.b64
+          base64 -d /tmp/v270.b64 > /tmp/v270-overrides.tgz
+          tar -xzf /tmp/v270-overrides.tgz -C android-stable
+          python3 v271/apply_v271_gtt_fix.py
+          python3 v272/apply_v272_duplicate_reconcile.py
+          python3 v272/repair_v272_host_tests.py
+          python3 v273/apply_v273_legacy_gtt_test.py
+          base64 -d v274/apply_v274_final_stable.py.gz.b64 | gzip -dc > /tmp/apply_v274.py
+          python3 /tmp/apply_v274.py
+          python3 v274/sync_v274_tests.py
+          python3 v275/apply_v275_manual_exit_reentry.py
+          python3 v276/apply_v276_wallet_prewarm.py
+
+      - name: Snapshot critical BUY and P0 SELL methods
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          s=Path('android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/GrowwClient.java').read_text()
+          def block(name):
+              start=s.index(name)
+              brace=s.index('{', start)
+              depth=0
+              for i in range(brace,len(s)):
+                  if s[i]=='{': depth+=1
+                  elif s[i]=='}':
+                      depth-=1
+                      if depth==0: return s[start:i+1]
+              raise RuntimeError(name)
+          out=[]
+          for name in ['static EntryResult placeConfirmedEntryLimit(', 'static ApiResult placeEarlyExitMarketSell(']:
+              b=block(name)
+              out.append(name+' '+hashlib.sha256(b.encode()).hexdigest())
+          Path('/tmp/critical-methods.before').write_text('\n'.join(out)+'\n')
+          print('\n'.join(out))
+          PY
+          sha256sum android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/ProductionNotificationService.java > /tmp/listener.before
+
+      - name: Apply v2.7.7 cost-basis and trailing fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 v277/apply_v277_entry_basis_trailing_fix.py
+          python3 v277/add_v277_tests.py
+
+      - name: Verify v2.7.7 contracts and critical path preservation
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum -c /tmp/listener.before
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          J=Path('android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable')
+          g=(J/'GrowwClient.java').read_text(); m=(J/'StrategyMonitorService.java').read_text(); e=(J/'Stage2Engine.java').read_text(); p=(J/'Stage2Policy.java').read_text()
+          def block(src,name):
+              start=src.index(name); brace=src.index('{',start); depth=0
+              for i in range(brace,len(src)):
+                  if src[i]=='{': depth+=1
+                  elif src[i]=='}':
+                      depth-=1
+                      if depth==0: return src[start:i+1]
+              raise RuntimeError(name)
+          expected={}
+          for line in Path('/tmp/critical-methods.before').read_text().splitlines():
+              name,h=line.rsplit(' ',1); expected[name]=h
+          for name,h in expected.items():
+              now=hashlib.sha256(block(g,name).encode()).hexdigest()
+              assert now==h,(name,h,now)
+          # Exact root-cause fix.
+          ensure=block(m,'private boolean ensureFastProfitTargetArmed(')
+          assert 'refreshEntryAveragePrice(token, strategy)' in ensure
+          assert 'TRAILING NOT ARMED — ENTRY BASIS UNAVAILABLE' in ensure
+          assert ensure.index('return false;') < ensure.index('strategy.fastProfitArmed = true;')
+          assert 'entry average ₹0 • no false ARMED state' in ensure
+          # Multi-source broker-confirmed cost basis.
+          assert '/positions/trading-symbol' in g
+          assert '/order/detail/' in g and 'average_fill_price' in g
+          assert '/order/trades/' in g and 'ORDER_TRADES_VWAP' in g
+          # Trailing contracts still intact and now auditable.
+          assert 'PROFIT_TRAIL_ARM_NET_RATE = 0.005d' in p
+          assert 'PROFIT TRAIL ARMED' in e
+          assert 'hardFloorHit(currentNet, s.protectedNet)' in e
+          assert 'adaptive protected-profit floor breached' in e
+          # Existing core risk/re-entry/time gates remain.
+          for x in ['REENTRY_MIN_NET_RATE = 0.005d','ENTRY_CUTOFF_MINUTE = 14 * 60','FORCE_EXIT_MINUTE = 14 * 60 + 59','DAILY_NET_LOSS_LIMIT = 2000d']:
+              assert x in p,x
+          print('v2.7.7 contracts passed; immediate BUY and P0 SELL method hashes unchanged')
+          PY
+
+      - name: Set v2.7.7 S24 identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          sed -i "s/applicationId 'com.suhas.multyfiautobuy.v2411fresh'/applicationId 'com.suhas.multyfiautobuy.v277s24'/" android-stable/app/build.gradle
+          sed -i "s/versionCode 251/versionCode 277/" android-stable/app/build.gradle
+          sed -i "s/versionName '2.4.11'/versionName '2.7.7'/" android-stable/app/build.gradle
+          sed -i 's/Multyfi AutoBuy 2.7.0 FINAL/Multyfi AutoBuy 2.7.7 S24 FINAL/g' android-stable/app/src/main/res/values/strings.xml
+
+      - name: Unit tests lint and build S24
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --console=plain -p android-stable :app:testDebugUnitTest :app:lintDebug :app:assembleRelease | tee build-s24.log
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          t=f=e=0
+          for x in Path('android-stable/app/build/test-results/testDebugUnitTest').glob('TEST-*.xml'):
+              r=ET.parse(x).getroot(); t+=int(r.attrib.get('tests',0)); f+=int(r.attrib.get('failures',0)); e+=int(r.attrib.get('errors',0))
+          print(t,f,e); assert t >= 109 and f == 0 and e == 0
+          Path('/tmp/tests.txt').write_text(f'Tests: {t}\nFailures: {f}\nErrors: {e}\n')
+          PY
+
+      - name: Sign and verify S24 APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=android-stable/v277-final; mkdir -p "$OUT"
+          KS="$RUNNER_TEMP/s24.jks"; PASS='MultyfiV277S24_2026!'
+          keytool -genkeypair -keystore "$KS" -storepass "$PASS" -keypass "$PASS" -alias v277s24 -keyalg RSA -keysize 4096 -validity 3650 -dname 'CN=Multyfi AutoBuy v2.7.7 S24, OU=Private Build, O=Multyfi AutoBuy, L=Bengaluru, ST=Karnataka, C=IN'
+          U=$(find android-stable/app/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          F="$OUT/Multyfi-AutoBuy-v2.7.7-FINAL-S24-TRAILING-ENTRY-BASIS-FRESH-SIGNED.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$U" "$OUT/a.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KS" --ks-key-alias v277s24 --ks-pass "pass:$PASS" --key-pass "pass:$PASS" --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --out "$F" "$OUT/a.apk"
+          rm -f "$OUT/a.apk" "$KS"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$F" | tee "$OUT/S24-SIGNATURE-VERIFY.txt"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$F" | tee "$OUT/S24-BADGING.txt"
+          grep -q "package: name='com.suhas.multyfiautobuy.v277s24'" "$OUT/S24-BADGING.txt"
+          grep -q "versionCode='277'" "$OUT/S24-BADGING.txt"
+          grep -q "versionName='2.7.7'" "$OUT/S24-BADGING.txt"
+          grep -q "sdkVersion:'28'" "$OUT/S24-BADGING.txt"
+          grep -q "targetSdkVersion:'36'" "$OUT/S24-BADGING.txt"
+          sha256sum "$F" | tee "$OUT/S24-SHA256.txt"
+
+      - name: Build and sign LG G7 Android 10 variant
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=android-stable/v277-final
+          sed -i "s/applicationId 'com.suhas.multyfiautobuy.v277s24'/applicationId 'com.suhas.multyfiautobuy.v277lg'/" android-stable/app/build.gradle
+          sed -i 's/Multyfi AutoBuy 2.7.7 S24 FINAL/Multyfi AutoBuy 2.7.7 LG FINAL/g' android-stable/app/src/main/res/values/strings.xml
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('android-stable/app/src/main/AndroidManifest.xml'); s=p.read_text()
+          s=s.replace('    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />\n','')
+          s=s.replace('\n            android:foregroundServiceType="specialUse"','')
+          start=s.find('            <property\n                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"')
+          if start >= 0:
+              end=s.find('/>',start); assert end >= 0; s=s[:start]+s[end+2:]
+          p.write_text(s)
+          PY
+          gradle --no-daemon --console=plain -p android-stable :app:clean :app:assembleRelease | tee build-lg.log
+          KS="$RUNNER_TEMP/lg.jks"; PASS='MultyfiV277LG_2026!'
+          keytool -genkeypair -keystore "$KS" -storepass "$PASS" -keypass "$PASS" -alias v277lg -keyalg RSA -keysize 4096 -validity 3650 -dname 'CN=Multyfi AutoBuy v2.7.7 LG G7, OU=Private Build, O=Multyfi AutoBuy, L=Bengaluru, ST=Karnataka, C=IN'
+          U=$(find android-stable/app/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)
+          F="$OUT/Multyfi-AutoBuy-v2.7.7-FINAL-LG-G7-TRAILING-ENTRY-BASIS-FRESH-SIGNED.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$U" "$OUT/a.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KS" --ks-key-alias v277lg --ks-pass "pass:$PASS" --key-pass "pass:$PASS" --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --out "$F" "$OUT/a.apk"
+          rm -f "$OUT/a.apk" "$KS"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$F" | tee "$OUT/LG-SIGNATURE-VERIFY.txt"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$F" | tee "$OUT/LG-BADGING.txt"
+          grep -q "package: name='com.suhas.multyfiautobuy.v277lg'" "$OUT/LG-BADGING.txt"
+          grep -q "versionCode='277'" "$OUT/LG-BADGING.txt"
+          grep -q "versionName='2.7.7'" "$OUT/LG-BADGING.txt"
+          grep -q "sdkVersion:'28'" "$OUT/LG-BADGING.txt"
+          sha256sum "$F" | tee "$OUT/LG-SHA256.txt"
+
+      - name: Validation report
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=android-stable/v277-final
+          {
+            echo 'Multyfi AutoBuy v2.7.7 FINAL — TRAILING ENTRY BASIS FIX'
+            echo '=========================================================='
+            cat /tmp/tests.txt
+            echo
+            echo 'INCIDENT ROOT CAUSE CONFIRMED:'
+            echo '- The live UNIPARTS audit showed STAGE2 ADAPTIVE WATCH ARMED with entry average ₹0.'
+            echo '- v2.7.6 set fastProfitArmed=true before validating a real entry cost basis.'
+            echo '- Stage2 evaluateActive refuses to calculate NET P&L or trailing protection while entryAveragePrice <= 0.'
+            echo '- Therefore +0.50% NET / PeakNet / protected-floor logic could not arm for that trade.'
+            echo
+            echo 'v2.7.7 FIX:'
+            echo '- Never reports the adaptive trail ARMED while entry average is zero.'
+            echo '- Cost basis recovery order: Groww position net_price -> order detail average_fill_price -> actual order-trades quantity-weighted VWAP.'
+            echo '- If all cost-basis sources are unavailable, trailing remains explicitly NOT ARMED and retries; it never silently pretends protection is active.'
+            echo '- When basis becomes available, the next fast evaluation computes current NET immediately; if +0.50% NET is already crossed, the trail arms immediately.'
+            echo '- New audit event PROFIT TRAIL ARMED shows entry, qty, current NET, peak NET and protected floor.'
+            echo '- Regression test covers the reported UNIPARTS-sized trade: ₹821.08 x 343 and a ₹2,500 peak must produce a nonzero protected floor; floor breach triggers exit decision.'
+            echo
+            echo 'PRESERVED / HASH-VERIFIED:'
+            cat /tmp/critical-methods.before
+            echo '- placeConfirmedEntryLimit method hash unchanged by v2.7.7 patch.'
+            echo '- placeEarlyExitMarketSell method hash unchanged by v2.7.7 patch.'
+            echo '- ProductionNotificationService.java checksum unchanged by v2.7.7 patch.'
+            echo '- P0 Multyfi early SELL architecture remains unchanged.'
+            echo '- Manual exit re-entry watch, wallet prewarm, >=0.50% projected-NET re-entry gate, 14:00 entry cutoff and 14:59 force exit remain.'
+            echo
+            echo 'LIMITS:'
+            echo '- CI validates source contracts, unit tests, lint, release builds, signing and badging. It does not prove live Groww fills or guarantee a protected rupee amount under gaps, network failures or slippage.'
+          } | tee "$OUT/Multyfi-AutoBuy-v2.7.7-FINAL-VALIDATION.txt"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Multyfi-AutoBuy-v2.7.7-FINAL-TRAILING-ENTRY-BASIS-S24-LG
+          path: android-stable/v277-final/*
+          if-no-files-found: error
