@@ -1,0 +1,67 @@
+name: NSE Unified Scanner Android16 Smoke
+on:
+  push:
+    branches: [unified-nse-scanner-v1]
+    paths: ['.github/workflows/unified-scanner-api36-smoke.yml']
+  workflow_dispatch:
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Expand and patch
+        run: |
+          cat unified-scanner-src.part* | base64 -d > /tmp/src.tgz
+          tar -xzf /tmp/src.tgz
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/ScannerEngine.java')
+          s=p.read_text().replace('import java.io.File;','import java.io.File;\nimport java.io.FileOutputStream;\nimport java.io.FileInputStream;\nimport java.io.BufferedReader;\nimport java.io.InputStreamReader;').replace('import java.nio.file.Files;\n','')
+          s=s.replace('Files.writeString(f.toPath(),r.value,StandardCharsets.UTF_8);','try(FileOutputStream out=new FileOutputStream(f,false)){out.write(r.value.getBytes(StandardCharsets.UTF_8));}')
+          s=s.replace('List<String> lines=Files.readAllLines(f.toPath(),StandardCharsets.UTF_8);','List<String> lines=new ArrayList<>();try(BufferedReader br=new BufferedReader(new InputStreamReader(new FileInputStream(f),StandardCharsets.UTF_8))){String line;while((line=br.readLine())!=null)lines.add(line);}')
+          p.write_text(s)
+          PY
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - uses: android-actions/setup-android@v3
+      - run: yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools" "emulator" "system-images;android-36;google_apis;x86_64"
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '8.13'}
+      - run: gradle --no-daemon --console=plain -p unified-scanner testDebugUnitTest assembleDebug
+      - name: API 36 cold launch and UI smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/android-avd"; mkdir -p "$ANDROID_AVD_HOME"
+          echo no | avdmanager create avd --force --name scanner36 --package 'system-images;android-36;google_apis;x86_64' --device 'pixel_8_pro' --path "$ANDROID_AVD_HOME/scanner36.avd"
+          "$ANDROID_HOME/emulator/emulator" -avd scanner36 -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim > /tmp/emulator.log 2>&1 &
+          timeout 240 adb wait-for-device
+          for i in $(seq 1 90); do [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ] && break; sleep 4; done
+          APK=unified-scanner/app/build/outputs/apk/debug/app-debug.apk
+          adb install -r "$APK" | tee /tmp/install.txt
+          grep -q Success /tmp/install.txt
+          adb logcat -c
+          adb shell am start -W -n com.suhas.nseunifiedscanner/.MainActivity | tee /tmp/launch.txt
+          sleep 8
+          adb shell dumpsys activity activities > /tmp/activity.txt
+          grep -Eq '(topResumedActivity|ResumedActivity|mResumedActivity).*com.suhas.nseunifiedscanner/.MainActivity' /tmp/activity.txt
+          adb shell uiautomator dump /sdcard/ui.xml >/dev/null
+          adb pull /sdcard/ui.xml /tmp/ui.xml >/dev/null
+          grep -q 'NSE UNIFIED SCANNER' /tmp/ui.xml
+          grep -q '30-MIN TARGET HIT RATE' /tmp/ui.xml
+          grep -q 'TOP 3' /tmp/ui.xml
+          adb logcat -d -v threadtime > /tmp/logcat.txt
+          ! grep -E 'FATAL EXCEPTION|Process: com.suhas.nseunifiedscanner' /tmp/logcat.txt
+          adb exec-out screencap -p > /tmp/dashboard-api36.png
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: NSE-Scanner-API36-Smoke
+          path: |
+            /tmp/install.txt
+            /tmp/launch.txt
+            /tmp/activity.txt
+            /tmp/ui.xml
+            /tmp/logcat.txt
+            /tmp/dashboard-api36.png
