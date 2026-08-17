@@ -1,0 +1,23 @@
+name: Export Android APK Signer
+on:
+  push:
+    branches: [unified-nse-scanner-v1]
+    paths: ['.github/workflows/export-apksigner.yml']
+  workflow_dispatch:
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: android-actions/setup-android@v3
+      - run: |
+          yes | sdkmanager "build-tools;35.0.0"
+          mkdir -p signer/lib
+          cp "$ANDROID_HOME/build-tools/35.0.0/apksigner" signer/
+          cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" signer/lib/
+          chmod +x signer/apksigner
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Android-ApkSigner-35
+          path: signer/**
