@@ -1,0 +1,133 @@
+name: NSE Unified Scanner v1.0.0 S24
+
+on:
+  push:
+    branches: [unified-nse-scanner-v1]
+    paths:
+      - 'unified-scanner-src.tgz.b64'
+      - '.github/workflows/unified-scanner-build.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'unified-scanner-src.tgz.b64'
+      - '.github/workflows/unified-scanner-build.yml'
+  workflow_dispatch:
+
+jobs:
+  build-test-android16:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Expand scanner source
+        run: |
+          base64 -d unified-scanner-src.tgz.b64 > /tmp/unified-scanner-src.tgz
+          tar -xzf /tmp/unified-scanner-src.tgz
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK
+        run: yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools" "emulator" "system-images;android-36;google_apis;x86_64"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Unit tests lint and APKs
+        run: gradle --no-daemon --console=plain -p unified-scanner clean testDebugUnitTest lintDebug assembleDebug assembleRelease
+
+      - name: Name acceptance APK
+        run: |
+          mkdir -p unified-scanner/app/build/outputs/acceptance
+          cp unified-scanner/app/build/outputs/apk/debug/app-debug.apk unified-scanner/app/build/outputs/acceptance/NSE-Unified-Scanner-S24-v1.0.0-ACCEPTANCE.apk
+          sha256sum unified-scanner/app/build/outputs/acceptance/NSE-Unified-Scanner-S24-v1.0.0-ACCEPTANCE.apk > unified-scanner/app/build/outputs/acceptance/SHA256.txt
+          $ANDROID_HOME/build-tools/35.0.0/apksigner verify --verbose --print-certs unified-scanner/app/build/outputs/acceptance/NSE-Unified-Scanner-S24-v1.0.0-ACCEPTANCE.apk > unified-scanner/app/build/outputs/acceptance/APK-SIGNATURE.txt
+
+      - name: Source contract checks
+        run: |
+          set -euo pipefail
+          ROOT=unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner
+          grep -q "applicationId 'com.suhas.nseunifiedscanner'" unified-scanner/app/build.gradle
+          grep -q "targetSdk 34" unified-scanner/app/build.gradle
+          grep -q 'PENDING_PROTECTION' "$ROOT/UnifiedService.java"
+          grep -q 'requiredSellPrice' "$ROOT/UnifiedService.java"
+          grep -q 'placeCashMisOco' "$ROOT/GrowwApi.java"
+          grep -q 'placeSlM' "$ROOT/GrowwApi.java"
+          grep -q 'positionQuantity' "$ROOT/GrowwApi.java"
+          grep -q 'relVol>=1.30' "$ROOT/ScannerEngine.java"
+          grep -q 'roomR2>=0.68' "$ROOT/ScannerEngine.java"
+          grep -q 'same-candle target+stop' unified-scanner/README.md
+
+      - name: Android 16 emulator acceptance
+        timeout-minutes: 18
+        shell: bash
+        run: |
+          set +e
+          OUT=unified-scanner/app/build/outputs/acceptance
+          : > "$OUT/acceptance-api36.log"
+          : > "$OUT/ui-api36.xml"
+          code=0
+          mark(){ echo "==== $1 ====" | tee -a "$OUT/acceptance-api36.log"; }
+          fail(){ echo "FAIL: $*" | tee -a "$OUT/acceptance-api36.log"; code=1; }
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/android-avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          AVD_PATH="$ANDROID_AVD_HOME/s24_unified_api36.avd"
+          echo no | avdmanager create avd --force --name s24_unified_api36 --package 'system-images;android-36;google_apis;x86_64' --device 'pixel_8_pro' --path "$AVD_PATH" >> "$OUT/acceptance-api36.log" 2>&1 || code=1
+          "$ANDROID_HOME/emulator/emulator" -avd s24_unified_api36 -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none > "$OUT/emulator-api36.log" 2>&1 &
+          EPID=$!
+          timeout 240 adb wait-for-device >> "$OUT/acceptance-api36.log" 2>&1 || code=1
+          booted=0
+          for i in $(seq 1 90); do
+            [ "$(timeout 10 adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] && { booted=1; break; }
+            kill -0 "$EPID" 2>/dev/null || break
+            sleep 4
+          done
+          if [ "$booted" = 1 ]; then
+            APK="$OUT/NSE-Unified-Scanner-S24-v1.0.0-ACCEPTANCE.apk"
+            mark INSTALL
+            adb install -r "$APK" > "$OUT/install-api36.txt" 2>&1 || code=1
+            grep -q Success "$OUT/install-api36.txt" || fail "APK install"
+            adb shell pm grant com.suhas.nseunifiedscanner android.permission.POST_NOTIFICATIONS >> "$OUT/acceptance-api36.log" 2>&1 || true
+            mark COLD_LAUNCH
+            adb logcat -c
+            adb shell am start -W -n com.suhas.nseunifiedscanner/.MainActivity > "$OUT/cold-launch.txt" 2>&1 || code=1
+            sleep 8
+            adb shell dumpsys activity activities > "$OUT/activity.txt" 2>&1
+            grep -Eq '(topResumedActivity|ResumedActivity|mResumedActivity).*com.suhas.nseunifiedscanner/.MainActivity' "$OUT/activity.txt" || fail "MainActivity not resumed"
+            adb shell uiautomator dump /sdcard/unified.xml >> "$OUT/acceptance-api36.log" 2>&1
+            adb pull /sdcard/unified.xml "$OUT/ui-api36.xml" >> "$OUT/acceptance-api36.log" 2>&1
+            adb exec-out screencap -p > "$OUT/dashboard-api36.png" 2>/dev/null
+            grep -q 'NSE UNIFIED SCANNER' "$OUT/ui-api36.xml" || fail "Header missing"
+            grep -q '30-MIN TARGET HIT RATE' "$OUT/ui-api36.xml" || fail "Hit-rate UI missing"
+            grep -q 'TOP 3' "$OUT/ui-api36.xml" || fail "Top-3 UI missing"
+            adb logcat -d -v threadtime > "$OUT/logcat-api36.txt" 2>&1
+            if grep -E 'FATAL EXCEPTION|Process: com.suhas.nseunifiedscanner|ClassNotFoundException.*com.suhas.nseunifiedscanner' "$OUT/logcat-api36.txt" >> "$OUT/acceptance-api36.log"; then fail "Application crash detected"; fi
+          else
+            fail "Emulator did not boot"
+          fi
+          echo "$code" > "$OUT/acceptance-api36-exit-code.txt"
+          timeout 15 adb emu kill >/dev/null 2>&1 || true
+          kill "$EPID" >/dev/null 2>&1 || true
+          exit 0
+
+      - name: Upload acceptance package
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: NSE-Unified-Scanner-S24-v1.0.0-ACCEPTANCE
+          path: |
+            unified-scanner/app/build/outputs/acceptance/**
+            unified-scanner/INSTALL-S24-LADB.txt
+            unified-scanner/RELEASE-NOTES-v1.0.0.txt
+            unified-scanner/app/build/reports/tests/testDebugUnitTest/**
+            unified-scanner/app/build/reports/lint-results-debug.html
+          if-no-files-found: error
+
+      - name: Fail if emulator acceptance failed
+        run: test "$(cat unified-scanner/app/build/outputs/acceptance/acceptance-api36-exit-code.txt)" = "0"
