@@ -1,0 +1,26 @@
+name: Export Unified Scanner Source
+on:
+  push:
+    branches: [unified-nse-scanner-v1]
+    paths:
+      - '.github/workflows/export-unified-scanner-source.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Expand source
+        run: |
+          cat unified-scanner-src.part* | base64 -d > /tmp/src.tgz
+          tar -xzf /tmp/src.tgz
+      - name: Package source
+        run: |
+          tar -czf /tmp/unified-scanner-source.tgz unified-scanner
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unified-scanner-source
+          path: /tmp/unified-scanner-source.tgz
+          retention-days: 1
