@@ -7,7 +7,6 @@ import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.content.SharedPreferences;
 
-import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
@@ -54,7 +53,7 @@ final class LearningStore extends SQLiteOpenHelper {
         ContentValues v=new ContentValues(); v.put("status",outcome); v.put("resolved_ms",resolvedMs);
         int n=getWritableDatabase().update("recommendations",v,"id=? AND status='PENDING'",new String[]{String.valueOf(id)});
         if(n==1 && ("SUCCESS".equals(outcome)||"FAIL".equals(outcome)||"TIMEOUT".equals(outcome))) {
-            AdaptiveModel.update(context,features,"SUCCESS".equals(outcome)?1.0:0.0);
+            AdaptiveModel.update(context,features,"SUCCESS".equals(outcome)?1.0:0.0,1.0);
             retuneThreshold();
         }
     }
@@ -90,13 +89,20 @@ final class LearningStore extends SQLiteOpenHelper {
         return b.toString();
     }
 
+    /**
+     * Threshold changes are deliberately slow. The old implementation could
+     * raise the floor by two points after every single new outcome, which can
+     * starve the scanner of candidates. We now retune only once per 20 newly
+     * resolved primary recommendations, one point at a time, with hysteresis.
+     */
     private void retuneThreshold() {
         Stats s=stats(); if(s.n<30)return;
         SharedPreferences p=context.getSharedPreferences("scanner_prefs",Context.MODE_PRIVATE);
+        int last=p.getInt("last_retune_sample_n",0); if(s.n-last<20)return;
         int minScore=p.getInt("min_score",82);
-        if(s.rate<80.0) minScore=Math.min(92,minScore+2);
+        if(s.rate<76.0) minScore=Math.min(90,minScore+1);
         else if(s.rate>=86.0 && s.n>=50) minScore=Math.max(80,minScore-1);
-        p.edit().putInt("min_score",minScore).apply();
+        p.edit().putInt("min_score",minScore).putInt("last_retune_sample_n",s.n).apply();
     }
 
     static final class OpenRec { long id,scanMs,deadlineMs; String symbol,growwSymbol,features; double entry,target,stop; }
@@ -120,13 +126,16 @@ final class AdaptiveModel {
         return clamp(prob,0.05,0.98);
     }
 
-    static void update(Context c,String featuresJson,double y) {
+    static void update(Context c,String featuresJson,double y) { update(c,featuresJson,y,1.0); }
+
+    /** Primary outcomes use scale 1.0; shadow outcomes use a smaller scale. */
+    static void update(Context c,String featuresJson,double y,double scale) {
         try {
             JSONObject f=new JSONObject(featuresJson); SharedPreferences p=c.getSharedPreferences("model_weights",Context.MODE_PRIVATE);
             double bias=Double.longBitsToDouble(p.getLong("bias",Double.doubleToLongBits(DEFAULT_BIAS)));
             double[] w=new double[NAMES.length]; for(int i=0;i<w.length;i++)w[i]=Double.longBitsToDouble(p.getLong("w"+i,Double.doubleToLongBits(DEFAULT[i])));
             double z=bias; for(int i=0;i<w.length;i++)z+=w[i]*clamp(f.optDouble(NAMES[i],0.5),0,1);
-            double pred=1.0/(1.0+Math.exp(-z)); double err=y-pred; double lr=0.015;
+            double pred=1.0/(1.0+Math.exp(-z)); double err=y-pred; double lr=0.015*clamp(scale,0.05,1.0);
             bias=clamp(bias+lr*err,-4.5,-0.5); SharedPreferences.Editor e=p.edit().putLong("bias",Double.doubleToLongBits(bias));
             for(int i=0;i<w.length;i++){double x=clamp(f.optDouble(NAMES[i],0.5),0,1);w[i]=clamp(w[i]+lr*(err*x-0.003*w[i]),-1.2,2.2);e.putLong("w"+i,Double.doubleToLongBits(w[i]));}
             e.apply();
