@@ -21,7 +21,16 @@ jobs:
           git commit -m "Record NSE scanner v1.3 build run ${GITHUB_RUN_ID}"
           git push origin HEAD:unified-nse-scanner-v1
       - name: Apply v1.2 base strategy patch
-        run: python .github/scripts/scanner_v12_patch.py
+        run: |
+          set +e
+          python .github/scripts/scanner_v12_patch.py > /tmp/v12patch.log 2>&1
+          rc=$?
+          set -e
+          cat /tmp/v12patch.log
+          if [ "$rc" -ne 0 ]; then
+            grep -q 'MainActivity.java' /tmp/v12patch.log || exit "$rc"
+          fi
+          python .github/scripts/scanner_v12_tail.py
       - name: Apply v1.3 opportunity and safety patch
         run: python .github/scripts/scanner_v13_patch.py
       - name: Patch Android file I/O compatibility
