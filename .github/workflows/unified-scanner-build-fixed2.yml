@@ -10,10 +10,8 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
-      - name: Expand and patch Android source
+      - name: Patch Android file I/O compatibility
         run: |
-          cat unified-scanner-src.part* | base64 -d > /tmp/src.tgz
-          tar -xzf /tmp/src.tgz
           python - <<'PY'
           from pathlib import Path
           p=Path('unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/ScannerEngine.java')
@@ -32,19 +30,21 @@ jobs:
         run: |
           gradle --no-daemon --console=plain -p unified-scanner clean testDebugUnitTest lintDebug assembleDebug assembleRelease
           mkdir -p unified-scanner/out
-          cp unified-scanner/app/build/outputs/apk/debug/app-debug.apk unified-scanner/out/NSE-Unified-Scanner-S24-v1.0.0.apk
-          cp unified-scanner/app/build/outputs/apk/release/app-release-unsigned.apk unified-scanner/out/NSE-Unified-Scanner-S24-v1.0.0-UNSIGNED.apk
-          $ANDROID_HOME/build-tools/35.0.0/apksigner verify --verbose --print-certs unified-scanner/out/NSE-Unified-Scanner-S24-v1.0.0.apk > unified-scanner/out/APK-SIGNATURE.txt
-          sha256sum unified-scanner/out/NSE-Unified-Scanner-S24-v1.0.0.apk > unified-scanner/out/SHA256.txt
-          grep -q 'PENDING_PROTECTION' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/UnifiedService.java
-          grep -q 'placeCashMisOco' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/GrowwApi.java
+          cp unified-scanner/app/build/outputs/apk/debug/app-debug.apk unified-scanner/out/NSE-Unified-Scanner-S24-v1.1.0-DEBUG.apk
+          cp unified-scanner/app/build/outputs/apk/release/app-release-unsigned.apk unified-scanner/out/NSE-Unified-Scanner-S24-v1.1.0-UNSIGNED.apk
+          $ANDROID_HOME/build-tools/35.0.0/aapt dump badging unified-scanner/out/NSE-Unified-Scanner-S24-v1.1.0-DEBUG.apk | grep "versionName='1.1.0'"
+          $ANDROID_HOME/build-tools/35.0.0/apksigner verify --verbose --print-certs unified-scanner/out/NSE-Unified-Scanner-S24-v1.1.0-DEBUG.apk > unified-scanner/out/DEBUG-SIGNATURE.txt
+          sha256sum unified-scanner/out/NSE-Unified-Scanner-S24-v1.1.0-DEBUG.apk > unified-scanner/out/DEBUG-SHA256.txt
+          grep -q 'TARGET HITS TODAY' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/MainActivity.java
+          grep -q 'CONNECTION HEALTH' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/MainActivity.java
+          grep -q 'recordShadowIfNew' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/ScannerEngine.java
+          grep -q 'static_ip_state' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/UnifiedService.java
           grep -q 'relVol>=1.30' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/ScannerEngine.java
       - uses: actions/upload-artifact@v4
         with:
-          name: NSE-Unified-Scanner-S24-v1.0.0
+          name: NSE-Unified-Scanner-S24-v1.1.0
           path: |
             unified-scanner/out/**
-            unified-scanner/INSTALL-S24-LADB.txt
-            unified-scanner/RELEASE-NOTES-v1.0.0.txt
             unified-scanner/app/build/reports/tests/testDebugUnitTest/**
             unified-scanner/app/build/reports/lint-results-debug.html
+          retention-days: 30
