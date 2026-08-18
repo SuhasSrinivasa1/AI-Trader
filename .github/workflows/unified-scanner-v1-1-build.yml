@@ -1,0 +1,36 @@
+name: NSE Unified Scanner v1.1 Build
+on:
+  push:
+    branches: [unified-nse-scanner-v1]
+    paths:
+      - '.github/workflows/unified-scanner-v1-1-build.yml'
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - run: yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Test lint and build
+        run: gradle --no-daemon --console=plain -p unified-scanner testDebugUnitTest lintDebug assembleDebug assembleRelease
+      - name: Validate APKs
+        run: |
+          test -s unified-scanner/app/build/outputs/apk/debug/app-debug.apk
+          test -s unified-scanner/app/build/outputs/apk/release/app-release-unsigned.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging unified-scanner/app/build/outputs/apk/debug/app-debug.apk | grep "versionName='1.1.0'"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NSE-Unified-Scanner-S24-v1.1.0-UNSIGNED
+          path: |
+            unified-scanner/app/build/outputs/apk/release/app-release-unsigned.apk
+            unified-scanner/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
