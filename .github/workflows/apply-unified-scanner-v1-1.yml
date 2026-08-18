@@ -1,0 +1,166 @@
+name: Apply Unified Scanner v1.1
+on:
+  push:
+    branches: [unified-nse-scanner-v1]
+    paths:
+      - '.github/workflows/apply-unified-scanner-v1-1.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply v1.1 source changes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def req_replace(path, old, new, label):
+              p=Path(path); s=p.read_text()
+              if old not in s:
+                  raise SystemExit(f'Missing pattern {label} in {path}')
+              p.write_text(s.replace(old,new,1))
+
+          # Scanner: broader WATCH discovery, unchanged live BUY hard gates, shadow learning.
+          p=Path('unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/ScannerEngine.java')
+          s=p.read_text()
+          s=s.replace('private static final int TOP_PREFILTER=26;','private static final int TOP_PREFILTER=32;')
+          s=s.replace('private static final int TOP_QUOTE=14;','private static final int TOP_QUOTE=18;')
+          s=s.replace('private final LearningStore learning;','private final LearningStore learning;\n    private final LearningInsights insights;',1)
+          s=s.replace('ScannerEngine(Context c) { context=c.getApplicationContext(); learning=new LearningStore(context); }','ScannerEngine(Context c) { context=c.getApplicationContext(); learning=new LearningStore(context); insights=new LearningInsights(context); }',1)
+          s=s.replace('resolvePending(token);','resolvePending(token);\n            resolveShadowPending(token);',1)
+          s=s.replace('if(l<20||l>10000||day<0.25||day>9.0)continue;','if(l<20||l>10000||day<-0.15||day>9.0)continue;',1)
+          s=s.replace('if(fromOpen<-0.10||nearHigh>1.75)continue;','if(fromOpen<-0.35||nearHigh>3.00)continue;',1)
+          old='if(entry<=vwap||rsi<52||rsi>75||!macd.bullish||oneHour<0.30||relVol<1.05||roomR2<0.45||distR1>0.55||distR1<-0.75||wickRatio>1.6)return null;'
+          new='// Discovery gate is intentionally wider than the live BUY gate. This keeps a useful Top 3/Watch list even in weak markets while score() still enforces strict live-entry safety.\n        if(entry<vwap*0.998||rsi<46||rsi>79||oneHour<-0.15||relVol<0.75||roomR2<0.20||distR1>0.80||distR1<-1.20||wickRatio>2.6)return null;'
+          if old not in s: raise SystemExit('Missing Scanner discovery gate')
+          s=s.replace(old,new,1)
+          old='recs.sort(Comparator.comparingDouble((Recommendation r)->r.rankScore).reversed());\n            if(recs.size()>3)recs=new ArrayList<>(recs.subList(0,3));\n            for(Recommendation r:recs) learning.recordIfNew(r);'
+          new='recs.sort(Comparator.comparingDouble((Recommendation r)->r.rankScore).reversed());\n            // Ranks 4-10 are lower-weight shadow observations. They never appear in the headline hit rate and never enable BUY, but they give the adaptive model far more 30-minute outcomes to learn from.\n            for(int i=3;i<Math.min(10,recs.size());i++) insights.recordShadowIfNew(recs.get(i));\n            if(recs.size()>3)recs=new ArrayList<>(recs.subList(0,3));\n            for(Recommendation r:recs) learning.recordIfNew(r);'
+          if old not in s: raise SystemExit('Missing Scanner rec sort block')
+          s=s.replace(old,new,1)
+          marker='    private List<Instrument> loadUniverse() throws Exception {'
+          shadow='''    private void resolveShadowPending(String token){
+              long now=System.currentTimeMillis();
+              for(LearningInsights.ShadowRec r:insights.openShadow()){
+                  try{
+                      LocalDateTime st=LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(r.scanMs),IST).minusMinutes(1);
+                      LocalDateTime en=LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(Math.min(now,r.deadlineMs)),IST).plusMinutes(1);
+                      GrowwApi.Result<List<GrowwApi.Candle>> hr=GrowwApi.candles(token,r.growwSymbol,st.format(API_TIME),en.format(API_TIME),"5minute");
+                      if(!hr.ok)continue;
+                      String outcome=null;
+                      for(GrowwApi.Candle c:hr.value){boolean hitT=c.high>=r.target;boolean hitS=c.low<=r.stop;if(hitT&&hitS){outcome="AMBIGUOUS";break;}if(hitT){outcome="SUCCESS";break;}if(hitS){outcome="FAIL";break;}}
+                      if(outcome==null&&now>=r.deadlineMs)outcome="TIMEOUT";
+                      if(outcome!=null){insights.resolveShadow(r.id,outcome,now,r.features);learning.audit("SHADOW",r.symbol+" → "+outcome);}
+                  }catch(Exception ignore){}
+              }
+          }
+
+'''
+          if marker not in s: raise SystemExit('Missing Scanner loadUniverse marker')
+          s=s.replace(marker,shadow+marker,1)
+          p.write_text(s)
+
+          # Service: explicit API / fixed-IP / feed connectivity evidence.
+          p=Path('unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/UnifiedService.java')
+          s=p.read_text()
+          old='setStatus("Scanning NSE…"); ScannerEngine.ScanResult r=scanner.scan(token); if(r.error==null||r.error.isEmpty())setStatus("Scan complete • "+r.marketLabel+" • "+r.recommendations.size()+" candidates");else setStatus("Scan error • "+r.error);'
+          new='''setStatus("Scanning NSE…"); ScannerEngine.ScanResult r=scanner.scan(token);
+            if(r.error==null||r.error.isEmpty()){
+                prefs().edit().putBoolean("groww_api_ok",true).putLong("groww_api_checked_ms",System.currentTimeMillis()).putBoolean("nse_feed_ok",true).putLong("nse_feed_checked_ms",System.currentTimeMillis()).apply();
+                checkStaticIp(false);
+                setStatus("Scan complete • "+r.marketLabel+" • "+r.recommendations.size()+" candidates");
+            }else{
+                prefs().edit().putBoolean("nse_feed_ok",false).putLong("nse_feed_checked_ms",System.currentTimeMillis()).apply();
+                setStatus("Scan error • "+r.error);
+            }'''
+          if old not in s: raise SystemExit('Missing service scan status block')
+          s=s.replace(old,new,1)
+          s=s.replace('GrowwApi.Result<String> a=GrowwApi.authenticate(api,secret);if(!a.ok){setStatus("Groww auth failed • "+a.error);learning.audit("AUTH",a.error);return "";}','GrowwApi.Result<String> a=GrowwApi.authenticate(api,secret);if(!a.ok){prefs().edit().putBoolean("groww_api_ok",false).putLong("groww_api_checked_ms",System.currentTimeMillis()).apply();setStatus("Groww auth failed • "+a.error);learning.audit("AUTH",a.error);return "";}',1)
+          s=s.replace('GrowwApi.Result<String> v=GrowwApi.verifyProfile(a.value);if(!v.ok){setStatus("Groww profile check failed • "+v.error);learning.audit("AUTH",v.error);return "";}','GrowwApi.Result<String> v=GrowwApi.verifyProfile(a.value);if(!v.ok){prefs().edit().putBoolean("groww_api_ok",false).putLong("groww_api_checked_ms",System.currentTimeMillis()).apply();setStatus("Groww profile check failed • "+v.error);learning.audit("AUTH",v.error);return "";}',1)
+          old='setStatus("Groww authenticated • NSE ready");learning.audit("AUTH","Groww authenticated");return a.value;'
+          new='prefs().edit().putBoolean("groww_api_ok",true).putLong("groww_api_checked_ms",System.currentTimeMillis()).apply();checkStaticIp(true);setStatus("Groww authenticated • NSE ready");learning.audit("AUTH","Groww authenticated");return a.value;'
+          if old not in s: raise SystemExit('Missing auth success block')
+          s=s.replace(old,new,1)
+          old='String publicIp=publicIp();if(publicIp.isEmpty()||!configured.equals(publicIp)){setStatus("BUY blocked • public IP does not match Groww-whitelisted IP");return;}'
+          new='String publicIp=publicIp();boolean ipOk=!publicIp.isEmpty()&&configured.equals(publicIp);prefs().edit().putInt("static_ip_state",ipOk?1:(publicIp.isEmpty()?0:-1)).putLong("static_ip_checked_ms",System.currentTimeMillis()).apply();if(!ipOk){setStatus("BUY blocked • public IP does not match Groww-whitelisted IP");return;}'
+          if old not in s: raise SystemExit('Missing BUY IP block')
+          s=s.replace(old,new,1)
+          marker='    private String publicIp(){'
+          helper='''    private void checkStaticIp(boolean force){
+              long now=System.currentTimeMillis(),last=prefs().getLong("static_ip_checked_ms",0);
+              if(!force && now-last<10*60_000L)return;
+              String configured=SecureStore.get(this,SecureStore.DEDICATED_IP);
+              if(configured.isEmpty()){prefs().edit().putInt("static_ip_state",0).putLong("static_ip_checked_ms",now).apply();return;}
+              String current=publicIp();int state=current.isEmpty()?0:(configured.equals(current)?1:-1);
+              prefs().edit().putInt("static_ip_state",state).putLong("static_ip_checked_ms",now).apply();
+          }
+
+'''
+          if marker not in s: raise SystemExit('Missing publicIp marker')
+          s=s.replace(marker,helper+marker,1)
+          s=s.replace('NSEUnifiedScanner/1.0','NSEUnifiedScanner/1.1')
+          p.write_text(s)
+
+          # Main UI: resolved hit names, connection health, confidence and shadow-learning telemetry.
+          p=Path('unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/MainActivity.java')
+          s=p.read_text()
+          old='private LinearLayout body,recs;private TextView successRate,successSub,market,status,scanMeta,active;private Switch liveSwitch;\n    private LearningStore learning;'
+          new='private LinearLayout body,recs,hits;private TextView successRate,successSub,market,status,scanMeta,active,connectivity,historySummary,learningMeta;private Switch liveSwitch;\n    private LearningStore learning; private LearningInsights insights;'
+          if old not in s: raise SystemExit('Missing Main fields')
+          s=s.replace(old,new,1)
+          old='learning=new LearningStore(this);setContentView(buildUi());'
+          new='learning=new LearningStore(this);insights=new LearningInsights(this);setContentView(buildUi());'
+          if old not in s: raise SystemExit('Missing Main init')
+          s=s.replace(old,new,1)
+          old='LinearLayout perf=card();TextView cap=txt("30-MIN TARGET HIT RATE",11,MUTED,true);successRate=txt("—",38,TEXT,true);successSub=txt("No resolved scanner recommendations yet • goal ≥80%, never guaranteed",12,MUTED,false);perf.addView(cap);perf.addView(successRate);perf.addView(successSub);body.addView(perf);\n        body.addView(space(10));'
+          new='''LinearLayout perf=card();TextView cap=txt("30-MIN TARGET HIT RATE",11,MUTED,true);successRate=txt("—",38,TEXT,true);successSub=txt("No resolved scanner recommendations yet • goal ≥80%, never guaranteed",12,MUTED,false);perf.addView(cap);perf.addView(successRate);perf.addView(successSub);body.addView(perf);
+        body.addView(space(10));
+
+        LinearLayout hc=card();hc.addView(txt("TARGET HITS TODAY",12,GREEN,true));historySummary=txt("Waiting for resolved recommendations…",12,MUTED,false);hc.addView(historySummary);hc.addView(space(7));hits=new LinearLayout(this);hits.setOrientation(LinearLayout.VERTICAL);hc.addView(hits);body.addView(hc);
+        body.addView(space(10));'''
+          if old not in s: raise SystemExit('Missing perf block')
+          s=s.replace(old,new,1)
+          old='m.addView(market);m.addView(status);m.addView(scanMeta);body.addView(m);\n        body.addView(space(10));'
+          new='''m.addView(market);m.addView(status);m.addView(scanMeta);body.addView(m);
+        body.addView(space(10));
+
+        LinearLayout conn=card();conn.addView(txt("CONNECTION HEALTH",12,ACCENT,true));connectivity=txt("Groww API  ○ CHECKING\\nStatic IP  ○ CHECKING\\nNSE feed  ○ CHECKING",12,TEXT,true);conn.addView(connectivity);body.addView(conn);
+        body.addView(space(10));'''
+          if old not in s: raise SystemExit('Missing market block')
+          s=s.replace(old,new,1)
+          old='LinearLayout learn=card();learn.addView(txt("SELF-LEARNING RULE",12,ACCENT,true));learn.addView(txt("Every recommendation is replayed for 30 minutes. Target-before-stop = success; stop/timeout = failure; same-candle target+stop is excluded as ambiguous. Learning may tighten selection, but cannot change the 0.50% net target, 30-minute time stop, liquidity gates, or protection rules.",12,MUTED,false));body.addView(learn);\n        body.addView(space(8));TextView footer=txt("v1.0.0 • standalone package com.suhas.nseunifiedscanner • Multyfi AutoBuy is untouched",10,MUTED,false);'
+          new='''LinearLayout learn=card();learn.addView(txt("FAST SELF-LEARNING",12,ACCENT,true));learn.addView(txt("Displayed recommendations keep the official hit-rate. Ranks 4–10 are replayed separately as lower-weight shadow observations so the model learns faster without inflating the success metric. Live BUY gates remain strict; learning cannot override the +0.50% net objective, 30-minute time stop, liquidity, spread, R:R or protection rules.",12,MUTED,false));learningMeta=txt("Shadow learning starting…",11,MUTED,false);learn.addView(space(6));learn.addView(learningMeta);body.addView(learn);
+        body.addView(space(8));TextView footer=txt("v1.1.0 • standalone package com.suhas.nseunifiedscanner • Multyfi AutoBuy is untouched",10,MUTED,false);'''
+          if old not in s: raise SystemExit('Missing learning/footer block')
+          s=s.replace(old,new,1)
+          old='LearningStore.Stats s=learning.stats();if(s.n==0){successRate.setText("—");successRate.setTextColor(TEXT);successSub.setText("No resolved scanner recommendations yet • goal ≥80%, never guaranteed");}else{successRate.setText(String.format(Locale.US,"%.1f%%",s.rate));successRate.setTextColor(s.rate>=80?GREEN:s.rate>=70?AMBER:RED);successSub.setText("Last "+s.n+" resolved recommendations • "+s.wins+" target hits • executed sample "+s.executedN);}'
+          new='''LearningStore.Stats s=learning.stats();if(s.n==0){successRate.setText("—");successRate.setTextColor(TEXT);successSub.setText("No resolved scanner recommendations yet • goal ≥80%, never guaranteed");}else{successRate.setText(String.format(Locale.US,"%.1f%%",s.rate));successRate.setTextColor(s.rate>=80?GREEN:s.rate>=70?AMBER:RED);String confidence=s.n<20?"LOW CONFIDENCE":s.n<50?"BUILDING CONFIDENCE":"ROLLING EVIDENCE";successSub.setText(s.wins+"/"+s.n+" target hits • "+confidence+" • executed "+s.executedN+" • goal ≥80%, not guaranteed");}
+        renderHistory();renderConnectivity();LearningInsights.ShadowStats sh=insights.shadowStats();learningMeta.setText("Shadow learning today: "+sh.resolvedToday+" resolved • "+sh.hitsToday+" target-first • "+sh.pending+" pending. Shadow outcomes update model weights at 25% strength and never alter the headline hit-rate.");'''
+          if old not in s: raise SystemExit('Missing render stats')
+          s=s.replace(old,new,1)
+          marker='    private void details(ScannerEngine.Recommendation r){'
+          methods='''    private void renderHistory(){
+        LearningInsights.TodaySummary t=insights.todaySummary();historySummary.setText(t.hits+" hits • "+t.stops+" stops • "+t.timeouts+" timeouts • "+t.resolved+" resolved today");hits.removeAllViews();java.util.List<LearningInsights.HistoryRow> rows=insights.todayHits(6);if(rows.isEmpty()){hits.addView(txt("No target hits resolved today yet.",12,MUTED,false));return;}for(LearningInsights.HistoryRow r:rows){String line="✓ "+r.symbol+"   ₹"+money(r.entry)+" → ₹"+money(r.target)+"   • score "+String.format(Locale.US,"%.0f",r.score)+"   • "+time(r.scanMs)+" → "+time(r.resolvedMs)+(r.bought?"   • EXECUTED":"");hits.addView(txt(line,12,GREEN,true));hits.addView(space(4));}}
+
+    private void renderConnectivity(){
+        long now=System.currentTimeMillis();boolean api=prefs().getBoolean("groww_api_ok",false);long apiAge=now-prefs().getLong("groww_api_checked_ms",0);int ip=prefs().getInt("static_ip_state",0);long ipAge=now-prefs().getLong("static_ip_checked_ms",0);boolean feed=prefs().getBoolean("nse_feed_ok",false);long feedAge=now-prefs().getLong("nse_feed_checked_ms",0);
+        String a=api&&apiAge<8*60*60_000L?"✅ CONNECTED":"⚠ AUTH / CHECK REQUIRED";String i=ip==1&&ipAge<30*60_000L?"✅ MATCHED":ip==-1?"❌ MISMATCH":"○ NOT VERIFIED";String f=feed&&feedAge<7*60_000L?"✅ LIVE":"⚠ STALE / WAITING";connectivity.setText("Groww API  "+a+"\\nStatic IP  "+i+"\\nNSE feed  "+f+"\\nGreen is shown only after an actual API/feed check; the IP value itself is never displayed.");
+    }
+
+'''
+          if marker not in s: raise SystemExit('Missing details marker')
+          s=s.replace(marker,methods+marker,1)
+          p.write_text(s)
+
+          # Version bump.
+          p=Path('unified-scanner/app/build.gradle');s=p.read_text();s=s.replace('versionCode 100','versionCode 110').replace("versionName '1.0.0'","versionName '1.1.0'");p.write_text(s)
+          PY
+      - name: Commit v1.1
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add unified-scanner
+          git commit -m 'NSE Unified Scanner v1.1 faster learning and health UI'
+          git push origin HEAD:unified-nse-scanner-v1
