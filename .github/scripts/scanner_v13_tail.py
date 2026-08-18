@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 ROOT=Path('unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner')
 
 def rep(path,old,new):
@@ -30,5 +31,8 @@ rep(up,
 '''String setup=rec.features.optString("setupType","MOMENTUM");String body=String.format(Locale.US,"%s • Entry ₹%.2f • Target ₹%.2f • SL ₹%.2f • Score %.0f/100 • model %.0f%% • max 30 min. Tap to review and BUY.",setup,rec.entry,rec.target,rec.stop,rec.score,rec.probability*100);''',
 '''String setup=rec.features.optString("setupType","MOMENTUM");LearningStore.Stats ms=learning.stats();String confidence=ms.n<30?("calibration "+ms.n+"/30"):(String.format(Locale.US,"model %.0f%%",rec.probability*100));String body=String.format(Locale.US,"%s • Entry ₹%.2f • Target ₹%.2f • SL ₹%.2f • Score %.0f/100 • %s • max 30 min. Tap to review and BUY.",setup,rec.entry,rec.target,rec.stop,rec.score,confidence);''')
 
-rep(gp,"versionCode 110\n        versionName '1.1.0'","versionCode 130\n        versionName '1.3.0'")
+s=gp.read_text()
+out,n=re.subn(r"versionCode\s+\d+\s*\n\s*versionName\s+'[^']+'","versionCode 130\n        versionName '1.3.0'",s,count=1)
+if n!=1: raise SystemExit('missing v1.3 version anchor')
+gp.write_text(out)
 print('v1.3 tail patch applied successfully')
