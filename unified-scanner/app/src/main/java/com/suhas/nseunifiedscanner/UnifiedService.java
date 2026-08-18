@@ -55,7 +55,15 @@ public class UnifiedService extends Service {
         scanWork.execute(()->{try{
             if(!manual && !ScannerEngine.marketHoursNow()) { setStatus("Market closed • next scan during NSE hours"); return; }
             String token=ensureToken(false); if(token.isEmpty()){setStatus("Groww authentication required • scanner paused");return;}
-            setStatus("Scanning NSE…"); ScannerEngine.ScanResult r=scanner.scan(token); if(r.error==null||r.error.isEmpty())setStatus("Scan complete • "+r.marketLabel+" • "+r.recommendations.size()+" candidates");else setStatus("Scan error • "+r.error);
+            setStatus("Scanning NSE…"); ScannerEngine.ScanResult r=scanner.scan(token);
+            if(r.error==null||r.error.isEmpty()){
+                prefs().edit().putBoolean("groww_api_ok",true).putLong("groww_api_checked_ms",System.currentTimeMillis()).putBoolean("nse_feed_ok",true).putLong("nse_feed_checked_ms",System.currentTimeMillis()).apply();
+                checkStaticIp(false);
+                setStatus("Scan complete • "+r.marketLabel+" • "+r.recommendations.size()+" candidates");
+            }else{
+                prefs().edit().putBoolean("nse_feed_ok",false).putLong("nse_feed_checked_ms",System.currentTimeMillis()).apply();
+                setStatus("Scan error • "+r.error);
+            }
         }finally{scanning.set(false);}});
     }
 
@@ -74,10 +82,10 @@ public class UnifiedService extends Service {
 
     private synchronized String authenticate(boolean force){
         prefs().edit().putLong("last_auth_attempt",System.currentTimeMillis()).apply(); String api=SecureStore.get(this,SecureStore.API_KEY),secret=SecureStore.get(this,SecureStore.TOTP_SECRET);
-        GrowwApi.Result<String> a=GrowwApi.authenticate(api,secret);if(!a.ok){setStatus("Groww auth failed • "+a.error);learning.audit("AUTH",a.error);return "";}
-        GrowwApi.Result<String> v=GrowwApi.verifyProfile(a.value);if(!v.ok){setStatus("Groww profile check failed • "+v.error);learning.audit("AUTH",v.error);return "";}
+        GrowwApi.Result<String> a=GrowwApi.authenticate(api,secret);if(!a.ok){prefs().edit().putBoolean("groww_api_ok",false).putLong("groww_api_checked_ms",System.currentTimeMillis()).apply();setStatus("Groww auth failed • "+a.error);learning.audit("AUTH",a.error);return "";}
+        GrowwApi.Result<String> v=GrowwApi.verifyProfile(a.value);if(!v.ok){prefs().edit().putBoolean("groww_api_ok",false).putLong("groww_api_checked_ms",System.currentTimeMillis()).apply();setStatus("Groww profile check failed • "+v.error);learning.audit("AUTH",v.error);return "";}
         try{SecureStore.put(this,SecureStore.ACCESS_TOKEN,a.value);SecureStore.put(this,SecureStore.ACCESS_DAY,LocalDate.now(ScannerEngine.IST).toString());}catch(Exception e){setStatus("Could not securely save Groww token");return "";}
-        setStatus("Groww authenticated • NSE ready");learning.audit("AUTH","Groww authenticated");return a.value;
+        prefs().edit().putBoolean("groww_api_ok",true).putLong("groww_api_checked_ms",System.currentTimeMillis()).apply();checkStaticIp(true);setStatus("Groww authenticated • NSE ready");learning.audit("AUTH","Groww authenticated");return a.value;
     }
 
     private void buy(String symbol){
@@ -89,8 +97,8 @@ public class UnifiedService extends Service {
             if(rec==null||!rec.qualified){setStatus("BUY blocked • recommendation is not qualified");return;}
             if(System.currentTimeMillis()-rec.scanMs>150_000L){setStatus("BUY blocked • recommendation is stale; refresh scan");return;}
             String token=ensureToken(false);if(token.isEmpty()){setStatus("BUY blocked • Groww authentication required");return;}
-            String configured=SecureStore.get(this,SecureStore.DEDICATED_IP);if(configured.isEmpty()){setStatus("BUY blocked • save your Groww-whitelisted Dedicated IP");return;}
-            String publicIp=publicIp();if(publicIp.isEmpty()||!configured.equals(publicIp)){setStatus("BUY blocked • public IP does not match Groww-whitelisted IP");return;}
+            String configured=SecureStore.get(this,SecureStore.DEDICATED_IP);if(configured.isEmpty()){prefs().edit().putInt("static_ip_state",0).putLong("static_ip_checked_ms",System.currentTimeMillis()).apply();setStatus("BUY blocked • save your Groww-whitelisted Dedicated IP");return;}
+            String publicIp=publicIp();boolean ipOk=!publicIp.isEmpty()&&configured.equals(publicIp);prefs().edit().putInt("static_ip_state",ipOk?1:(publicIp.isEmpty()?0:-1)).putLong("static_ip_checked_ms",System.currentTimeMillis()).apply();if(!ipOk){setStatus("BUY blocked • public IP does not match Groww-whitelisted IP");return;}
 
             GrowwApi.Result<GrowwApi.Quote> qr=GrowwApi.quote(token,rec.symbol);if(!qr.ok){setStatus("BUY blocked • "+qr.error);return;}double ltp=qr.value.ltp;
             if(!(ltp>0)||ltp>rec.entry*1.0020){setStatus("BUY blocked • price moved >0.20% above scanner entry; no chasing");return;}
@@ -157,7 +165,16 @@ public class UnifiedService extends Service {
     private long todayAt(int h,int m){return LocalDate.now(ScannerEngine.IST).atTime(h,m).atZone(ScannerEngine.IST).toInstant().toEpochMilli();}
     private void sleep(long ms){try{Thread.sleep(ms);}catch(InterruptedException e){Thread.currentThread().interrupt();}}
 
-    private String publicIp(){HttpURLConnection c=null;try{c=(HttpURLConnection)new URL("https://api.ipify.org").openConnection();c.setConnectTimeout(4000);c.setReadTimeout(4000);c.setRequestProperty("User-Agent","NSEUnifiedScanner/1.0");try(BufferedReader b=new BufferedReader(new InputStreamReader(c.getInputStream()))){return b.readLine().trim();}}catch(Exception e){return "";}finally{if(c!=null)c.disconnect();}}
+    private void checkStaticIp(boolean force){
+        long now=System.currentTimeMillis(),last=prefs().getLong("static_ip_checked_ms",0);
+        if(!force && now-last<10*60_000L)return;
+        String configured=SecureStore.get(this,SecureStore.DEDICATED_IP);
+        if(configured.isEmpty()){prefs().edit().putInt("static_ip_state",0).putLong("static_ip_checked_ms",now).apply();return;}
+        String current=publicIp();int state=current.isEmpty()?0:(configured.equals(current)?1:-1);
+        prefs().edit().putInt("static_ip_state",state).putLong("static_ip_checked_ms",now).apply();
+    }
+
+    private String publicIp(){HttpURLConnection c=null;try{c=(HttpURLConnection)new URL("https://api.ipify.org").openConnection();c.setConnectTimeout(4000);c.setReadTimeout(4000);c.setRequestProperty("User-Agent","NSEUnifiedScanner/1.1");try(BufferedReader b=new BufferedReader(new InputStreamReader(c.getInputStream()))){return b.readLine().trim();}}catch(Exception e){return "";}finally{if(c!=null)c.disconnect();}}
     private SharedPreferences prefs(){return getSharedPreferences("scanner_prefs",Context.MODE_PRIVATE);}
     private void setStatus(String s){prefs().edit().putString("service_status",s).putLong("service_status_ms",System.currentTimeMillis()).apply();learning.audit("STATUS",s);updateNotification();}
     private void updateNotification(){NotificationManager n=(NotificationManager)getSystemService(NOTIFICATION_SERVICE);n.notify(NOTIFY_ID,notification(prefs().getString("service_status","NSE Unified Scanner running")));}
