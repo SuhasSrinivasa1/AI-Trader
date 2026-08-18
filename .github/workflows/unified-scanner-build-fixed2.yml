@@ -12,6 +12,14 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+      - name: Publish run id early
+        run: |
+          echo "${GITHUB_RUN_ID}" > .scanner-v1.1-run-id.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .scanner-v1.1-run-id.txt
+          git commit -m "Record NSE scanner v1.1 final build run ${GITHUB_RUN_ID}"
+          git push origin HEAD:unified-nse-scanner-v1
       - name: Patch Android file I/O compatibility
         run: |
           python - <<'PY'
@@ -52,11 +60,3 @@ jobs:
             unified-scanner/app/build/reports/tests/testDebugUnitTest/**
             unified-scanner/app/build/reports/lint-results-debug.html
           retention-days: 30
-      - name: Publish run id
-        run: |
-          echo "${GITHUB_RUN_ID}" > .scanner-v1.1-run-id.txt
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add .scanner-v1.1-run-id.txt
-          git commit -m "Record NSE scanner v1.1 final build run ${GITHUB_RUN_ID}"
-          git push origin HEAD:unified-nse-scanner-v1
