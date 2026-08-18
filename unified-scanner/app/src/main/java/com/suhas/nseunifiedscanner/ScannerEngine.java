@@ -90,10 +90,11 @@ final class ScannerEngine {
                 Recommendation r=score(fc,result.breadth,minScore,stats.n); if(r!=null)recs.add(r);
             }
             recs.sort(Comparator.comparingDouble((Recommendation r)->r.rankScore).reversed());
-            // Ranks 4–10 are shadow observations: never shown as official recommendations, never enable BUY, and never inflate the headline hit-rate.
-            for(int i=3;i<Math.min(10,recs.size());i++) insights.recordShadowIfNew(recs.get(i));
+            // WATCH names and ranks outside the displayed Top 3 are shadow observations. They teach the model but never inflate the actionable headline hit-rate.
+            for(int i=0;i<Math.min(10,recs.size());i++){Recommendation x=recs.get(i);if(i>=3||!x.qualified)insights.recordShadowIfNew(x);}
             if(recs.size()>3)recs=new ArrayList<>(recs.subList(0,3));
-            for(Recommendation r:recs) learning.recordIfNew(r);
+            // Only BUY-qualified calls enter the official recommendation hit-rate from v1.1 onward.
+            for(Recommendation r:recs) if(r.qualified) learning.recordIfNew(r);
             result.recommendations=recs; result.success=stats; result.minScore=minScore; result.scanned=universe.size(); result.prefiltered=pre.size();
             result.marketLabel=marketLabel(result.breadth,recs);
             saveState(result);
@@ -166,11 +167,13 @@ final class ScannerEngine {
     private void resolveShadowPending(String token){
         long now=System.currentTimeMillis();
         for(LearningInsights.ShadowRec r:insights.openShadow()){
+            // Shadow calls are evaluated once at the end of their 30-minute horizon. This avoids repeatedly spending historical-candle API calls every five minutes.
+            if(now<r.deadlineMs)continue;
             try{
-                LocalDateTime st=LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(r.scanMs),IST).minusMinutes(1); LocalDateTime en=LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(Math.min(now,r.deadlineMs)),IST).plusMinutes(1);
+                LocalDateTime st=LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(r.scanMs),IST).minusMinutes(1); LocalDateTime en=LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(r.deadlineMs),IST).plusMinutes(1);
                 GrowwApi.Result<List<GrowwApi.Candle>> hr=GrowwApi.candles(token,r.growwSymbol,st.format(API_TIME),en.format(API_TIME),"5minute"); if(!hr.ok)continue;
                 String outcome=null;for(GrowwApi.Candle c:hr.value){boolean hitT=c.high>=r.target;boolean hitS=c.low<=r.stop;if(hitT&&hitS){outcome="AMBIGUOUS";break;}if(hitT){outcome="SUCCESS";break;}if(hitS){outcome="FAIL";break;}}
-                if(outcome==null&&now>=r.deadlineMs)outcome="TIMEOUT";if(outcome!=null){insights.resolveShadow(r.id,outcome,now,r.features);learning.audit("SHADOW",r.symbol+" → "+outcome);}
+                if(outcome==null)outcome="TIMEOUT";insights.resolveShadow(r.id,outcome,now,r.features);learning.audit("SHADOW",r.symbol+" → "+outcome);
             }catch(Exception ignore){}
         }
     }
