@@ -27,18 +27,20 @@ import java.util.Map;
 final class ScannerEngine {
     static final ZoneId IST=ZoneId.of("Asia/Kolkata");
     static final DateTimeFormatter API_TIME=DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.US);
-    private static final int TOP_PREFILTER=26;
-    private static final int TOP_QUOTE=14;
+    private static final int TOP_PREFILTER=32;
+    private static final int TOP_QUOTE=18;
     private final Context context;
     private final LearningStore learning;
+    private final LearningInsights insights;
 
-    ScannerEngine(Context c) { context=c.getApplicationContext(); learning=new LearningStore(context); }
+    ScannerEngine(Context c) { context=c.getApplicationContext(); learning=new LearningStore(context); insights=new LearningInsights(context); }
 
     ScanResult scan(String token) {
         ScanResult result=new ScanResult(); result.scanMs=System.currentTimeMillis();
         if(token==null||token.isEmpty()){result.error="Groww authentication is required";return result;}
         try {
             resolvePending(token);
+            resolveShadowPending(token);
             List<Instrument> universe=loadUniverse();
             if(universe.isEmpty()){result.error="NSE instrument universe is empty";return result;}
 
@@ -54,11 +56,12 @@ final class ScannerEngine {
             for(Instrument ins:universe){
                 Double l=ltps.get(ins.symbol); GrowwApi.Ohlc o=ohlcs.get(ins.symbol); if(l==null||o==null||!(l>0)||!(o.close>0)||!(o.open>0))continue;
                 double day=(l/o.close-1.0)*100.0; valid++; if(day>0)positive++;
-                if(l<20||l>10000||day<0.25||day>9.0)continue;
+                // Discovery is deliberately wider than the live-entry gate. In a weak market we still want three ranked WATCH names instead of an empty screen.
+                if(l<20||l>10000||day<-0.15||day>9.0)continue;
                 double fromOpen=(l/o.open-1.0)*100.0; double nearHigh=o.high>0?(o.high-l)/l*100.0:9;
-                if(fromOpen<-0.10||nearHigh>1.75)continue;
+                if(fromOpen<-0.35||nearHigh>3.00)continue;
                 PreCandidate p=new PreCandidate();p.instrument=ins;p.ltp=l;p.ohlc=o;p.dayPct=day;
-                p.preScore=day*4.0+Math.max(0,1.75-nearHigh)*3.0+Math.max(0,fromOpen)*1.5;
+                p.preScore=day*4.0+Math.max(0,2.50-nearHigh)*2.5+Math.max(0,fromOpen)*1.5;
                 pre.add(p);
             }
             pre.sort(Comparator.comparingDouble((PreCandidate p)->p.preScore).reversed());
@@ -87,6 +90,8 @@ final class ScannerEngine {
                 Recommendation r=score(fc,result.breadth,minScore,stats.n); if(r!=null)recs.add(r);
             }
             recs.sort(Comparator.comparingDouble((Recommendation r)->r.rankScore).reversed());
+            // Ranks 4–10 are shadow observations: never shown as official recommendations, never enable BUY, and never inflate the headline hit-rate.
+            for(int i=3;i<Math.min(10,recs.size());i++) insights.recordShadowIfNew(recs.get(i));
             if(recs.size()>3)recs=new ArrayList<>(recs.subList(0,3));
             for(Recommendation r:recs) learning.recordIfNew(r);
             result.recommendations=recs; result.success=stats; result.minScore=minScore; result.scanned=universe.size(); result.prefiltered=pre.size();
@@ -110,7 +115,8 @@ final class ScannerEngine {
         double entry=p.ltp; double distR1=(entry/levels.r1-1.0)*100.0; double roomR2=(levels.r2/entry-1.0)*100.0;
         double body=Math.abs(candles.get(n-1).close-candles.get(n-1).open); double upper=Math.max(0,candles.get(n-1).high-Math.max(candles.get(n-1).close,candles.get(n-1).open));
         double wickRatio=body>0?upper/body:2.0;
-        if(entry<=vwap||rsi<52||rsi>75||!macd.bullish||oneHour<0.30||relVol<1.05||roomR2<0.45||distR1>0.55||distR1<-0.75||wickRatio>1.6)return null;
+        // WATCH/discovery gate only. Actual BUY remains governed by the much stricter hard gate in score().
+        if(entry<vwap*0.998||rsi<46||rsi>79||oneHour<-0.15||relVol<0.75||roomR2<0.20||distR1>0.80||distR1<-1.20||wickRatio>2.6)return null;
         FeatureCandidate f=new FeatureCandidate();f.instrument=p.instrument;f.entry=entry;f.rsi=rsi;f.relVol=relVol;f.macd=macd;f.atr=atr;f.oneHour=oneHour;f.vwap=vwap;f.r1=levels.r1;f.r2=levels.r2;f.distR1=distR1;f.roomR2=roomR2;f.wickRatio=wickRatio;f.dayPct=p.dayPct;
         f.baseScore=35 + Math.min(14,Math.max(0,oneHour*5)) + Math.min(12,Math.max(0,(relVol-1)*8)) + (entry>vwap?9:0) + (macd.hist>0&&macd.hist>macd.prevHist?10:4) + Math.max(0,8-Math.abs(rsi-62)*0.7) + Math.max(0,8-Math.abs(distR1)*8) + Math.min(8,Math.max(0,roomR2*5));
         return f;
@@ -122,6 +128,7 @@ final class ScannerEngine {
         double turnover=entry*q.volume; double depthRatio=(q.totalBuy+q.totalSell)>0?q.totalBuy/(q.totalBuy+q.totalSell):0.5;
         double circuitRoom=q.upperCircuit>entry?(q.upperCircuit/entry-1)*100:99;
         double roomR2=f.r2/entry*100-100; double distR1=entry/f.r1*100-100;
+        // LIVE BUY hard gate: intentionally unchanged by the wider discovery universe.
         boolean hard=entry>f.vwap && f.rsi>=55 && f.rsi<=72 && f.relVol>=1.30 && f.macd.hist>0 && f.macd.hist>=f.macd.prevHist && f.oneHour>=0.45 && f.oneHour<=4.0 && spreadPct<=0.22 && turnover>=50_000_000d && roomR2>=0.68 && distR1>=-0.55 && distR1<=0.38 && circuitRoom>=0.80;
         double liquidity=Math.min(1.0,turnover/300_000_000d); double market=AdaptiveModel.clamp((breadth-40)/35.0,0,1);
         double rsiQuality=AdaptiveModel.clamp(1-Math.abs(f.rsi-62)/14.0,0,1); double rel=AdaptiveModel.clamp((f.relVol-1.0)/2.0,0,1);
@@ -152,6 +159,18 @@ final class ScannerEngine {
                 GrowwApi.Result<List<GrowwApi.Candle>> hr=GrowwApi.candles(token,r.growwSymbol,st.format(API_TIME),en.format(API_TIME),"5minute"); if(!hr.ok)continue;
                 String outcome=null; for(GrowwApi.Candle c:hr.value){boolean hitT=c.high>=r.target;boolean hitS=c.low<=r.stop;if(hitT&&hitS){outcome="AMBIGUOUS";break;}if(hitT){outcome="SUCCESS";break;}if(hitS){outcome="FAIL";break;}}
                 if(outcome==null&&now>=r.deadlineMs)outcome="TIMEOUT"; if(outcome!=null){learning.resolve(r.id,outcome,now,r.features);learning.audit("LEARN",r.symbol+" → "+outcome);}
+            }catch(Exception ignore){}
+        }
+    }
+
+    private void resolveShadowPending(String token){
+        long now=System.currentTimeMillis();
+        for(LearningInsights.ShadowRec r:insights.openShadow()){
+            try{
+                LocalDateTime st=LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(r.scanMs),IST).minusMinutes(1); LocalDateTime en=LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(Math.min(now,r.deadlineMs)),IST).plusMinutes(1);
+                GrowwApi.Result<List<GrowwApi.Candle>> hr=GrowwApi.candles(token,r.growwSymbol,st.format(API_TIME),en.format(API_TIME),"5minute"); if(!hr.ok)continue;
+                String outcome=null;for(GrowwApi.Candle c:hr.value){boolean hitT=c.high>=r.target;boolean hitS=c.low<=r.stop;if(hitT&&hitS){outcome="AMBIGUOUS";break;}if(hitT){outcome="SUCCESS";break;}if(hitS){outcome="FAIL";break;}}
+                if(outcome==null&&now>=r.deadlineMs)outcome="TIMEOUT";if(outcome!=null){insights.resolveShadow(r.id,outcome,now,r.features);learning.audit("SHADOW",r.symbol+" → "+outcome);}
             }catch(Exception ignore){}
         }
     }
