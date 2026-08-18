@@ -1,0 +1,2 @@
+-keep class com.suhas.nseunifiedscanner.** { *; }
+-dontwarn org.json.**

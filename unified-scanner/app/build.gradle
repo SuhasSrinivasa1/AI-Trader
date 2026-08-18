@@ -1,0 +1,34 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'com.suhas.nseunifiedscanner'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'com.suhas.nseunifiedscanner'
+        minSdk 28
+        targetSdk 34
+        versionCode 100
+        versionName '1.0.0'
+        testInstrumentationRunner 'android.test.InstrumentationTestRunner'
+    }
+
+    buildTypes {
+        debug { minifyEnabled false }
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    testOptions { unitTests.returnDefaultValues = true }
+    lint { abortOnError true; checkReleaseBuilds true; warningsAsErrors false }
+}
+
+dependencies { testImplementation 'junit:junit:4.13.2' }

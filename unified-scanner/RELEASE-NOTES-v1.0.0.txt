@@ -1,0 +1,37 @@
+NSE UNIFIED SCANNER v1.0.0
+
+STANDALONE
+- Package: com.suhas.nseunifiedscanner
+- Target device: Samsung Galaxy S24 Ultra / Android 16
+- Does not change Multyfi AutoBuy.
+
+SCANNER
+- Full Groww NSE CASH EQ instrument universe.
+- 5-minute refresh aligned to completed candles.
+- Top three ranked 30-minute opportunities.
+- VWAP, RSI14, MACD 12/26/9 acceleration, ATR14, relative volume, one-hour momentum, prior-day pivot R1/R2, wick quality, live spread, turnover, order-book depth, circuit room, market cap, 52-week data and whole-universe breadth.
+- No chasing: a one-click buy is blocked if live price has moved >0.20% above the recommendation entry.
+
+LEARNING
+- Local SQLite recommendation ledger.
+- 30-minute replay of every distinct recommendation.
+- Target-before-stop = SUCCESS; stop = FAIL; timeout = TIMEOUT; target+stop within the same five-minute replay candle = AMBIGUOUS/excluded.
+- Rolling last-100 recommendation hit rate shown at top.
+- Bounded logistic model plus adaptive qualification threshold.
+- After at least 30 resolved samples, sub-80% performance tightens the score floor rather than forcing trades.
+- Learning cannot modify the +0.50% net objective, liquidity gates, maximum 30-minute duration or protection requirements.
+
+EXECUTION
+- LIVE OFF by default.
+- One active MIS position only.
+- User taps BUY; app sizes against available MIS margin using Groww margin API and configurable capital use (default 98%).
+- Actual filled quantity and average price are reconciled before protection.
+- Actual target is charge-aware and includes a slippage reserve.
+- Attempts CASH MIS OCO; safely falls back to SL-M + app target if OCO is unavailable/rejected.
+- Durable PENDING_PROTECTION state survives process interruption. Recovery first restores protection or exits.
+- Unprotected fill triggers emergency market exit.
+- Hard exit at 30 minutes or 15:10 IST, whichever occurs first.
+- Dedicated-IP exact-match, encrypted credentials, idempotent references, duplicate/one-position guards.
+
+DATA SCOPE
+- PE and news are not fabricated or scraped in this release. They are not exposed as stable fields by the Groww Trading API. V1 prioritizes live technical/liquidity/market data that can be validated and rate-limited safely.

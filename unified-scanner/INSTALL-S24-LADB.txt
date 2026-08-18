@@ -1,0 +1,36 @@
+NSE UNIFIED SCANNER v1.0.0 — S24 ULTRA / ANDROID 16
+
+This is a NEW standalone package: com.suhas.nseunifiedscanner
+It does NOT replace Multyfi AutoBuy.
+
+Before live trading:
+1. Install the APK.
+2. Open it once and allow notifications.
+3. Android Settings > Apps > NSE Unified Scanner > Battery > Unrestricted.
+4. Keep the Groww-whitelisted Dedicated IP connected.
+5. Open Settings in the scanner and save Groww API key, TOTP secret, exact Dedicated IP, and desired capital-use percentage.
+6. Tap AUTHENTICATE after completing any Groww-required daily approval.
+7. Keep LIVE OFF and run several read-only scans first.
+8. For the first live acceptance cycle, use reduced capital and supervise Groww directly. Confirm the entry fill, stop/OCO protection, target/time exit, and zero remaining position before using a larger allocation.
+
+LADB installation (run commands one at a time; do not prefix with adb shell):
+
+cp "$(find /sdcard/Download -type f -name 'NSE-Unified-Scanner-S24-v1.0.0*.apk' 2>/dev/null | head -n 1)" /data/local/tmp/NSE-Unified-Scanner-v1.0.0.apk
+
+pm install -r -g /data/local/tmp/NSE-Unified-Scanner-v1.0.0.apk
+
+am start -n com.suhas.nseunifiedscanner/.MainActivity
+
+dumpsys package com.suhas.nseunifiedscanner | grep -E 'versionName|versionCode|targetSdk'
+
+rm /data/local/tmp/NSE-Unified-Scanner-v1.0.0.apk
+
+Expected:
+versionName=1.0.0
+versionCode=100
+
+Important:
+- LIVE is OFF by default.
+- Scanner recommendation success rate begins with no observations and is learned only from its own resolved recommendations.
+- Same continuing recommendation is not repeatedly counted while the earlier recommendation is still within its 30-minute outcome window.
+- The app targets +0.50% net, but market fills, slippage, liquidity, broker/exchange latency and charges can prevent the target from being achieved.
