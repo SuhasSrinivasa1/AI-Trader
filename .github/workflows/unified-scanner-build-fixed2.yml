@@ -1,4 +1,4 @@
-name: NSE Unified Scanner Fixed2
+name: NSE Unified Scanner Fixed2 v1.1 Final
 on:
   push:
     branches: [unified-nse-scanner-v1]
@@ -40,11 +40,13 @@ jobs:
           grep -q 'TARGET HITS TODAY' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/MainActivity.java
           grep -q 'CONNECTION HEALTH' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/MainActivity.java
           grep -q 'recordShadowIfNew' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/ScannerEngine.java
+          grep -q 'if(now<r.deadlineMs)continue' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/ScannerEngine.java
+          grep -q 'if(r.qualified) learning.recordIfNew' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/ScannerEngine.java
           grep -q 'static_ip_state' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/UnifiedService.java
           grep -q 'relVol>=1.30' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/ScannerEngine.java
       - uses: actions/upload-artifact@v4
         with:
-          name: NSE-Unified-Scanner-S24-v1.1.0
+          name: NSE-Unified-Scanner-S24-v1.1.0-FINAL-BUILD
           path: |
             unified-scanner/out/**
             unified-scanner/app/build/reports/tests/testDebugUnitTest/**
@@ -56,5 +58,5 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add .scanner-v1.1-run-id.txt
-          git commit -m "Record NSE scanner v1.1 build run ${GITHUB_RUN_ID}"
+          git commit -m "Record NSE scanner v1.1 final build run ${GITHUB_RUN_ID}"
           git push origin HEAD:unified-nse-scanner-v1
