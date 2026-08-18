@@ -83,3 +83,4 @@ jobs:
             unified-scanner/app/build/reports/tests/testDebugUnitTest/**
             unified-scanner/app/build/reports/lint-results-debug.html
           retention-days: 30
+# retrigger: version patch robustness
