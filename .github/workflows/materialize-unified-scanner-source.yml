@@ -1,0 +1,27 @@
+name: Materialize Unified Scanner Source
+on:
+  push:
+    branches: [unified-nse-scanner-v1]
+    paths:
+      - '.github/workflows/materialize-unified-scanner-source.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Expand source into repository
+        run: |
+          cat unified-scanner-src.part* | base64 -d > /tmp/src.tgz
+          tar -xzf /tmp/src.tgz
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add unified-scanner
+          if git diff --cached --quiet; then
+            echo 'Source already materialized'
+          else
+            git commit -m 'Materialize unified scanner Android source'
+            git push origin HEAD:unified-nse-scanner-v1
+          fi
