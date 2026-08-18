@@ -100,5 +100,18 @@ final class TradeSetupLogic {
                 spreadPct<=0.20 && turnover>=50_000_000d && roomR2>=0.68 && circuitRoom>=0.80 && marketSupport;
     }
 
+    /**
+     * Early-move setup: abnormal volume can qualify before the 1-hour move has
+     * reached the normal momentum threshold. It remains bounded by liquidity,
+     * spread, resistance room and market/depth support.
+     */
+    static boolean volumeIgnitionSetup(double rsi,double relVol,double macdHist,double prevMacdHist,double oneHour,double spreadPct,double turnover,double roomR2,double circuitRoom,double breadth,double depthRatio,double wickRatio) {
+        boolean momentumTurning=macdHist>0 || macdHist>=prevMacdHist*0.95;
+        boolean marketSupport=breadth>=38.0 || depthRatio>=0.57;
+        return rsi>=52 && rsi<=73 && relVol>=2.10 && momentumTurning && oneHour>=0.10 && oneHour<=3.0 &&
+                spreadPct<=0.18 && turnover>=65_000_000d && roomR2>=0.72 && circuitRoom>=0.90 &&
+                wickRatio<=1.05 && marketSupport;
+    }
+
     static double clamp(double x,double lo,double hi){return Math.max(lo,Math.min(hi,x));}
 }
