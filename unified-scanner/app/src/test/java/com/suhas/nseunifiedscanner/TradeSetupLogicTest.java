@@ -23,4 +23,12 @@ public class TradeSetupLogicTest {
     @Test public void weakRecoveryWithoutVolumeIsRejected(){
         assertFalse(TradeSetupLogic.recoverySetup(true,2.0,0.8,60.0,0.85,0.03,0.02,0.40,0.08,240_000_000d,1.10,8.0,50.0,0.58));
     }
+
+    @Test public void strongVolumeIgnitionCanQualifyEarly(){
+        assertTrue(TradeSetupLogic.volumeIgnitionSetup(59.0,2.55,0.05,0.03,0.22,0.07,210_000_000d,1.05,6.0,47.0,0.61,0.45));
+    }
+
+    @Test public void volumeIgnitionRejectsLargeUpperWick(){
+        assertFalse(TradeSetupLogic.volumeIgnitionSetup(59.0,2.55,0.05,0.03,0.22,0.07,210_000_000d,1.05,6.0,47.0,0.61,1.80));
+    }
 }
