@@ -49,6 +49,7 @@ jobs:
           set -e
           cat /tmp/v16patch.log
           python .github/scripts/scanner_v16_tail.py
+          python .github/scripts/scanner_v16_ui_fix.py
       - name: Patch Android file I/O compatibility
         run: |
           python - <<'PY'
@@ -82,6 +83,7 @@ jobs:
           grep -q '0.003,0.0006' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/UnifiedService.java
           grep -q '0.30% NET ACCURACY' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/MainActivity.java
           grep -q 'EARLY RADAR' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/MainActivity.java
+          grep -q 'adaptive 8–20% weight' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/MainActivity.java
           grep -q 'versionName.*1.6.0' unified-scanner/app/build.gradle
           cp -r unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner unified-scanner/out/patched-source
       - uses: actions/upload-artifact@v4
