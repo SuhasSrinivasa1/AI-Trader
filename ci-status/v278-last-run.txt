@@ -1,4 +1,0 @@
-run_id=32216270091
-conclusion=failure
-head_sha=5984f2023da01407c01b5287c4d68eac2e1d3b32
-watch_rc=1
