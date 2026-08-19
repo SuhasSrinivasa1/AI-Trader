@@ -1,0 +1,1 @@
+Trigger validated v2.7.8 build after temporary workflow-run capture was installed on main.
