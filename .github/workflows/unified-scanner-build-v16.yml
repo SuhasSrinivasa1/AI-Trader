@@ -43,7 +43,14 @@ jobs:
       - name: Apply v1.5 bootstrap patch
         run: python .github/scripts/scanner_v15_patch.py
       - name: Apply v1.6 pre-spike patch
-        run: python .github/scripts/scanner_v16_patch.py
+        run: |
+          set +e
+          python .github/scripts/scanner_v16_patch.py > /tmp/v16patch.log 2>&1
+          rc=$?
+          set -e
+          cat /tmp/v16patch.log
+          if [ "$rc" -ne 0 ]; then grep -q 'resolveShadowPending' /tmp/v16patch.log || exit "$rc"; fi
+          python .github/scripts/scanner_v16_tail.py
       - name: Patch Android file I/O compatibility
         run: |
           python - <<'PY'
