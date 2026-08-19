@@ -1,5 +1,17 @@
 from pathlib import Path
 
+# Build repair: v2.7.7's compile repair removes the formatter helper that the
+# new v2.7.8 audit messages use. Restore it deterministically before javac.
+engine_path = Path('android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/Stage2Engine.java')
+engine = engine_path.read_text()
+if 'private static String money(double value)' not in engine:
+    anchor = '    private static SharedPreferences prefs(Context context) {\n'
+    assert anchor in engine, 'Stage2Engine prefs anchor missing'
+    helper = '''    private static String money(double value) {\n        return String.format(Locale.US, "%.2f", value);\n    }\n\n'''
+    engine = engine.replace(anchor, helper + anchor, 1)
+    engine_path.write_text(engine)
+assert 'private static String money(double value)' in engine_path.read_text()
+
 p = Path('android-stable/app/src/test/java/com/suhas/multyfiautobuy/stable/V278ReentryZeroBufferTest.java')
 p.parent.mkdir(parents=True, exist_ok=True)
 p.write_text(r'''package com.suhas.multyfiautobuy.stable;
@@ -40,4 +52,4 @@ public class V278ReentryZeroBufferTest {
     }
 }
 ''')
-print('Added v2.7.8 zero-buffer trailing and KABRA re-entry regression tests')
+print('Added v2.7.8 compile repair + zero-buffer trailing/KABRA re-entry regression tests')
