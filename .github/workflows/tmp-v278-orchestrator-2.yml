@@ -1,5 +1,6 @@
 name: TEMP v2.7.8 Build Orchestrator 2
 
+# kick retry after workflow became active on default branch
 on:
   push:
     branches: [main]
