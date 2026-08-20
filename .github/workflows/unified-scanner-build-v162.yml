@@ -1,4 +1,5 @@
 name: NSE Unified Scanner v1.6.2
+# rerun after fixed-capital patch-anchor correction
 on:
   push:
     branches: [unified-nse-scanner-v1]
