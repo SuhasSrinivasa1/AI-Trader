@@ -1,0 +1,97 @@
+name: NSE Unified Scanner v1.6.2
+on:
+  push:
+    branches: [unified-nse-scanner-v1]
+    paths: ['.github/workflows/unified-scanner-build-v162.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish run id early
+        run: |
+          echo "${GITHUB_RUN_ID}" > .scanner-v1.6.2-run-id.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .scanner-v1.6.2-run-id.txt
+          git commit -m "Record NSE scanner v1.6.2 build run ${GITHUB_RUN_ID}"
+          git push origin HEAD:unified-nse-scanner-v1
+      - name: Apply v1.2 base strategy patch
+        run: |
+          set +e
+          python .github/scripts/scanner_v12_patch.py > /tmp/v12patch.log 2>&1
+          rc=$?
+          set -e
+          cat /tmp/v12patch.log
+          if [ "$rc" -ne 0 ]; then grep -q 'MainActivity.java' /tmp/v12patch.log || exit "$rc"; fi
+          python .github/scripts/scanner_v12_tail.py
+      - name: Apply v1.3 opportunity and safety patch
+        run: |
+          set +e
+          python .github/scripts/scanner_v13_patch.py > /tmp/v13patch.log 2>&1
+          rc=$?
+          set -e
+          cat /tmp/v13patch.log
+          if [ "$rc" -ne 0 ]; then grep -q 'MainActivity.java' /tmp/v13patch.log || exit "$rc"; fi
+          python .github/scripts/scanner_v13_tail.py
+      - name: Apply v1.4 profit lock and re-entry patch
+        run: python .github/scripts/scanner_v14_patch.py
+      - name: Apply v1.5 bootstrap patch
+        run: python .github/scripts/scanner_v15_patch.py
+      - name: Apply v1.6 pre-spike patch
+        run: |
+          set +e
+          python .github/scripts/scanner_v16_patch.py > /tmp/v16patch.log 2>&1
+          set -e
+          cat /tmp/v16patch.log
+          python .github/scripts/scanner_v16_tail.py
+          python .github/scripts/scanner_v16_ui_fix.py
+      - name: Apply v1.6.1 bullish HOD breakout and segmented-learning patch
+        run: python .github/scripts/scanner_v161_patch.py
+      - name: Apply v1.6.2 fixed ₹10k test-capital patch
+        run: python .github/scripts/scanner_v162_patch.py
+      - name: Patch Android file I/O compatibility
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/ScannerEngine.java')
+          s=p.read_text().replace('import java.io.File;','import java.io.File;\nimport java.io.FileOutputStream;\nimport java.io.FileInputStream;\nimport java.io.BufferedReader;\nimport java.io.InputStreamReader;').replace('import java.nio.file.Files;\n','')
+          s=s.replace('Files.writeString(f.toPath(),r.value,StandardCharsets.UTF_8);','try(FileOutputStream out=new FileOutputStream(f,false)){out.write(r.value.getBytes(StandardCharsets.UTF_8));}')
+          s=s.replace('List<String> lines=Files.readAllLines(f.toPath(),StandardCharsets.UTF_8);','List<String> lines=new ArrayList<>();try(BufferedReader br=new BufferedReader(new InputStreamReader(new FileInputStream(f),StandardCharsets.UTF_8))){String line;while((line=br.readLine())!=null)lines.add(line);}')
+          p.write_text(s)
+          PY
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - uses: android-actions/setup-android@v3
+      - run: yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '8.13'}
+      - name: Build and validate
+        run: |
+          gradle --no-daemon --console=plain -p unified-scanner clean testDebugUnitTest lintDebug assembleDebug assembleRelease
+          mkdir -p unified-scanner/out
+          cp unified-scanner/app/build/outputs/apk/debug/app-debug.apk unified-scanner/out/NSE-Unified-Scanner-S24-v1.6.2-DEBUG.apk
+          cp unified-scanner/app/build/outputs/apk/release/app-release-unsigned.apk unified-scanner/out/NSE-Unified-Scanner-S24-v1.6.2-UNSIGNED.apk
+          $ANDROID_HOME/build-tools/35.0.0/aapt dump badging unified-scanner/out/NSE-Unified-Scanner-S24-v1.6.2-DEBUG.apk | grep "versionName='1.6.2'"
+          $ANDROID_HOME/build-tools/35.0.0/apksigner verify --verbose --print-certs unified-scanner/out/NSE-Unified-Scanner-S24-v1.6.2-DEBUG.apk > unified-scanner/out/DEBUG-SIGNATURE.txt
+          sha256sum unified-scanner/out/NSE-Unified-Scanner-S24-v1.6.2-DEBUG.apk > unified-scanner/out/DEBUG-SHA256.txt
+          grep -q 'TRADE_CAPITAL=10000.0' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/FixedCapitalLogic.java
+          grep -q 'FixedCapitalLogic.quantity(limit)' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/UnifiedService.java
+          grep -q 'requiredMisMargin' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/UnifiedService.java
+          grep -q '₹10K TEST' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/MainActivity.java
+          grep -q 'FIXED TEST CAPITAL ₹10,000' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/MainActivity.java
+          grep -q 'versionName.*1.6.2' unified-scanner/app/build.gradle
+          cp -r unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner unified-scanner/out/patched-source
+          cp -r unified-scanner/app/src/test/java/com/suhas/nseunifiedscanner unified-scanner/out/patched-tests
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NSE-Unified-Scanner-S24-v1.6.2-BUILD
+          path: |
+            unified-scanner/out/**
+            unified-scanner/app/build/reports/tests/testDebugUnitTest/**
+            unified-scanner/app/build/reports/lint-results-debug.html
+          retention-days: 30
