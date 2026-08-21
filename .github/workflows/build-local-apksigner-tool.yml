@@ -1,0 +1,34 @@
+name: Build local APK signer tool
+on:
+  push:
+    branches: [unified-nse-scanner-v1]
+    paths: ['.github/workflows/build-local-apksigner-tool.yml']
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: mcxiaoke/ApkSigner
+          path: apksigner-src
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Compile standalone apksigner
+        run: |
+          set -e
+          mkdir -p classes
+          find apksigner-src/src/main/java apksigner-src/src/apksigner/java -name '*.java' > sources.txt
+          javac -source 8 -target 8 -d classes @sources.txt
+          mkdir -p classes/com/android/apksigner
+          cp apksigner-src/src/apksigner/java/com/android/apksigner/help*.txt classes/com/android/apksigner/ || true
+          jar cfe apksigner-tool.jar com.android.apksigner.ApkSignerTool -C classes .
+          java -jar apksigner-tool.jar --help >/tmp/help.txt
+          test -s apksigner-tool.jar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: local-apksigner-tool
+          path: apksigner-tool.jar
+          retention-days: 7
