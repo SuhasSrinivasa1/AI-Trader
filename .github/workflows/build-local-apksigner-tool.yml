@@ -4,10 +4,21 @@ on:
     branches: [unified-nse-scanner-v1]
     paths: ['.github/workflows/build-local-apksigner-tool.yml']
   workflow_dispatch:
+permissions:
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+      - name: Publish run id
+        run: |
+          echo "${GITHUB_RUN_ID}" > .apksigner-tool-run-id.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .apksigner-tool-run-id.txt
+          git commit -m "Record APK signer tool run ${GITHUB_RUN_ID}"
+          git push origin HEAD:unified-nse-scanner-v1
       - uses: actions/checkout@v4
         with:
           repository: mcxiaoke/ApkSigner
