@@ -1,4 +1,4 @@
-# retry 2 after dynamic-horizon fixture correction
+# retry 3: chunked v3.1.0 patch payload
 name: NSE Unified Scanner v3.1.0 Quality Momentum
 on:
   push:
@@ -55,7 +55,7 @@ jobs:
 
       - name: Apply v3.1.0 Quality Momentum / Cash EQ patch
         run: |
-          base64 -d .github/scripts/scanner_v310_patch.py.gz.b64 | gzip -dc > /tmp/scanner_v310_patch.py
+          cat .github/scripts/v310_payload/part* | base64 -d | gzip -dc > /tmp/scanner_v310_patch.py
           python /tmp/scanner_v310_patch.py
 
       - uses: actions/setup-java@v4
