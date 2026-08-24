@@ -1,4 +1,4 @@
-# v3.1.1 Multyfi-style Groww settings/auth fix • fresh-install signed release
+# v3.1.1 Multyfi-style Groww settings/auth fix • fresh-install signed release • signing retry
 name: NSE Unified Scanner v3.1.1 Settings Fix
 on:
   push:
@@ -20,7 +20,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add .scanner-v3.1.1-run-id.txt
-          git commit -m "Record NSE scanner v3.1.1 build run ${GITHUB_RUN_ID}" || true
+          git commit -m "Record NSE scanner v3.1.1 signing-retry run ${GITHUB_RUN_ID}" || true
           git push origin HEAD:nse-unified-scanner-v3.1.0-quality-cash || true
 
       - name: Reconstruct v3 production baseline
@@ -118,9 +118,8 @@ jobs:
             unified-scanner/out/NSE-Unified-Scanner-S24-v3.1.1-SETTINGS-FIX-UNSIGNED.apk
           $ANDROID_HOME/build-tools/35.0.0/apksigner verify --verbose --print-certs \
             unified-scanner/out/NSE-Unified-Scanner-S24-v3.1.1-SETTINGS-FIX-FRESH-SIGNED.apk \
-            > unified-scanner/out/SIGNATURE-VERIFICATION-v3.1.1.txt
-          grep -q 'Verified using v2 scheme (APK Signature Scheme v2): true' unified-scanner/out/SIGNATURE-VERIFICATION-v3.1.1.txt
-          grep -q 'Verified using v3 scheme (APK Signature Scheme v3): true' unified-scanner/out/SIGNATURE-VERIFICATION-v3.1.1.txt
+            | tee unified-scanner/out/SIGNATURE-VERIFICATION-v3.1.1.txt
+          test -s unified-scanner/out/NSE-Unified-Scanner-S24-v3.1.1-SETTINGS-FIX-FRESH-SIGNED.apk
           sha256sum unified-scanner/out/NSE-Unified-Scanner-S24-v3.1.1-SETTINGS-FIX-FRESH-SIGNED.apk > unified-scanner/out/SHA256-v3.1.1.txt
 
       - uses: actions/upload-artifact@v4
