@@ -1,5 +1,5 @@
-# retry 4: produce fresh-install signed standalone APK
-name: NSE Unified Scanner v3.1.0 Quality Momentum Fresh Signed
+# v3.1.1 Multyfi-style Groww settings/auth fix • fresh-install signed release
+name: NSE Unified Scanner v3.1.1 Settings Fix
 on:
   push:
     branches: [nse-unified-scanner-v3.1.0-quality-cash]
@@ -16,11 +16,11 @@ jobs:
 
       - name: Publish run id early
         run: |
-          echo "${GITHUB_RUN_ID}" > .scanner-v3.1.0-run-id.txt
+          echo "${GITHUB_RUN_ID}" > .scanner-v3.1.1-run-id.txt
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add .scanner-v3.1.0-run-id.txt
-          git commit -m "Record NSE scanner v3.1.0 fresh-signed build run ${GITHUB_RUN_ID}" || true
+          git add .scanner-v3.1.1-run-id.txt
+          git commit -m "Record NSE scanner v3.1.1 build run ${GITHUB_RUN_ID}" || true
           git push origin HEAD:nse-unified-scanner-v3.1.0-quality-cash || true
 
       - name: Reconstruct v3 production baseline
@@ -58,6 +58,11 @@ jobs:
           cat .github/scripts/v310_payload/part* | base64 -d | gzip -dc > /tmp/scanner_v310_patch.py
           python /tmp/scanner_v310_patch.py
 
+      - name: Apply v3.1.1 Groww settings/auth patch
+        run: |
+          base64 -d .github/scripts/scanner_v311_settings_patch.py.gz.b64 | gzip -dc > /tmp/scanner_v311_settings_patch.py
+          python /tmp/scanner_v311_settings_patch.py
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -72,73 +77,60 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: Test lint and build
+      - name: Full validation and release assembly
         run: |
           gradle --no-daemon --console=plain -p unified-scanner clean testDebugUnitTest lintDebug assembleDebug assembleRelease
           mkdir -p unified-scanner/out
-          cp unified-scanner/app/build/outputs/apk/release/app-release-unsigned.apk unified-scanner/out/NSE-Unified-Scanner-S24-v3.1.0-QUALITY-MOMENTUM-UNSIGNED.apk
-          $ANDROID_HOME/build-tools/35.0.0/aapt dump badging unified-scanner/out/NSE-Unified-Scanner-S24-v3.1.0-QUALITY-MOMENTUM-UNSIGNED.apk | grep "versionName='3.1.0'"
-          grep -q 'versionCode 310' unified-scanner/app/build.gradle
-          grep -q 'QualityMomentumLogic' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/ScannerEngine.java
-          grep -q 'QUALITY MOMENTUM' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/MainActivity.java
-          grep -q 'BOX/CHOP' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/MainActivity.java
+          cp unified-scanner/app/build/outputs/apk/release/app-release-unsigned.apk unified-scanner/out/NSE-Unified-Scanner-S24-v3.1.1-SETTINGS-FIX-UNSIGNED.apk
+          $ANDROID_HOME/build-tools/35.0.0/aapt dump badging unified-scanner/out/NSE-Unified-Scanner-S24-v3.1.1-SETTINGS-FIX-UNSIGNED.apk | grep "versionName='3.1.1'"
+          grep -q 'versionCode 311' unified-scanner/app/build.gradle
+          grep -q 'SAVE API CREDENTIALS' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/MainActivity.java
+          grep -q 'REFRESH TOKEN' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/MainActivity.java
+          grep -q 'AUTHENTICATE' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/MainActivity.java
+          grep -q 'SAVE + VERIFY STATIC IP' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/MainActivity.java
+          grep -q 'ACTION_REFRESH_TOKEN' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/UnifiedService.java
+          grep -q 'GrowwSessionLogicTest' <(find unified-scanner/app/src/test -type f -printf '%f\n')
+          cp unified-scanner/app/build/reports/lint-results-debug.html unified-scanner/out/LINT.html
 
-      - name: Generate fresh standalone signing key
+      - name: Sign fresh-install release APK
         run: |
           set -e
-          STORE_PASS='NSEScanner310Fresh!2026'
-          KEY_PASS='NSEScanner310Fresh!2026'
-          ALIAS='nse-unified-scanner-fresh-v310'
+          STORE_PASS='TempFresh311BuildOnly!'
+          ALIAS='nse-scanner-v311-fresh'
           keytool -genkeypair -v \
-            -keystore /tmp/nse-unified-scanner-v310-fresh.jks \
+            -keystore /tmp/nse-v311-fresh.jks \
             -storepass "$STORE_PASS" \
-            -keypass "$KEY_PASS" \
+            -keypass "$STORE_PASS" \
             -alias "$ALIAS" \
             -keyalg RSA \
             -keysize 4096 \
             -validity 10000 \
-            -dname "CN=NSE Unified Scanner v3.1.0 Fresh, OU=Private Build, O=Standalone, L=Bengaluru, ST=Karnataka, C=IN"
-
+            -dname "CN=NSE Unified Scanner v3.1.1, OU=Private Fresh Install, O=NSE Scanner, L=Bengaluru, ST=Karnataka, C=IN"
           $ANDROID_HOME/build-tools/35.0.0/apksigner sign \
-            --ks /tmp/nse-unified-scanner-v310-fresh.jks \
+            --ks /tmp/nse-v311-fresh.jks \
             --ks-key-alias "$ALIAS" \
             --ks-pass pass:"$STORE_PASS" \
-            --key-pass pass:"$KEY_PASS" \
+            --key-pass pass:"$STORE_PASS" \
             --v1-signing-enabled true \
             --v2-signing-enabled true \
             --v3-signing-enabled true \
-            --out unified-scanner/out/NSE-Unified-Scanner-S24-v3.1.0-QUALITY-MOMENTUM-FRESH-SIGNED.apk \
-            unified-scanner/out/NSE-Unified-Scanner-S24-v3.1.0-QUALITY-MOMENTUM-UNSIGNED.apk
-
+            --out unified-scanner/out/NSE-Unified-Scanner-S24-v3.1.1-SETTINGS-FIX-FRESH-SIGNED.apk \
+            unified-scanner/out/NSE-Unified-Scanner-S24-v3.1.1-SETTINGS-FIX-UNSIGNED.apk
           $ANDROID_HOME/build-tools/35.0.0/apksigner verify --verbose --print-certs \
-            unified-scanner/out/NSE-Unified-Scanner-S24-v3.1.0-QUALITY-MOMENTUM-FRESH-SIGNED.apk \
-            > unified-scanner/out/FRESH-SIGNATURE-VERIFICATION.txt
-
-          grep -q 'Verified using v2 scheme (APK Signature Scheme v2): true' unified-scanner/out/FRESH-SIGNATURE-VERIFICATION.txt
-          grep -q 'Verified using v3 scheme (APK Signature Scheme v3): true' unified-scanner/out/FRESH-SIGNATURE-VERIFICATION.txt
-
-          sha256sum unified-scanner/out/NSE-Unified-Scanner-S24-v3.1.0-QUALITY-MOMENTUM-FRESH-SIGNED.apk \
-            > unified-scanner/out/FRESH-SIGNED-SHA256.txt
-
-          cp /tmp/nse-unified-scanner-v310-fresh.jks unified-scanner/out/NSE-Unified-Scanner-v3.1.0-FRESH-SIGNING-KEY.jks
-          cat > unified-scanner/out/FRESH-SIGNING-README.txt <<'EOF'
-NSE Unified Scanner v3.1.0 Fresh Standalone Signing
-Alias: nse-unified-scanner-fresh-v310
-Keystore password: NSEScanner310Fresh!2026
-Key password: NSEScanner310Fresh!2026
-
-This is a NEW signing identity for the fresh-install v3.1.0 application.
-Future in-place updates to this fresh installation must use this exact keystore.
-It does NOT match the old v3.0.0 signing certificate.
-EOF
+            unified-scanner/out/NSE-Unified-Scanner-S24-v3.1.1-SETTINGS-FIX-FRESH-SIGNED.apk \
+            > unified-scanner/out/SIGNATURE-VERIFICATION-v3.1.1.txt
+          grep -q 'Verified using v2 scheme (APK Signature Scheme v2): true' unified-scanner/out/SIGNATURE-VERIFICATION-v3.1.1.txt
+          grep -q 'Verified using v3 scheme (APK Signature Scheme v3): true' unified-scanner/out/SIGNATURE-VERIFICATION-v3.1.1.txt
+          sha256sum unified-scanner/out/NSE-Unified-Scanner-S24-v3.1.1-SETTINGS-FIX-FRESH-SIGNED.apk > unified-scanner/out/SHA256-v3.1.1.txt
 
       - uses: actions/upload-artifact@v4
         with:
-          name: NSE-Unified-Scanner-S24-v3.1.0-QUALITY-MOMENTUM-FRESH-SIGNED
+          name: NSE-Unified-Scanner-S24-v3.1.1-SETTINGS-FIX-FRESH-SIGNED
           path: |
-            unified-scanner/out/NSE-Unified-Scanner-S24-v3.1.0-QUALITY-MOMENTUM-FRESH-SIGNED.apk
-            unified-scanner/out/FRESH-SIGNATURE-VERIFICATION.txt
-            unified-scanner/out/FRESH-SIGNED-SHA256.txt
-            unified-scanner/out/NSE-Unified-Scanner-v3.1.0-FRESH-SIGNING-KEY.jks
-            unified-scanner/out/FRESH-SIGNING-README.txt
+            unified-scanner/out/NSE-Unified-Scanner-S24-v3.1.1-SETTINGS-FIX-FRESH-SIGNED.apk
+            unified-scanner/out/NSE-Unified-Scanner-S24-v3.1.1-SETTINGS-FIX-UNSIGNED.apk
+            unified-scanner/out/SIGNATURE-VERIFICATION-v3.1.1.txt
+            unified-scanner/out/SHA256-v3.1.1.txt
+            unified-scanner/out/LINT.html
+            unified-scanner/app/build/reports/tests/testDebugUnitTest/**
           retention-days: 30
