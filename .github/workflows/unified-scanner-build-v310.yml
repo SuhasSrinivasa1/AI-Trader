@@ -1,5 +1,5 @@
-# v3.1.1 Multyfi-style Groww settings/auth fix • fresh-install signed release • signing retry
-name: NSE Unified Scanner v3.1.1 Settings Fix
+# v3.2.0 evidence engine • opening-drive + normal-session quality momentum • fresh-install signed release
+name: NSE Unified Scanner v3.2.0 Evidence Engine
 on:
   push:
     branches: [nse-unified-scanner-v3.1.0-quality-cash]
@@ -16,11 +16,11 @@ jobs:
 
       - name: Publish run id early
         run: |
-          echo "${GITHUB_RUN_ID}" > .scanner-v3.1.1-run-id.txt
+          echo "${GITHUB_RUN_ID}" > .scanner-v3.2.0-run-id.txt
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add .scanner-v3.1.1-run-id.txt
-          git commit -m "Record NSE scanner v3.1.1 signing-retry run ${GITHUB_RUN_ID}" || true
+          git add .scanner-v3.2.0-run-id.txt
+          git commit -m "Record NSE scanner v3.2.0 build run ${GITHUB_RUN_ID}" || true
           git push origin HEAD:nse-unified-scanner-v3.1.0-quality-cash || true
 
       - name: Reconstruct v3 production baseline
@@ -63,6 +63,11 @@ jobs:
           base64 -d .github/scripts/scanner_v311_settings_patch.py.gz.b64 | gzip -dc > /tmp/scanner_v311_settings_patch.py
           python /tmp/scanner_v311_settings_patch.py
 
+      - name: Apply v3.2.0 opening evidence engine patch
+        run: |
+          base64 -d .github/scripts/scanner_v320_opening_evidence_patch.py.gz.b64 | gzip -dc > /tmp/scanner_v320_opening_evidence_patch.py
+          python /tmp/scanner_v320_opening_evidence_patch.py
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -79,57 +84,68 @@ jobs:
 
       - name: Full validation and release assembly
         run: |
+          set -e
           gradle --no-daemon --console=plain -p unified-scanner clean testDebugUnitTest lintDebug assembleDebug assembleRelease
           mkdir -p unified-scanner/out
-          cp unified-scanner/app/build/outputs/apk/release/app-release-unsigned.apk unified-scanner/out/NSE-Unified-Scanner-S24-v3.1.1-SETTINGS-FIX-UNSIGNED.apk
-          $ANDROID_HOME/build-tools/35.0.0/aapt dump badging unified-scanner/out/NSE-Unified-Scanner-S24-v3.1.1-SETTINGS-FIX-UNSIGNED.apk | grep "versionName='3.1.1'"
-          grep -q 'versionCode 311' unified-scanner/app/build.gradle
+          cp unified-scanner/app/build/outputs/apk/release/app-release-unsigned.apk unified-scanner/out/NSE-Unified-Scanner-S24-v3.2.0-EVIDENCE-OPENING-DRIVE-UNSIGNED.apk
+          $ANDROID_HOME/build-tools/35.0.0/aapt dump badging unified-scanner/out/NSE-Unified-Scanner-S24-v3.2.0-EVIDENCE-OPENING-DRIVE-UNSIGNED.apk | tee unified-scanner/out/BADGING-v3.2.0.txt | grep "versionName='3.2.0'"
+          grep -q 'versionCode 320' unified-scanner/app/build.gradle
+          grep -q 'class OpeningDriveLogic' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/OpeningDriveLogic.java
+          grep -q 'displayEligible' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/ScannerEngine.java
+          grep -q 'OPENING DRIVE' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/MainActivity.java
+          grep -q 'QUALIFIED OPPORTUNITY GOAL 20' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/MainActivity.java
           grep -q 'SAVE API CREDENTIALS' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/MainActivity.java
           grep -q 'REFRESH TOKEN' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/MainActivity.java
           grep -q 'AUTHENTICATE' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/MainActivity.java
           grep -q 'SAVE + VERIFY STATIC IP' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/MainActivity.java
-          grep -q 'ACTION_REFRESH_TOKEN' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/UnifiedService.java
+          grep -q 'OpeningDriveLogicTest' <(find unified-scanner/app/src/test -type f -printf '%f\n')
           grep -q 'GrowwSessionLogicTest' <(find unified-scanner/app/src/test -type f -printf '%f\n')
           cp unified-scanner/app/build/reports/lint-results-debug.html unified-scanner/out/LINT.html
 
       - name: Sign fresh-install release APK
         run: |
           set -e
-          STORE_PASS='TempFresh311BuildOnly!'
-          ALIAS='nse-scanner-v311-fresh'
+          STORE_PASS='FreshBuild320Only!'
+          ALIAS='nse-scanner-v320-fresh'
           keytool -genkeypair -v \
-            -keystore /tmp/nse-v311-fresh.jks \
+            -keystore /tmp/nse-v320-fresh.jks \
             -storepass "$STORE_PASS" \
             -keypass "$STORE_PASS" \
             -alias "$ALIAS" \
             -keyalg RSA \
             -keysize 4096 \
             -validity 10000 \
-            -dname "CN=NSE Unified Scanner v3.1.1, OU=Private Fresh Install, O=NSE Scanner, L=Bengaluru, ST=Karnataka, C=IN"
+            -dname "CN=NSE Unified Scanner v3.2.0, OU=Private Fresh Install, O=NSE Scanner, L=Bengaluru, ST=Karnataka, C=IN"
+          $ANDROID_HOME/build-tools/35.0.0/zipalign -p -f 4 \
+            unified-scanner/out/NSE-Unified-Scanner-S24-v3.2.0-EVIDENCE-OPENING-DRIVE-UNSIGNED.apk \
+            unified-scanner/out/NSE-Unified-Scanner-S24-v3.2.0-EVIDENCE-OPENING-DRIVE-ALIGNED.apk
           $ANDROID_HOME/build-tools/35.0.0/apksigner sign \
-            --ks /tmp/nse-v311-fresh.jks \
+            --ks /tmp/nse-v320-fresh.jks \
             --ks-key-alias "$ALIAS" \
             --ks-pass pass:"$STORE_PASS" \
             --key-pass pass:"$STORE_PASS" \
             --v1-signing-enabled true \
             --v2-signing-enabled true \
             --v3-signing-enabled true \
-            --out unified-scanner/out/NSE-Unified-Scanner-S24-v3.1.1-SETTINGS-FIX-FRESH-SIGNED.apk \
-            unified-scanner/out/NSE-Unified-Scanner-S24-v3.1.1-SETTINGS-FIX-UNSIGNED.apk
+            --out unified-scanner/out/NSE-Unified-Scanner-S24-v3.2.0-EVIDENCE-OPENING-DRIVE-FRESH-SIGNED.apk \
+            unified-scanner/out/NSE-Unified-Scanner-S24-v3.2.0-EVIDENCE-OPENING-DRIVE-ALIGNED.apk
           $ANDROID_HOME/build-tools/35.0.0/apksigner verify --verbose --print-certs \
-            unified-scanner/out/NSE-Unified-Scanner-S24-v3.1.1-SETTINGS-FIX-FRESH-SIGNED.apk \
-            | tee unified-scanner/out/SIGNATURE-VERIFICATION-v3.1.1.txt
-          test -s unified-scanner/out/NSE-Unified-Scanner-S24-v3.1.1-SETTINGS-FIX-FRESH-SIGNED.apk
-          sha256sum unified-scanner/out/NSE-Unified-Scanner-S24-v3.1.1-SETTINGS-FIX-FRESH-SIGNED.apk > unified-scanner/out/SHA256-v3.1.1.txt
+            unified-scanner/out/NSE-Unified-Scanner-S24-v3.2.0-EVIDENCE-OPENING-DRIVE-FRESH-SIGNED.apk \
+            | tee unified-scanner/out/SIGNATURE-VERIFICATION-v3.2.0.txt
+          $ANDROID_HOME/build-tools/35.0.0/zipalign -c -v 4 unified-scanner/out/NSE-Unified-Scanner-S24-v3.2.0-EVIDENCE-OPENING-DRIVE-FRESH-SIGNED.apk > unified-scanner/out/ZIPALIGN-v3.2.0.txt
+          test -s unified-scanner/out/NSE-Unified-Scanner-S24-v3.2.0-EVIDENCE-OPENING-DRIVE-FRESH-SIGNED.apk
+          sha256sum unified-scanner/out/NSE-Unified-Scanner-S24-v3.2.0-EVIDENCE-OPENING-DRIVE-FRESH-SIGNED.apk > unified-scanner/out/SHA256-v3.2.0.txt
 
       - uses: actions/upload-artifact@v4
         with:
-          name: NSE-Unified-Scanner-S24-v3.1.1-SETTINGS-FIX-FRESH-SIGNED
+          name: NSE-Unified-Scanner-S24-v3.2.0-EVIDENCE-OPENING-DRIVE-FRESH-SIGNED
           path: |
-            unified-scanner/out/NSE-Unified-Scanner-S24-v3.1.1-SETTINGS-FIX-FRESH-SIGNED.apk
-            unified-scanner/out/NSE-Unified-Scanner-S24-v3.1.1-SETTINGS-FIX-UNSIGNED.apk
-            unified-scanner/out/SIGNATURE-VERIFICATION-v3.1.1.txt
-            unified-scanner/out/SHA256-v3.1.1.txt
+            unified-scanner/out/NSE-Unified-Scanner-S24-v3.2.0-EVIDENCE-OPENING-DRIVE-FRESH-SIGNED.apk
+            unified-scanner/out/NSE-Unified-Scanner-S24-v3.2.0-EVIDENCE-OPENING-DRIVE-UNSIGNED.apk
+            unified-scanner/out/SIGNATURE-VERIFICATION-v3.2.0.txt
+            unified-scanner/out/SHA256-v3.2.0.txt
+            unified-scanner/out/BADGING-v3.2.0.txt
+            unified-scanner/out/ZIPALIGN-v3.2.0.txt
             unified-scanner/out/LINT.html
             unified-scanner/app/build/reports/tests/testDebugUnitTest/**
           retention-days: 30
