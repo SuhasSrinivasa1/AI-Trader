@@ -1,4 +1,4 @@
-# v3.2.0 evidence engine • opening-drive + normal-session quality momentum • fresh-install signed release
+# v3.2.0 evidence engine • opening-drive + normal-session quality momentum • fresh-install signed release • retry 1
 name: NSE Unified Scanner v3.2.0 Evidence Engine
 on:
   push:
@@ -20,7 +20,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add .scanner-v3.2.0-run-id.txt
-          git commit -m "Record NSE scanner v3.2.0 build run ${GITHUB_RUN_ID}" || true
+          git commit -m "Record NSE scanner v3.2.0 retry-1 build run ${GITHUB_RUN_ID}" || true
           git push origin HEAD:nse-unified-scanner-v3.1.0-quality-cash || true
 
       - name: Reconstruct v3 production baseline
@@ -65,7 +65,7 @@ jobs:
 
       - name: Apply v3.2.0 opening evidence engine patch
         run: |
-          base64 -d .github/scripts/scanner_v320_opening_evidence_patch.py.gz.b64 | gzip -dc > /tmp/scanner_v320_opening_evidence_patch.py
+          base64 -d .github/scripts/scanner_v320_opening_evidence_patch_retry1.py.gz.b64 | gzip -dc > /tmp/scanner_v320_opening_evidence_patch.py
           python /tmp/scanner_v320_opening_evidence_patch.py
 
       - uses: actions/setup-java@v4
