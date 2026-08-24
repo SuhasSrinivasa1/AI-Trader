@@ -1,0 +1,124 @@
+name: NSE Unified Scanner v3.1.0 Quality Momentum
+on:
+  push:
+    branches: [nse-unified-scanner-v3.1.0-quality-cash]
+    paths: ['.github/workflows/unified-scanner-build-v310.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Publish run id early
+        run: |
+          echo "${GITHUB_RUN_ID}" > .scanner-v3.1.0-run-id.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .scanner-v3.1.0-run-id.txt
+          git commit -m "Record NSE scanner v3.1.0 build run ${GITHUB_RUN_ID}" || true
+          git push origin HEAD:nse-unified-scanner-v3.1.0-quality-cash || true
+
+      - name: Reconstruct v3 production baseline
+        run: |
+          set +e
+          python .github/scripts/scanner_v12_patch.py > /tmp/v12patch.log 2>&1
+          set -e
+          cat /tmp/v12patch.log
+          python .github/scripts/scanner_v12_tail.py
+          set +e
+          python .github/scripts/scanner_v13_patch.py > /tmp/v13patch.log 2>&1
+          set -e
+          cat /tmp/v13patch.log
+          python .github/scripts/scanner_v13_tail.py
+          python .github/scripts/scanner_v14_patch.py
+          python .github/scripts/scanner_v15_patch.py
+          set +e
+          python .github/scripts/scanner_v16_patch.py > /tmp/v16patch.log 2>&1
+          set -e
+          cat /tmp/v16patch.log
+          python .github/scripts/scanner_v16_tail.py
+          python .github/scripts/scanner_v16_ui_fix.py
+          python .github/scripts/scanner_v161_patch.py
+          python .github/scripts/scanner_v162_patch.py
+          python .github/scripts/scanner_v163_patch.py
+          python .github/scripts/scanner_v164_patch.py
+          python .github/scripts/scanner_v165_patch.py
+          python .github/scripts/scanner_v20_patch.py
+          python .github/scripts/scanner_v20_compile_fix.py
+          python .github/scripts/scanner_v300_patch.py
+          python .github/scripts/scanner_v300_compile_fix.py
+
+      - name: Apply v3.1.0 Quality Momentum / Cash EQ patch
+        run: |
+          base64 -d .github/scripts/scanner_v310_patch.py.gz.b64 | gzip -dc > /tmp/scanner_v310_patch.py
+          python /tmp/scanner_v310_patch.py
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK
+        run: yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Test lint and build
+        run: |
+          gradle --no-daemon --console=plain -p unified-scanner clean testDebugUnitTest lintDebug assembleDebug assembleRelease
+          mkdir -p unified-scanner/out
+          cp unified-scanner/app/build/outputs/apk/debug/app-debug.apk unified-scanner/out/NSE-Unified-Scanner-S24-v3.1.0-QUALITY-MOMENTUM-DEBUG.apk
+          cp unified-scanner/app/build/outputs/apk/release/app-release-unsigned.apk unified-scanner/out/NSE-Unified-Scanner-S24-v3.1.0-QUALITY-MOMENTUM-UNSIGNED.apk
+          $ANDROID_HOME/build-tools/35.0.0/aapt dump badging unified-scanner/out/NSE-Unified-Scanner-S24-v3.1.0-QUALITY-MOMENTUM-DEBUG.apk | grep "versionName='3.1.0'"
+          grep -q 'versionCode 310' unified-scanner/app/build.gradle
+          grep -q 'QualityMomentumLogic' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/ScannerEngine.java
+          grep -q 'QUALITY MOMENTUM' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/MainActivity.java
+          grep -q 'BOX/CHOP' unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner/MainActivity.java
+          grep -q 'QualityMomentumLogicTest' <(find unified-scanner/app/src/test -type f -printf '%f\n')
+          cp -r unified-scanner/app/src/main/java/com/suhas/nseunifiedscanner unified-scanner/out/patched-source
+          cp -r unified-scanner/app/src/test/java/com/suhas/nseunifiedscanner unified-scanner/out/patched-tests
+          cp unified-scanner/app/build/reports/lint-results-debug.html unified-scanner/out/LINT.html
+          $ANDROID_HOME/build-tools/35.0.0/apksigner verify --verbose --print-certs unified-scanner/out/NSE-Unified-Scanner-S24-v3.1.0-QUALITY-MOMENTUM-DEBUG.apk > unified-scanner/out/DEBUG-SIGNATURE.txt
+          sha256sum unified-scanner/out/NSE-Unified-Scanner-S24-v3.1.0-QUALITY-MOMENTUM-DEBUG.apk > unified-scanner/out/DEBUG-SHA256.txt
+          sha256sum unified-scanner/out/NSE-Unified-Scanner-S24-v3.1.0-QUALITY-MOMENTUM-UNSIGNED.apk > unified-scanner/out/UNSIGNED-SHA256.txt
+
+      - name: Optional permanent release signing
+        env:
+          NSE_KEYSTORE_B64: ${{ secrets.NSE_KEYSTORE_B64 }}
+          NSE_KEYSTORE_PASSWORD: ${{ secrets.NSE_KEYSTORE_PASSWORD }}
+          NSE_KEY_ALIAS: ${{ secrets.NSE_KEY_ALIAS }}
+          NSE_KEY_PASSWORD: ${{ secrets.NSE_KEY_PASSWORD }}
+        run: |
+          set -e
+          OUT=unified-scanner/out
+          if [ -n "$NSE_KEYSTORE_B64" ] && [ -n "$NSE_KEYSTORE_PASSWORD" ] && [ -n "$NSE_KEY_ALIAS" ] && [ -n "$NSE_KEY_PASSWORD" ]; then
+            printf '%s' "$NSE_KEYSTORE_B64" | base64 -d > /tmp/nse-unified-scanner-release.jks
+            $ANDROID_HOME/build-tools/35.0.0/apksigner sign \
+              --ks /tmp/nse-unified-scanner-release.jks \
+              --ks-key-alias "$NSE_KEY_ALIAS" \
+              --ks-pass env:NSE_KEYSTORE_PASSWORD \
+              --key-pass env:NSE_KEY_PASSWORD \
+              --out "$OUT/NSE-Unified-Scanner-S24-v3.1.0-QUALITY-MOMENTUM-FINAL.apk" \
+              "$OUT/NSE-Unified-Scanner-S24-v3.1.0-QUALITY-MOMENTUM-UNSIGNED.apk"
+            $ANDROID_HOME/build-tools/35.0.0/apksigner verify --verbose --print-certs "$OUT/NSE-Unified-Scanner-S24-v3.1.0-QUALITY-MOMENTUM-FINAL.apk" > "$OUT/FINAL-SIGNATURE.txt"
+            sha256sum "$OUT/NSE-Unified-Scanner-S24-v3.1.0-QUALITY-MOMENTUM-FINAL.apk" > "$OUT/FINAL-SHA256.txt"
+            grep -qi '1b35c4a0105ed4a4c8b27aecfcf011eeb6b7a17a90c063f02c3e8a679d9b2c46' "$OUT/FINAL-SIGNATURE.txt" && echo 'PERMANENT SIGNER MATCHED' > "$OUT/SIGNING-STATUS.txt" || (echo 'SIGNER MISMATCH' > "$OUT/SIGNING-STATUS.txt"; exit 1)
+          else
+            echo 'PERMANENT SIGNING SECRETS NOT AVAILABLE IN THIS WORKFLOW' > "$OUT/SIGNING-STATUS.txt"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NSE-Unified-Scanner-S24-v3.1.0-QUALITY-MOMENTUM-BUILD
+          path: |
+            unified-scanner/out/**
+            unified-scanner/app/build/reports/tests/testDebugUnitTest/**
+          retention-days: 30
