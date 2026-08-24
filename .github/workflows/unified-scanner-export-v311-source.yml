@@ -1,0 +1,61 @@
+name: Export NSE Unified Scanner v3.1.1 Generated Source
+on:
+  push:
+    branches: [nse-unified-scanner-v3.1.0-quality-cash]
+    paths: ['.github/workflows/unified-scanner-export-v311-source.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish run id
+        run: |
+          echo "${GITHUB_RUN_ID}" > .scanner-v311-export-run-id.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .scanner-v311-export-run-id.txt
+          git commit -m "Record v3.1.1 source export run ${GITHUB_RUN_ID}" || true
+          git push origin HEAD:nse-unified-scanner-v3.1.0-quality-cash || true
+      - name: Reconstruct v3.1.1 source
+        run: |
+          set +e
+          python .github/scripts/scanner_v12_patch.py >/tmp/v12.log 2>&1
+          set -e
+          cat /tmp/v12.log
+          python .github/scripts/scanner_v12_tail.py
+          set +e
+          python .github/scripts/scanner_v13_patch.py >/tmp/v13.log 2>&1
+          set -e
+          cat /tmp/v13.log
+          python .github/scripts/scanner_v13_tail.py
+          python .github/scripts/scanner_v14_patch.py
+          python .github/scripts/scanner_v15_patch.py
+          set +e
+          python .github/scripts/scanner_v16_patch.py >/tmp/v16.log 2>&1
+          set -e
+          cat /tmp/v16.log
+          python .github/scripts/scanner_v16_tail.py
+          python .github/scripts/scanner_v16_ui_fix.py
+          python .github/scripts/scanner_v161_patch.py
+          python .github/scripts/scanner_v162_patch.py
+          python .github/scripts/scanner_v163_patch.py
+          python .github/scripts/scanner_v164_patch.py
+          python .github/scripts/scanner_v165_patch.py
+          python .github/scripts/scanner_v20_patch.py
+          python .github/scripts/scanner_v20_compile_fix.py
+          python .github/scripts/scanner_v300_patch.py
+          python .github/scripts/scanner_v300_compile_fix.py
+          cat .github/scripts/v310_payload/part* | base64 -d | gzip -dc >/tmp/scanner_v310_patch.py
+          python /tmp/scanner_v310_patch.py
+          base64 -d .github/scripts/scanner_v311_settings_patch.py.gz.b64 | gzip -dc >/tmp/scanner_v311_settings_patch.py
+          python /tmp/scanner_v311_settings_patch.py
+          tar -czf NSE-Unified-Scanner-v3.1.1-generated-source.tar.gz unified-scanner
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NSE-Unified-Scanner-v3.1.1-generated-source
+          path: NSE-Unified-Scanner-v3.1.1-generated-source.tar.gz
+          retention-days: 7
