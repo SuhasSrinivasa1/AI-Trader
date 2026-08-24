@@ -1,3 +1,4 @@
+# retry 2 after dynamic-horizon fixture correction
 name: NSE Unified Scanner v3.1.0 Quality Momentum
 on:
   push:
