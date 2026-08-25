@@ -7,6 +7,7 @@ on:
       - '.github/payloads/delivery-momentum-v1.part*'
       - '.github/scripts/delivery_momentum_v1_runtime_fix.py'
       - '.github/scripts/delivery_momentum_v11_ui_patch.py'
+      - '.github/scripts/delivery_momentum_v11_insets_fix.py'
       - '.github/workflows/delivery-momentum-v1.yml'
 permissions:
   contents: write
@@ -48,6 +49,8 @@ jobs:
         run: python .github/scripts/delivery_momentum_v1_runtime_fix.py
       - name: Apply professional v1.1 dashboard UI
         run: python .github/scripts/delivery_momentum_v11_ui_patch.py
+      - name: Apply API26-safe system inset fix
+        run: python .github/scripts/delivery_momentum_v11_insets_fix.py
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -74,6 +77,8 @@ jobs:
           grep -q 'TOP CONTINUATION CANDIDATES' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/MainActivity.java
           grep -q 'LIVE RANKING' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/MainActivity.java
           grep -q 'PAPER LEARNING' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/MainActivity.java
+          grep -q 'getSystemWindowInsetTop()' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/MainActivity.java
+          ! grep -q 'WindowInsets.Type.systemBars()' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/MainActivity.java
           grep -q 'universe=null' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
           grep -q 'minusDays(12)' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
           grep -q 'if(!"BUY".equals(c.state))continue;' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
