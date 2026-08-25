@@ -30,6 +30,18 @@ jobs:
           test -f delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/MomentumMath.java
           grep -q "applicationId 'com.suhas.nsedeliverymomentum'" delivery-momentum/app/build.gradle
           ! grep -R -q 'com.suhas.nseunifiedscanner' delivery-momentum
+      - name: Android compile compatibility fix
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/GrowwClient.java')
+          s=p.read_text()
+          old='JSONObject p=j.optJSONObject("payload"); Map<String,Ohlc> out=new HashMap<>(); if(p!=null)for(String k:p.keySet()){String s=k.startsWith("NSE_")?k.substring(4):k; out.put(s,parseOhlc(String.valueOf(p.opt(k))));} return ApiResult.ok(out);'
+          new='JSONObject p=j.optJSONObject("payload"); Map<String,Ohlc> out=new HashMap<>(); if(p!=null){Iterator<String> it=p.keys();while(it.hasNext()){String k=it.next();String s=k.startsWith("NSE_")?k.substring(4):k;out.put(s,parseOhlc(String.valueOf(p.opt(k))));}} return ApiResult.ok(out);'
+          if old not in s:
+              raise SystemExit('GrowwClient JSONObject anchor not found')
+          p.write_text(s.replace(old,new))
+          PY
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
