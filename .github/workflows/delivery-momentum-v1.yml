@@ -5,6 +5,7 @@ on:
     branches: [nse-delivery-momentum-v1-build-final]
     paths:
       - '.github/payloads/delivery-momentum-v1.part*'
+      - '.github/scripts/delivery_momentum_v1_runtime_fix.py'
       - '.github/workflows/delivery-momentum-v1.yml'
 permissions:
   contents: write
@@ -42,6 +43,8 @@ jobs:
               raise SystemExit('GrowwClient JSONObject anchor not found')
           p.write_text(s.replace(old,new))
           PY
+      - name: Apply fresh-app runtime reliability fixes
+        run: python .github/scripts/delivery_momentum_v1_runtime_fix.py
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -66,6 +69,9 @@ jobs:
           grep -q 'expectedRemaining<1.0' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/MomentumMath.java
           grep -q 'hourlyPace<0.45' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/MomentumMath.java
           grep -q '10-HIT BENCHMARK' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/MainActivity.java
+          grep -q 'universe=null' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
+          grep -q 'minusDays(12)' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
+          grep -q 'if(!"BUY".equals(c.state))continue;' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
           cp delivery-momentum/app/build/reports/lint-results-debug.html delivery-momentum/out/LINT.html
           cp -r delivery-momentum/app/build/reports/tests/testDebugUnitTest delivery-momentum/out/UNIT-TESTS
       - name: Sign fresh-install delivery release
@@ -90,6 +96,10 @@ jobs:
           turnover, market/sector strength, order-flow support and projected subsequent same-session upside >=1.0%.
           One-bar spikes, choppy paths, deep pullbacks and excessive extension are penalized.
           No small rupee target cards and no fixed 30/60/120-minute trade horizon.
+
+          Runtime reliability fixes: official NIFTY-500 universe is loaded off the Android main thread;
+          relative-volume baselines refresh by 15-minute session bucket using an API-valid 12-day history window;
+          order-flow persistence is session-scoped; and LIVE execution uses the same BUY qualification shown in UI.
 
           Learning: every BUY-qualified recommendation is tracked in paper and live modes.
           HIT = subsequently reaches +1.0% from recommendation price in the same session.
