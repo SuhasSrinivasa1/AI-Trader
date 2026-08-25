@@ -1,4 +1,4 @@
-name: NSE Delivery Momentum v1.1.1 Scanner Fix
+name: NSE Delivery Momentum v1.2.0 ALL-NSE Build
 on:
   workflow_dispatch:
   push:
@@ -9,6 +9,7 @@ on:
       - '.github/scripts/delivery_momentum_v11_ui_patch.py'
       - '.github/scripts/delivery_momentum_v11_insets_fix.py'
       - '.github/scripts/delivery_momentum_v111_ohlc_health_fix.py'
+      - '.github/scripts/delivery_momentum_v120_all_nse_patch.py'
       - '.github/workflows/delivery-momentum-v1.yml'
 permissions:
   contents: write
@@ -26,14 +27,13 @@ jobs:
           git add .delivery-momentum-v1-run-id.txt
           git commit -m "Record Delivery Momentum build ${GITHUB_RUN_ID}" || true
           git push origin HEAD:nse-delivery-momentum-v1-build-final || true
-      - name: Materialize completely fresh application source
+      - name: Materialize fresh application source
         run: |
           set -e
           cat .github/payloads/delivery-momentum-v1.part* | base64 -d | tar -xz
           test -f delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/MainActivity.java
           test -f delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/MomentumMath.java
           grep -q "applicationId 'com.suhas.nsedeliverymomentum'" delivery-momentum/app/build.gradle
-          ! grep -R -q 'com.suhas.nseunifiedscanner' delivery-momentum
       - name: Android compile compatibility fix
         run: |
           python - <<'PY'
@@ -42,18 +42,19 @@ jobs:
           s=p.read_text()
           old='JSONObject p=j.optJSONObject("payload"); Map<String,Ohlc> out=new HashMap<>(); if(p!=null)for(String k:p.keySet()){String s=k.startsWith("NSE_")?k.substring(4):k; out.put(s,parseOhlc(String.valueOf(p.opt(k))));} return ApiResult.ok(out);'
           new='JSONObject p=j.optJSONObject("payload"); Map<String,Ohlc> out=new HashMap<>(); if(p!=null){Iterator<String> it=p.keys();while(it.hasNext()){String k=it.next();String s=k.startsWith("NSE_")?k.substring(4):k;out.put(s,parseOhlc(String.valueOf(p.opt(k))));}} return ApiResult.ok(out);'
-          if old not in s:
-              raise SystemExit('GrowwClient JSONObject anchor not found')
+          if old not in s: raise SystemExit('GrowwClient JSONObject anchor not found')
           p.write_text(s.replace(old,new))
           PY
-      - name: Apply fresh-app runtime reliability fixes
+      - name: Apply runtime reliability fixes
         run: python .github/scripts/delivery_momentum_v1_runtime_fix.py
-      - name: Apply professional v1.1 dashboard UI
+      - name: Apply professional dashboard UI
         run: python .github/scripts/delivery_momentum_v11_ui_patch.py
       - name: Apply API26-safe system inset fix
         run: python .github/scripts/delivery_momentum_v11_insets_fix.py
       - name: Fix OHLC parsing and scanner health
         run: python .github/scripts/delivery_momentum_v111_ohlc_health_fix.py
+      - name: Apply ALL-NSE discovery architecture
+        run: python .github/scripts/delivery_momentum_v120_all_nse_patch.py
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -69,64 +70,73 @@ jobs:
           set -e
           gradle --no-daemon --console=plain -p delivery-momentum clean testDebugUnitTest lintDebug assembleDebug assembleRelease
           mkdir -p delivery-momentum/out
-          cp delivery-momentum/app/build/outputs/apk/release/app-release-unsigned.apk delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.1.1-UNSIGNED.apk
-          $ANDROID_HOME/build-tools/35.0.0/aapt dump badging delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.1.1-UNSIGNED.apk | tee delivery-momentum/out/APK-BADGING.txt
+          cp delivery-momentum/app/build/outputs/apk/release/app-release-unsigned.apk delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.2.0-ALL-NSE-UNSIGNED.apk
+          $ANDROID_HOME/build-tools/35.0.0/aapt dump badging delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.2.0-ALL-NSE-UNSIGNED.apk | tee delivery-momentum/out/APK-BADGING.txt
           grep -q "package: name='com.suhas.nsedeliverymomentum'" delivery-momentum/out/APK-BADGING.txt
-          grep -q "versionName='1.1.1'" delivery-momentum/out/APK-BADGING.txt
+          grep -q "versionName='1.2.0'" delivery-momentum/out/APK-BADGING.txt
+          grep -q 'EQUITY_L.csv' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/UniverseStore.java
+          grep -q '"EQ".equalsIgnoreCase(series)' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/UniverseStore.java
+          grep -q 'all.size()>=800' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/UniverseStore.java
+          grep -q 'broadMoverCount' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
+          grep -q 'Math.min(90,movers.size())' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
+          grep -q 'Math.min(10,out.size())' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
+          grep -q 'ALL-NSE COMPLETE' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
           grep -q 'parseOhlc(p.opt(k))' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/GrowwClient.java
           grep -q 'OHLC DATA INVALID' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
-          grep -q 'next deep scan %ds' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
           grep -q '"product","CNC"' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/GrowwClient.java
           grep -q '"order_type","MARKET"' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/GrowwClient.java
           grep -q 'expectedRemaining<1.0' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/MomentumMath.java
           grep -q 'hourlyPace<0.45' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/MomentumMath.java
-          grep -q 'TOP CONTINUATION CANDIDATES' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/MainActivity.java
-          grep -q 'LIVE RANKING' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/MainActivity.java
+          grep -q 'ALL-NSE DISCOVERY' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/MainActivity.java
           grep -q 'PAPER LEARNING' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/MainActivity.java
           grep -q 'getSystemWindowInsetTop()' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/MainActivity.java
-          ! grep -q 'WindowInsets.Type.systemBars()' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/MainActivity.java
-          grep -q 'universe=null' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
-          grep -q 'minusDays(12)' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
           grep -q 'if(!"BUY".equals(c.state))continue;' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
           cp delivery-momentum/app/build/reports/lint-results-debug.html delivery-momentum/out/LINT.html
           cp -r delivery-momentum/app/build/reports/tests/testDebugUnitTest delivery-momentum/out/UNIT-TESTS
-      - name: Sign fresh-install delivery release
+      - name: Sign fresh-install release
         run: |
           set -e
-          STORE_PASS='FreshDeliveryMomentumV11!'
-          ALIAS='nse-delivery-momentum-v11'
-          keytool -genkeypair -v -keystore /tmp/delivery-momentum-v11.jks -storepass "$STORE_PASS" -keypass "$STORE_PASS" -alias "$ALIAS" -keyalg RSA -keysize 4096 -validity 10000 -dname "CN=NSE Delivery Momentum v1.1, OU=Private Fresh Install, O=Delivery Momentum, L=Bengaluru, ST=Karnataka, C=IN"
-          $ANDROID_HOME/build-tools/35.0.0/apksigner sign --ks /tmp/delivery-momentum-v11.jks --ks-key-alias "$ALIAS" --ks-pass pass:"$STORE_PASS" --key-pass pass:"$STORE_PASS" --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --out delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.1.1-SCANNER-FIX-FRESH-SIGNED.apk delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.1.1-UNSIGNED.apk
-          $ANDROID_HOME/build-tools/35.0.0/apksigner verify --verbose --print-certs delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.1.1-SCANNER-FIX-FRESH-SIGNED.apk | tee delivery-momentum/out/SIGNATURE-VERIFICATION.txt
+          STORE_PASS='FreshDeliveryMomentumV12!'
+          ALIAS='nse-delivery-momentum-v12'
+          keytool -genkeypair -v -keystore /tmp/delivery-momentum-v12.jks -storepass "$STORE_PASS" -keypass "$STORE_PASS" -alias "$ALIAS" -keyalg RSA -keysize 4096 -validity 10000 -dname "CN=NSE Delivery Momentum v1.2, OU=Private Fresh Install, O=Delivery Momentum, L=Bengaluru, ST=Karnataka, C=IN"
+          $ANDROID_HOME/build-tools/35.0.0/apksigner sign --ks /tmp/delivery-momentum-v12.jks --ks-key-alias "$ALIAS" --ks-pass pass:"$STORE_PASS" --key-pass pass:"$STORE_PASS" --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --out delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.2.0-ALL-NSE-FRESH-SIGNED.apk delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.2.0-ALL-NSE-UNSIGNED.apk
+          $ANDROID_HOME/build-tools/35.0.0/apksigner verify --verbose --print-certs delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.2.0-ALL-NSE-FRESH-SIGNED.apk | tee delivery-momentum/out/SIGNATURE-VERIFICATION.txt
           grep -q 'Verified using v2 scheme (APK Signature Scheme v2): true' delivery-momentum/out/SIGNATURE-VERIFICATION.txt
-          sha256sum delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.1.1-SCANNER-FIX-FRESH-SIGNED.apk > delivery-momentum/out/SHA256.txt
+          grep -q 'Verified using v3 scheme (APK Signature Scheme v3): true' delivery-momentum/out/SIGNATURE-VERIFICATION.txt
+          sha256sum delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.2.0-ALL-NSE-FRESH-SIGNED.apk > delivery-momentum/out/SHA256.txt
       - name: Package source and release notes
         run: |
           cat > delivery-momentum/out/RELEASE-NOTES.txt <<'EOF'
-          NSE DELIVERY MOMENTUM v1.1.1 — LIVE OHLC + SCANNER HEALTH FIX
+          NSE DELIVERY MOMENTUM v1.2.0 — ALL-NSE DISCOVERY
           Package: com.suhas.nsedeliverymomentum
 
-          ROOT CAUSE FIXED:
-          - Groww OHLC payload entries are JSON objects.
-          - v1.1.0 converted each object to text and used a parser that failed on quoted JSON field names.
-          - This caused open/close values to become zero, so breadth stayed at 0%, mover selection stayed empty,
-            and the UI could remain on scanning/refresh without producing deep candidates.
+          MAJOR ARCHITECTURE CHANGE
+          - Broad discovery now loads the official NSE EQUITY_L cash-equity master and filters SERIES=EQ.
+          - NIFTY500 is retained only for sector enrichment / quality preference; it no longer limits discovery.
+          - Every available NSE CASH/EQ symbol is submitted to the broad OHLC scan.
+          - If the official all-equity master is unavailable, the app fails back to the mapped quality universe rather than crashing.
 
-          FIXES:
-          - Parse OHLC JSON objects directly.
-          - Robust fallback parser retained.
-          - Fail visibly if too few OHLC rows contain valid open/last values.
-          - Scanner health now reports valid rows, breadth, mover count, deep-candidate count and BUY count.
-          - The waiting message now shows seconds until the next deep scan instead of falsely saying a refresh
-            is continuously in progress.
-          - Deep scan cadence reduced from 150s to 90s while broad scanning remains every ~60s.
+          TWO-STAGE FUNNEL
+          - Broad stage: all NSE EQ symbols, valid OHLC, day move, breadth and developing movers.
+          - Deep pool: up to 90 names using strongest all-market movers plus mapped quality names.
+          - Early quote-stage liquidity screen prevents thin stocks from consuming expensive candle/history analysis.
+          - Final recommendation still requires the sustained-continuation model: pace, VWAP acceptance, smoothness,
+            participation, relative strength, order flow and >=1% additional same-session potential.
+          - Top 10 deep candidates remain visible even when not yet BUY-qualified.
 
-          UI and sustained-continuation strategy remain otherwise unchanged.
-          Delivery only: Groww CASH + CNC + MARKET BUY. No MIS/F&O. No automated sell.
+          HEALTH DISPLAY
+          - Status reports valid/total universe, breadth, broad-mover count, deep-pool count and BUY count.
+          - This makes it obvious whether the application is truly scanning the full NSE universe.
+
+          EXECUTION
+          - Delivery only: Groww CASH + CNC + MARKET BUY.
+          - No MIS/F&O execution. No automated sell.
+          - Live execution remains OFF by default; paper learning works with live execution OFF.
+          - 10 hits/day remains a performance benchmark, not a guaranteed or forced trade quota.
           EOF
-          (cd delivery-momentum && zip -qr out/NSE-Delivery-Momentum-v1.1.1-SOURCE.zip app build.gradle settings.gradle gradle.properties)
+          (cd delivery-momentum && zip -qr out/NSE-Delivery-Momentum-v1.2.0-SOURCE.zip app build.gradle settings.gradle gradle.properties)
       - uses: actions/upload-artifact@v4
         with:
-          name: NSE-Delivery-Momentum-S24-v1.1.1-SCANNER-FIX
+          name: NSE-Delivery-Momentum-S24-v1.2.0-ALL-NSE
           path: delivery-momentum/out/**
           retention-days: 30
