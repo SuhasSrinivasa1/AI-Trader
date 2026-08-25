@@ -1,4 +1,4 @@
-name: NSE Delivery Momentum v1.2.0 ALL-NSE Build
+name: NSE Delivery Momentum v1.3.0 DUAL ENGINE
 on:
   workflow_dispatch:
   push:
@@ -10,6 +10,7 @@ on:
       - '.github/scripts/delivery_momentum_v11_insets_fix.py'
       - '.github/scripts/delivery_momentum_v111_ohlc_health_fix.py'
       - '.github/scripts/delivery_momentum_v120_all_nse_patch.py'
+      - '.github/scripts/delivery_momentum_v130_trajectory_patch.py'
       - '.github/workflows/delivery-momentum-v1.yml'
 permissions:
   contents: write
@@ -55,6 +56,8 @@ jobs:
         run: python .github/scripts/delivery_momentum_v111_ohlc_health_fix.py
       - name: Apply ALL-NSE discovery architecture
         run: python .github/scripts/delivery_momentum_v120_all_nse_patch.py
+      - name: Add independent upward-trajectory engine
+        run: python .github/scripts/delivery_momentum_v130_trajectory_patch.py
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -70,73 +73,82 @@ jobs:
           set -e
           gradle --no-daemon --console=plain -p delivery-momentum clean testDebugUnitTest lintDebug assembleDebug assembleRelease
           mkdir -p delivery-momentum/out
-          cp delivery-momentum/app/build/outputs/apk/release/app-release-unsigned.apk delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.2.0-ALL-NSE-UNSIGNED.apk
-          $ANDROID_HOME/build-tools/35.0.0/aapt dump badging delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.2.0-ALL-NSE-UNSIGNED.apk | tee delivery-momentum/out/APK-BADGING.txt
+          cp delivery-momentum/app/build/outputs/apk/release/app-release-unsigned.apk delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.3.0-DUAL-ENGINE-UNSIGNED.apk
+          $ANDROID_HOME/build-tools/35.0.0/aapt dump badging delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.3.0-DUAL-ENGINE-UNSIGNED.apk | tee delivery-momentum/out/APK-BADGING.txt
           grep -q "package: name='com.suhas.nsedeliverymomentum'" delivery-momentum/out/APK-BADGING.txt
-          grep -q "versionName='1.2.0'" delivery-momentum/out/APK-BADGING.txt
+          grep -q "versionName='1.3.0'" delivery-momentum/out/APK-BADGING.txt
           grep -q 'EQUITY_L.csv' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/UniverseStore.java
-          grep -q '"EQ".equalsIgnoreCase(series)' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/UniverseStore.java
           grep -q 'all.size()>=800' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/UniverseStore.java
-          grep -q 'broadMoverCount' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
-          grep -q 'Math.min(90,movers.size())' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
-          grep -q 'Math.min(10,out.size())' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
-          grep -q 'ALL-NSE COMPLETE' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
-          grep -q 'parseOhlc(p.opt(k))' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/GrowwClient.java
-          grep -q 'OHLC DATA INVALID' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
+          grep -q 'Math.min(5,out.size())' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
+          grep -q 'trajectory_cards' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
+          grep -q 'Math.min(40,trajectoryPool.size())' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
+          grep -q '"3minute"' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
+          grep -q 'UPTREND' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
+          grep -q 'day_change_perc' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/GrowwClient.java
+          grep -q 'positive15' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/TrajectoryMath.java
+          grep -q 'maxSpikeShare' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/TrajectoryMath.java
+          grep -q 'gap-only move' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/TrajectoryMath.java
+          grep -q 'UPWARD TRAJECTORY • TOP 5' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/MainActivity.java
+          grep -q 'TOP CONTINUATION CANDIDATES' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/MainActivity.java
           grep -q '"product","CNC"' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/GrowwClient.java
           grep -q '"order_type","MARKET"' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/GrowwClient.java
-          grep -q 'expectedRemaining<1.0' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/MomentumMath.java
-          grep -q 'hourlyPace<0.45' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/MomentumMath.java
-          grep -q 'ALL-NSE DISCOVERY' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/MainActivity.java
-          grep -q 'PAPER LEARNING' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/MainActivity.java
-          grep -q 'getSystemWindowInsetTop()' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/MainActivity.java
           grep -q 'if(!"BUY".equals(c.state))continue;' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
+          grep -q 'if(!"UPTREND".equals(c.state))continue;' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
           cp delivery-momentum/app/build/reports/lint-results-debug.html delivery-momentum/out/LINT.html
           cp -r delivery-momentum/app/build/reports/tests/testDebugUnitTest delivery-momentum/out/UNIT-TESTS
       - name: Sign fresh-install release
         run: |
           set -e
-          STORE_PASS='FreshDeliveryMomentumV12!'
-          ALIAS='nse-delivery-momentum-v12'
-          keytool -genkeypair -v -keystore /tmp/delivery-momentum-v12.jks -storepass "$STORE_PASS" -keypass "$STORE_PASS" -alias "$ALIAS" -keyalg RSA -keysize 4096 -validity 10000 -dname "CN=NSE Delivery Momentum v1.2, OU=Private Fresh Install, O=Delivery Momentum, L=Bengaluru, ST=Karnataka, C=IN"
-          $ANDROID_HOME/build-tools/35.0.0/apksigner sign --ks /tmp/delivery-momentum-v12.jks --ks-key-alias "$ALIAS" --ks-pass pass:"$STORE_PASS" --key-pass pass:"$STORE_PASS" --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --out delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.2.0-ALL-NSE-FRESH-SIGNED.apk delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.2.0-ALL-NSE-UNSIGNED.apk
-          $ANDROID_HOME/build-tools/35.0.0/apksigner verify --verbose --print-certs delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.2.0-ALL-NSE-FRESH-SIGNED.apk | tee delivery-momentum/out/SIGNATURE-VERIFICATION.txt
+          STORE_PASS='FreshDeliveryMomentumV13!'
+          ALIAS='nse-delivery-momentum-v13'
+          keytool -genkeypair -v -keystore /tmp/delivery-momentum-v13.jks -storepass "$STORE_PASS" -keypass "$STORE_PASS" -alias "$ALIAS" -keyalg RSA -keysize 4096 -validity 10000 -dname "CN=NSE Delivery Momentum v1.3, OU=Private Fresh Install, O=Delivery Momentum, L=Bengaluru, ST=Karnataka, C=IN"
+          $ANDROID_HOME/build-tools/35.0.0/apksigner sign --ks /tmp/delivery-momentum-v13.jks --ks-key-alias "$ALIAS" --ks-pass pass:"$STORE_PASS" --key-pass pass:"$STORE_PASS" --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --out delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.3.0-DUAL-ENGINE-FRESH-SIGNED.apk delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.3.0-DUAL-ENGINE-UNSIGNED.apk
+          $ANDROID_HOME/build-tools/35.0.0/apksigner verify --verbose --print-certs delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.3.0-DUAL-ENGINE-FRESH-SIGNED.apk | tee delivery-momentum/out/SIGNATURE-VERIFICATION.txt
           grep -q 'Verified using v2 scheme (APK Signature Scheme v2): true' delivery-momentum/out/SIGNATURE-VERIFICATION.txt
           grep -q 'Verified using v3 scheme (APK Signature Scheme v3): true' delivery-momentum/out/SIGNATURE-VERIFICATION.txt
-          sha256sum delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.2.0-ALL-NSE-FRESH-SIGNED.apk > delivery-momentum/out/SHA256.txt
+          sha256sum delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.3.0-DUAL-ENGINE-FRESH-SIGNED.apk > delivery-momentum/out/SHA256.txt
       - name: Package source and release notes
         run: |
           cat > delivery-momentum/out/RELEASE-NOTES.txt <<'EOF'
-          NSE DELIVERY MOMENTUM v1.2.0 — ALL-NSE DISCOVERY
+          NSE DELIVERY MOMENTUM v1.3.0 — DUAL ENGINE / UPWARD TRAJECTORY
           Package: com.suhas.nsedeliverymomentum
 
-          MAJOR ARCHITECTURE CHANGE
-          - Broad discovery now loads the official NSE EQUITY_L cash-equity master and filters SERIES=EQ.
-          - NIFTY500 is retained only for sector enrichment / quality preference; it no longer limits discovery.
-          - Every available NSE CASH/EQ symbol is submitted to the broad OHLC scan.
-          - If the official all-equity master is unavailable, the app fails back to the mapped quality universe rather than crashing.
+          TABLE 1 — EXISTING CONTINUATION ENGINE
+          - Existing v1.2 ALL-NSE discovery and continuation logic is retained.
+          - Visible list reduced from Top 10 to Top 5 as requested.
+          - Its BUY qualification, learning and execution rules are otherwise unchanged.
 
-          TWO-STAGE FUNNEL
-          - Broad stage: all NSE EQ symbols, valid OHLC, day move, breadth and developing movers.
-          - Deep pool: up to 90 names using strongest all-market movers plus mapped quality names.
-          - Early quote-stage liquidity screen prevents thin stocks from consuming expensive candle/history analysis.
-          - Final recommendation still requires the sustained-continuation model: pace, VWAP acceptance, smoothness,
-            participation, relative strength, order flow and >=1% additional same-session potential.
-          - Top 10 deep candidates remain visible even when not yet BUY-qualified.
+          TABLE 2 — NEW UPWARD TRAJECTORY ENGINE
+          - Independent all-NSE CASH/EQ trajectory search; it does not replace Table 1.
+          - Broad prefilter favors positive day gain, near-high location and controlled pullback.
+          - Deep analysis uses 3-minute candles so a forming trend can be recognized earlier.
+          - Session log-price regression slope + R-squared measure persistent drift and smoothness.
+          - Recent slope must remain positive; old momentum alone is insufficient.
+          - Rolling 15m and 30m returns measure repeated continuation rather than a single jump.
+          - Higher lows/highs, session VWAP hold, path efficiency and close-near-high location confirm structure.
+          - Maximum intraday drawdown is controlled.
+          - Largest-candle concentration is measured; one-spike moves are penalized unless meaningful follow-through occurs.
+          - Groww day_change_perc is used to estimate the open gap; gap-only moves are penalized and must prove post-open appreciation.
+          - Turnover, spread, market/sector relative strength and order-flow imbalance remain corroborating evidence.
+          - Top 5 UPTREND / BUILDING / WATCH candidates stay visible.
 
-          HEALTH DISPLAY
-          - Status reports valid/total universe, breadth, broad-mover count, deep-pool count and BUY count.
-          - This makes it obvious whether the application is truly scanning the full NSE universe.
+          RESEARCH BASIS
+          - Intraday momentum is documented internationally and strengthens with trading activity/volatility.
+          - NSE research finds order imbalance can contain short-term predictive information, especially at short horizons.
+          - Practitioner trend definitions emphasize higher highs/higher lows; VWAP + volume are useful corroborating signals.
+          - Because extreme trends can reverse, the engine explicitly penalizes overextended, spike-dominated and deep-drawdown paths.
 
-          EXECUTION
+          EXECUTION / LEARNING
           - Delivery only: Groww CASH + CNC + MARKET BUY.
-          - No MIS/F&O execution. No automated sell.
-          - Live execution remains OFF by default; paper learning works with live execution OFF.
-          - 10 hits/day remains a performance benchmark, not a guaranteed or forced trade quota.
+          - No MIS/F&O execution. No automatic sell.
+          - LIVE OFF remains paper learning only.
+          - When LIVE is ON, both a Table-1 BUY and a Table-2 UPTREND can be CNC-buy eligible; duplicate-symbol and daily-max locks are shared.
+          - A symbol is recorded only once per session across the two engines; +1% subsequent same-session rise remains the learning hit definition.
+          - 10 hits/day is a benchmark, never a fabricated or forced quota.
           EOF
-          (cd delivery-momentum && zip -qr out/NSE-Delivery-Momentum-v1.2.0-SOURCE.zip app build.gradle settings.gradle gradle.properties)
+          (cd delivery-momentum && zip -qr out/NSE-Delivery-Momentum-v1.3.0-SOURCE.zip app build.gradle settings.gradle gradle.properties)
       - uses: actions/upload-artifact@v4
         with:
-          name: NSE-Delivery-Momentum-S24-v1.2.0-ALL-NSE
+          name: NSE-Delivery-Momentum-S24-v1.3.0-DUAL-ENGINE
           path: delivery-momentum/out/**
           retention-days: 30
