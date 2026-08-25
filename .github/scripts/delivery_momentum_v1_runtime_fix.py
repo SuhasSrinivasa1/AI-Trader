@@ -32,6 +32,30 @@ for old, new in repls:
     s = s.replace(old, new, 1)
 svc.write_text(s)
 
+boot = Path('delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/BootReceiver.java')
+b = boot.read_text()
+old = 'Intent s = new Intent(c, DeliveryMomentumService.class);'
+new = 'new SecretStore(c).putBool("live", false);\n        Intent s = new Intent(c, DeliveryMomentumService.class);'
+if old not in b:
+    raise SystemExit('Missing BootReceiver anchor')
+boot.write_text(b.replace(old, new, 1))
+
+learn = Path('delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/LearningStore.java')
+l = learn.read_text()
+old = 'return n>=5?(h+2.0)/(n+4.0):0.65;'
+new = 'return n>=5?(h+2.0)/(n+4.0):0.50;'
+if old not in l:
+    raise SystemExit('Missing LearningStore prior anchor')
+learn.write_text(l.replace(old, new, 1))
+
+math = Path('delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/MomentumMath.java')
+m = math.read_text()
+old = 'double prior=historicalHitRate>0?historicalHitRate:0.65;'
+new = 'double prior=historicalHitRate>0?historicalHitRate:0.50;'
+if old not in m:
+    raise SystemExit('Missing MomentumMath prior anchor')
+math.write_text(m.replace(old, new, 1))
+
 # Guard the exact problems this patch fixes.
 assert 'universe=null' in s
 assert 'if(universe==null)universe=new UniverseStore().load()' in s
@@ -39,5 +63,7 @@ assert 'minusDays(12)' in s
 assert 'baselineBucket' in s
 assert 'flowKey=GrowwClient.sessionDay()+"_"+s' in s
 assert 'c.score<82' not in s
+assert 'putBool("live", false)' in boot.read_text()
+assert ':0.50;' in learn.read_text()
 
 print('Delivery Momentum v1 runtime reliability fixes applied')
