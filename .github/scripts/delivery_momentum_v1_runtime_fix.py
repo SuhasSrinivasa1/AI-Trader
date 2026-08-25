@@ -54,7 +54,13 @@ old = 'double prior=historicalHitRate>0?historicalHitRate:0.65;'
 new = 'double prior=historicalHitRate>0?historicalHitRate:0.50;'
 if old not in m:
     raise SystemExit('Missing MomentumMath prior anchor')
-math.write_text(m.replace(old, new, 1))
+m = m.replace(old, new, 1)
+old = '(Math.min(rem,180)/60.0)'
+new = '(rem/60.0)'
+if old not in m:
+    raise SystemExit('Missing fixed 180-minute projection cap anchor')
+m = m.replace(old, new, 1)
+math.write_text(m)
 
 # Guard the exact problems this patch fixes.
 assert 'universe=null' in s
@@ -65,5 +71,7 @@ assert 'flowKey=GrowwClient.sessionDay()+"_"+s' in s
 assert 'c.score<82' not in s
 assert 'putBool("live", false)' in boot.read_text()
 assert ':0.50;' in learn.read_text()
+assert 'Math.min(rem,180)' not in math.read_text()
+assert '(rem/60.0)' in math.read_text()
 
 print('Delivery Momentum v1 runtime reliability fixes applied')
