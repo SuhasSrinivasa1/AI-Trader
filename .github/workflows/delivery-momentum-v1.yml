@@ -1,4 +1,4 @@
-name: NSE Delivery Momentum v1 Fresh Build
+name: NSE Delivery Momentum v1.1 UI Build
 on:
   workflow_dispatch:
   push:
@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/payloads/delivery-momentum-v1.part*'
       - '.github/scripts/delivery_momentum_v1_runtime_fix.py'
+      - '.github/scripts/delivery_momentum_v11_ui_patch.py'
       - '.github/workflows/delivery-momentum-v1.yml'
 permissions:
   contents: write
@@ -45,6 +46,8 @@ jobs:
           PY
       - name: Apply fresh-app runtime reliability fixes
         run: python .github/scripts/delivery_momentum_v1_runtime_fix.py
+      - name: Apply professional v1.1 dashboard UI
+        run: python .github/scripts/delivery_momentum_v11_ui_patch.py
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -60,15 +63,17 @@ jobs:
           set -e
           gradle --no-daemon --console=plain -p delivery-momentum clean testDebugUnitTest lintDebug assembleDebug assembleRelease
           mkdir -p delivery-momentum/out
-          cp delivery-momentum/app/build/outputs/apk/release/app-release-unsigned.apk delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.0.0-UNSIGNED.apk
-          $ANDROID_HOME/build-tools/35.0.0/aapt dump badging delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.0.0-UNSIGNED.apk | tee delivery-momentum/out/APK-BADGING.txt
+          cp delivery-momentum/app/build/outputs/apk/release/app-release-unsigned.apk delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.1.0-UNSIGNED.apk
+          $ANDROID_HOME/build-tools/35.0.0/aapt dump badging delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.1.0-UNSIGNED.apk | tee delivery-momentum/out/APK-BADGING.txt
           grep -q "package: name='com.suhas.nsedeliverymomentum'" delivery-momentum/out/APK-BADGING.txt
-          grep -q "versionName='1.0.0'" delivery-momentum/out/APK-BADGING.txt
+          grep -q "versionName='1.1.0'" delivery-momentum/out/APK-BADGING.txt
           grep -q '"product","CNC"' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/GrowwClient.java
           grep -q '"order_type","MARKET"' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/GrowwClient.java
           grep -q 'expectedRemaining<1.0' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/MomentumMath.java
           grep -q 'hourlyPace<0.45' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/MomentumMath.java
-          grep -q '10-HIT BENCHMARK' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/MainActivity.java
+          grep -q 'TOP CONTINUATION CANDIDATES' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/MainActivity.java
+          grep -q 'LIVE RANKING' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/MainActivity.java
+          grep -q 'PAPER LEARNING' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/MainActivity.java
           grep -q 'universe=null' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
           grep -q 'minusDays(12)' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
           grep -q 'if(!"BUY".equals(c.state))continue;' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
@@ -77,41 +82,42 @@ jobs:
       - name: Sign fresh-install delivery release
         run: |
           set -e
-          STORE_PASS='FreshDeliveryMomentumV1!'
-          ALIAS='nse-delivery-momentum-v1'
-          keytool -genkeypair -v -keystore /tmp/delivery-momentum-v1.jks -storepass "$STORE_PASS" -keypass "$STORE_PASS" -alias "$ALIAS" -keyalg RSA -keysize 4096 -validity 10000 -dname "CN=NSE Delivery Momentum v1, OU=Private Fresh Install, O=Delivery Momentum, L=Bengaluru, ST=Karnataka, C=IN"
-          $ANDROID_HOME/build-tools/35.0.0/apksigner sign --ks /tmp/delivery-momentum-v1.jks --ks-key-alias "$ALIAS" --ks-pass pass:"$STORE_PASS" --key-pass pass:"$STORE_PASS" --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --out delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.0.0-FRESH-SIGNED.apk delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.0.0-UNSIGNED.apk
-          $ANDROID_HOME/build-tools/35.0.0/apksigner verify --verbose --print-certs delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.0.0-FRESH-SIGNED.apk | tee delivery-momentum/out/SIGNATURE-VERIFICATION.txt
+          STORE_PASS='FreshDeliveryMomentumV11!'
+          ALIAS='nse-delivery-momentum-v11'
+          keytool -genkeypair -v -keystore /tmp/delivery-momentum-v11.jks -storepass "$STORE_PASS" -keypass "$STORE_PASS" -alias "$ALIAS" -keyalg RSA -keysize 4096 -validity 10000 -dname "CN=NSE Delivery Momentum v1.1, OU=Private Fresh Install, O=Delivery Momentum, L=Bengaluru, ST=Karnataka, C=IN"
+          $ANDROID_HOME/build-tools/35.0.0/apksigner sign --ks /tmp/delivery-momentum-v11.jks --ks-key-alias "$ALIAS" --ks-pass pass:"$STORE_PASS" --key-pass pass:"$STORE_PASS" --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --out delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.1.0-UI-OVERHAUL-FRESH-SIGNED.apk delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.1.0-UNSIGNED.apk
+          $ANDROID_HOME/build-tools/35.0.0/apksigner verify --verbose --print-certs delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.1.0-UI-OVERHAUL-FRESH-SIGNED.apk | tee delivery-momentum/out/SIGNATURE-VERIFICATION.txt
           grep -q 'Verified using v2 scheme (APK Signature Scheme v2): true' delivery-momentum/out/SIGNATURE-VERIFICATION.txt
-          sha256sum delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.0.0-FRESH-SIGNED.apk > delivery-momentum/out/SHA256.txt
+          sha256sum delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.1.0-UI-OVERHAUL-FRESH-SIGNED.apk > delivery-momentum/out/SHA256.txt
       - name: Package source and release notes
         run: |
           cat > delivery-momentum/out/RELEASE-NOTES.txt <<'EOF'
-          NSE DELIVERY MOMENTUM v1.0.0 — FRESH APPLICATION
+          NSE DELIVERY MOMENTUM v1.1.0 — PROFESSIONAL UI OVERHAUL
           Package: com.suhas.nsedeliverymomentum
 
-          Fresh codebase. NSE cash-equity sustained-continuation scanner.
+          STRATEGY / EXECUTION LOGIC IS UNCHANGED from the fresh delivery-momentum engine.
           Delivery execution only: Groww CASH + CNC + MARKET BUY. No MIS/FNO. No automated sell.
-          Prefers smooth rising price paths, >=0.45%/hour trend pace, VWAP acceptance, relative volume,
-          turnover, market/sector strength, order-flow support and projected subsequent same-session upside >=1.0%.
-          One-bar spikes, choppy paths, deep pullbacks and excessive extension are penalized.
-          No small rupee target cards and no fixed 30/60/120-minute trade horizon.
 
-          Runtime reliability fixes: official NIFTY-500 universe is loaded off the Android main thread;
-          relative-volume baselines refresh by 15-minute session bucket using an API-valid 12-day history window;
-          order-flow persistence is session-scoped; and LIVE execution uses the same BUY qualification shown in UI.
+          UI overhaul:
+          - Android status-bar / navigation-bar insets fixed; no title overlap.
+          - Clean branded header and compact connection-health chips.
+          - Four clear daily KPI cards: Hits, Hit Rate, Calls and 10-Hit Benchmark.
+          - Benchmark progress bar.
+          - Dedicated Paper Learning / Live Execution control card.
+          - Clear strategy summary instead of long undefined text blocks.
+          - Professional empty/scanning state.
+          - Candidate cards reorganized around Price, Day Move, Confidence, Trend Pace,
+            Upside Left, Relative Volume, Turnover, VWAP Hold and Path Quality.
+          - BUY / CONFIRMING / WATCH states use distinct visual treatment.
+          - Candidate card explicitly states WHY IT QUALIFIED or WHAT IT NEEDS.
+          - Settings reorganized into Groww Connection, Static IP and Live Buy Limits sections.
 
-          Learning: every BUY-qualified recommendation is tracked in paper and live modes.
-          HIT = subsequently reaches +1.0% from recommendation price in the same session.
-          The UI shows resolved hit rate and a 10-HIT BENCHMARK. Ten winners are a target, not a guarantee,
-          and the app never fabricates low-quality calls to satisfy the benchmark.
-
-          Live execution is OFF by default and requires Groww auth + matched static IP.
-          Real execution sends CNC MARKET BUY only, using configurable capital per buy and max live buys/day.
+          Runtime reliability protections from v1.0 remain active.
+          Ten hits/day remains a performance benchmark, not a fabricated guarantee.
           EOF
-          (cd delivery-momentum && zip -qr out/NSE-Delivery-Momentum-v1.0.0-SOURCE.zip app build.gradle settings.gradle gradle.properties)
+          (cd delivery-momentum && zip -qr out/NSE-Delivery-Momentum-v1.1.0-SOURCE.zip app build.gradle settings.gradle gradle.properties)
       - uses: actions/upload-artifact@v4
         with:
-          name: NSE-Delivery-Momentum-S24-v1.0.0-FRESH-SIGNED
+          name: NSE-Delivery-Momentum-S24-v1.1.0-UI-OVERHAUL
           path: delivery-momentum/out/**
           retention-days: 30
