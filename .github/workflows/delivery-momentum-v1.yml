@@ -1,4 +1,4 @@
-name: NSE Delivery Momentum v1.1 UI Build
+name: NSE Delivery Momentum v1.1.1 Scanner Fix
 on:
   workflow_dispatch:
   push:
@@ -8,6 +8,7 @@ on:
       - '.github/scripts/delivery_momentum_v1_runtime_fix.py'
       - '.github/scripts/delivery_momentum_v11_ui_patch.py'
       - '.github/scripts/delivery_momentum_v11_insets_fix.py'
+      - '.github/scripts/delivery_momentum_v111_ohlc_health_fix.py'
       - '.github/workflows/delivery-momentum-v1.yml'
 permissions:
   contents: write
@@ -51,6 +52,8 @@ jobs:
         run: python .github/scripts/delivery_momentum_v11_ui_patch.py
       - name: Apply API26-safe system inset fix
         run: python .github/scripts/delivery_momentum_v11_insets_fix.py
+      - name: Fix OHLC parsing and scanner health
+        run: python .github/scripts/delivery_momentum_v111_ohlc_health_fix.py
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -66,10 +69,13 @@ jobs:
           set -e
           gradle --no-daemon --console=plain -p delivery-momentum clean testDebugUnitTest lintDebug assembleDebug assembleRelease
           mkdir -p delivery-momentum/out
-          cp delivery-momentum/app/build/outputs/apk/release/app-release-unsigned.apk delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.1.0-UNSIGNED.apk
-          $ANDROID_HOME/build-tools/35.0.0/aapt dump badging delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.1.0-UNSIGNED.apk | tee delivery-momentum/out/APK-BADGING.txt
+          cp delivery-momentum/app/build/outputs/apk/release/app-release-unsigned.apk delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.1.1-UNSIGNED.apk
+          $ANDROID_HOME/build-tools/35.0.0/aapt dump badging delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.1.1-UNSIGNED.apk | tee delivery-momentum/out/APK-BADGING.txt
           grep -q "package: name='com.suhas.nsedeliverymomentum'" delivery-momentum/out/APK-BADGING.txt
-          grep -q "versionName='1.1.0'" delivery-momentum/out/APK-BADGING.txt
+          grep -q "versionName='1.1.1'" delivery-momentum/out/APK-BADGING.txt
+          grep -q 'parseOhlc(p.opt(k))' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/GrowwClient.java
+          grep -q 'OHLC DATA INVALID' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
+          grep -q 'next deep scan %ds' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
           grep -q '"product","CNC"' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/GrowwClient.java
           grep -q '"order_type","MARKET"' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/GrowwClient.java
           grep -q 'expectedRemaining<1.0' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/MomentumMath.java
@@ -90,39 +96,37 @@ jobs:
           STORE_PASS='FreshDeliveryMomentumV11!'
           ALIAS='nse-delivery-momentum-v11'
           keytool -genkeypair -v -keystore /tmp/delivery-momentum-v11.jks -storepass "$STORE_PASS" -keypass "$STORE_PASS" -alias "$ALIAS" -keyalg RSA -keysize 4096 -validity 10000 -dname "CN=NSE Delivery Momentum v1.1, OU=Private Fresh Install, O=Delivery Momentum, L=Bengaluru, ST=Karnataka, C=IN"
-          $ANDROID_HOME/build-tools/35.0.0/apksigner sign --ks /tmp/delivery-momentum-v11.jks --ks-key-alias "$ALIAS" --ks-pass pass:"$STORE_PASS" --key-pass pass:"$STORE_PASS" --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --out delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.1.0-UI-OVERHAUL-FRESH-SIGNED.apk delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.1.0-UNSIGNED.apk
-          $ANDROID_HOME/build-tools/35.0.0/apksigner verify --verbose --print-certs delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.1.0-UI-OVERHAUL-FRESH-SIGNED.apk | tee delivery-momentum/out/SIGNATURE-VERIFICATION.txt
+          $ANDROID_HOME/build-tools/35.0.0/apksigner sign --ks /tmp/delivery-momentum-v11.jks --ks-key-alias "$ALIAS" --ks-pass pass:"$STORE_PASS" --key-pass pass:"$STORE_PASS" --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --out delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.1.1-SCANNER-FIX-FRESH-SIGNED.apk delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.1.1-UNSIGNED.apk
+          $ANDROID_HOME/build-tools/35.0.0/apksigner verify --verbose --print-certs delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.1.1-SCANNER-FIX-FRESH-SIGNED.apk | tee delivery-momentum/out/SIGNATURE-VERIFICATION.txt
           grep -q 'Verified using v2 scheme (APK Signature Scheme v2): true' delivery-momentum/out/SIGNATURE-VERIFICATION.txt
-          sha256sum delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.1.0-UI-OVERHAUL-FRESH-SIGNED.apk > delivery-momentum/out/SHA256.txt
+          sha256sum delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.1.1-SCANNER-FIX-FRESH-SIGNED.apk > delivery-momentum/out/SHA256.txt
       - name: Package source and release notes
         run: |
           cat > delivery-momentum/out/RELEASE-NOTES.txt <<'EOF'
-          NSE DELIVERY MOMENTUM v1.1.0 — PROFESSIONAL UI OVERHAUL
+          NSE DELIVERY MOMENTUM v1.1.1 — LIVE OHLC + SCANNER HEALTH FIX
           Package: com.suhas.nsedeliverymomentum
 
-          STRATEGY / EXECUTION LOGIC IS UNCHANGED from the fresh delivery-momentum engine.
-          Delivery execution only: Groww CASH + CNC + MARKET BUY. No MIS/FNO. No automated sell.
+          ROOT CAUSE FIXED:
+          - Groww OHLC payload entries are JSON objects.
+          - v1.1.0 converted each object to text and used a parser that failed on quoted JSON field names.
+          - This caused open/close values to become zero, so breadth stayed at 0%, mover selection stayed empty,
+            and the UI could remain on scanning/refresh without producing deep candidates.
 
-          UI overhaul:
-          - Android status-bar / navigation-bar insets fixed; no title overlap.
-          - Clean branded header and compact connection-health chips.
-          - Four clear daily KPI cards: Hits, Hit Rate, Calls and 10-Hit Benchmark.
-          - Benchmark progress bar.
-          - Dedicated Paper Learning / Live Execution control card.
-          - Clear strategy summary instead of long undefined text blocks.
-          - Professional empty/scanning state.
-          - Candidate cards reorganized around Price, Day Move, Confidence, Trend Pace,
-            Upside Left, Relative Volume, Turnover, VWAP Hold and Path Quality.
-          - BUY / CONFIRMING / WATCH states use distinct visual treatment.
-          - Candidate card explicitly states WHY IT QUALIFIED or WHAT IT NEEDS.
-          - Settings reorganized into Groww Connection, Static IP and Live Buy Limits sections.
+          FIXES:
+          - Parse OHLC JSON objects directly.
+          - Robust fallback parser retained.
+          - Fail visibly if too few OHLC rows contain valid open/last values.
+          - Scanner health now reports valid rows, breadth, mover count, deep-candidate count and BUY count.
+          - The waiting message now shows seconds until the next deep scan instead of falsely saying a refresh
+            is continuously in progress.
+          - Deep scan cadence reduced from 150s to 90s while broad scanning remains every ~60s.
 
-          Runtime reliability protections from v1.0 remain active.
-          Ten hits/day remains a performance benchmark, not a fabricated guarantee.
+          UI and sustained-continuation strategy remain otherwise unchanged.
+          Delivery only: Groww CASH + CNC + MARKET BUY. No MIS/F&O. No automated sell.
           EOF
-          (cd delivery-momentum && zip -qr out/NSE-Delivery-Momentum-v1.1.0-SOURCE.zip app build.gradle settings.gradle gradle.properties)
+          (cd delivery-momentum && zip -qr out/NSE-Delivery-Momentum-v1.1.1-SOURCE.zip app build.gradle settings.gradle gradle.properties)
       - uses: actions/upload-artifact@v4
         with:
-          name: NSE-Delivery-Momentum-S24-v1.1.0-UI-OVERHAUL
+          name: NSE-Delivery-Momentum-S24-v1.1.1-SCANNER-FIX
           path: delivery-momentum/out/**
           retention-days: 30
