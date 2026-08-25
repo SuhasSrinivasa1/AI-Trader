@@ -28,8 +28,6 @@ new_parser = '''private static Ohlc parseOhlc(Object raw){
 if old_parser not in s:
     raise SystemExit('OHLC parser anchor not found')
 s = s.replace(old_parser, new_parser)
-# Make fallback regex tolerant of normal JSON quotes around field names.
-s = s.replace('Pattern.compile(k+"\\\\s*[:=]\\\\s*([0-9.]+)")', 'Pattern.compile("\\\\\"?"+k+"\\\\\"?\\\\s*[:=]\\\\s*([0-9.]+)")')
 g.write_text(s)
 
 svc = Path('delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java')
