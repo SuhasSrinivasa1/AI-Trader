@@ -11,6 +11,7 @@ on:
       - '.github/scripts/delivery_momentum_v111_ohlc_health_fix.py'
       - '.github/scripts/delivery_momentum_v120_all_nse_patch.py'
       - '.github/scripts/delivery_momentum_v130_trajectory_patch.py'
+      - '.github/scripts/delivery_momentum_v130_low_price_fix.py'
       - '.github/workflows/delivery-momentum-v1.yml'
 permissions:
   contents: write
@@ -58,6 +59,8 @@ jobs:
         run: python .github/scripts/delivery_momentum_v120_all_nse_patch.py
       - name: Add independent upward-trajectory engine
         run: python .github/scripts/delivery_momentum_v130_trajectory_patch.py
+      - name: Allow liquid low-priced trajectory candidates
+        run: python .github/scripts/delivery_momentum_v130_low_price_fix.py
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -82,6 +85,7 @@ jobs:
           grep -q 'Math.min(5,out.size())' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
           grep -q 'trajectory_cards' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
           grep -q 'Math.min(40,trajectoryPool.size())' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
+          grep -q 'o.last<5||o.high<=o.low' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
           grep -q '"3minute"' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
           grep -q 'UPTREND' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
           grep -q 'day_change_perc' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/GrowwClient.java
@@ -130,6 +134,7 @@ jobs:
           - Largest-candle concentration is measured; one-spike moves are penalized unless meaningful follow-through occurs.
           - Groww day_change_perc is used to estimate the open gap; gap-only moves are penalized and must prove post-open appreciation.
           - Turnover, spread, market/sector relative strength and order-flow imbalance remain corroborating evidence.
+          - No arbitrary ₹20 price floor in the trajectory engine: liquid candidates from ₹5 upward can enter, so low-priced but heavily traded names are not discarded solely because of price.
           - Top 5 UPTREND / BUILDING / WATCH candidates stay visible.
 
           RESEARCH BASIS
