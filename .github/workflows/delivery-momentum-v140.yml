@@ -4,7 +4,7 @@ on:
   push:
     branches: [nse-delivery-momentum-v1-build-final]
     paths:
-      - '.github/scripts/delivery_momentum_v140_vu_ui_patch.py.gz.b64'
+      - '.github/scripts/v140_patch.part*'
       - '.github/workflows/delivery-momentum-v140.yml'
 permissions:
   contents: write
@@ -50,7 +50,7 @@ jobs:
           python .github/scripts/delivery_momentum_v131_trajectory_calibration.py
       - name: Apply v1.4 V-U engine and compact UI
         run: |
-          base64 -d .github/scripts/delivery_momentum_v140_vu_ui_patch.py.gz.b64 | gzip -d > /tmp/v140.py
+          cat .github/scripts/v140_patch.part* | base64 -d | gzip -d > /tmp/v140.py
           python /tmp/v140.py
       - uses: actions/setup-java@v4
         with:
