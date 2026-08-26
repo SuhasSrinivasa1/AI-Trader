@@ -1,0 +1,133 @@
+name: NSE Delivery Momentum v1.3.1 TRAJECTORY CALIBRATION
+on:
+  workflow_dispatch:
+  push:
+    branches: [nse-delivery-momentum-v1-build-final]
+    paths:
+      - '.github/scripts/delivery_momentum_v131_trajectory_calibration.py'
+      - '.github/workflows/delivery-momentum-v131.yml'
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish run id
+        run: |
+          echo "${GITHUB_RUN_ID}" > .delivery-momentum-v131-run-id.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .delivery-momentum-v131-run-id.txt
+          git commit -m "Record Delivery Momentum v1.3.1 build ${GITHUB_RUN_ID}" || true
+          git push origin HEAD:nse-delivery-momentum-v1-build-final || true
+      - name: Materialize fresh application source
+        run: |
+          set -e
+          cat .github/payloads/delivery-momentum-v1.part* | base64 -d | tar -xz
+          test -f delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/MainActivity.java
+      - name: Android compile compatibility fix
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/GrowwClient.java')
+          s=p.read_text()
+          old='JSONObject p=j.optJSONObject("payload"); Map<String,Ohlc> out=new HashMap<>(); if(p!=null)for(String k:p.keySet()){String s=k.startsWith("NSE_")?k.substring(4):k; out.put(s,parseOhlc(String.valueOf(p.opt(k))));} return ApiResult.ok(out);'
+          new='JSONObject p=j.optJSONObject("payload"); Map<String,Ohlc> out=new HashMap<>(); if(p!=null){Iterator<String> it=p.keys();while(it.hasNext()){String k=it.next();String s=k.startsWith("NSE_")?k.substring(4):k;out.put(s,parseOhlc(String.valueOf(p.opt(k))));}} return ApiResult.ok(out);'
+          if old not in s: raise SystemExit('GrowwClient JSONObject anchor not found')
+          p.write_text(s.replace(old,new))
+          PY
+      - name: Apply runtime reliability fixes
+        run: python .github/scripts/delivery_momentum_v1_runtime_fix.py
+      - name: Apply professional dashboard UI
+        run: python .github/scripts/delivery_momentum_v11_ui_patch.py
+      - name: Apply API26-safe system inset fix
+        run: python .github/scripts/delivery_momentum_v11_insets_fix.py
+      - name: Fix OHLC parsing and scanner health
+        run: python .github/scripts/delivery_momentum_v111_ohlc_health_fix.py
+      - name: Apply ALL-NSE discovery architecture
+        run: python .github/scripts/delivery_momentum_v120_all_nse_patch.py
+      - name: Add independent upward-trajectory engine
+        run: python .github/scripts/delivery_momentum_v130_trajectory_patch.py
+      - name: Allow liquid low-priced trajectory candidates
+        run: python .github/scripts/delivery_momentum_v130_low_price_fix.py
+      - name: Calibrate trajectory engine
+        run: python .github/scripts/delivery_momentum_v131_trajectory_calibration.py
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK
+        run: yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Full clean validation
+        run: |
+          set -e
+          gradle --no-daemon --console=plain -p delivery-momentum clean testDebugUnitTest lintDebug assembleDebug assembleRelease
+          mkdir -p delivery-momentum/out
+          cp delivery-momentum/app/build/outputs/apk/release/app-release-unsigned.apk delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.3.1-TRAJECTORY-CALIBRATION-UNSIGNED.apk
+          $ANDROID_HOME/build-tools/35.0.0/aapt dump badging delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.3.1-TRAJECTORY-CALIBRATION-UNSIGNED.apk | tee delivery-momentum/out/APK-BADGING.txt
+          grep -q "package: name='com.suhas.nsedeliverymomentum'" delivery-momentum/out/APK-BADGING.txt
+          grep -q "versionName='1.3.1'" delivery-momentum/out/APK-BADGING.txt
+          grep -q 'confirmations>=needConfirm' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/TrajectoryMath.java
+          grep -q 'scoreFloor=elapsedMinutes<75?63' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/TrajectoryMath.java
+          grep -q 'm.maxDrawdown>2.60' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/TrajectoryMath.java
+          grep -q 'Math.min(5,out.size())' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
+          grep -q 'BUILDING %d' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
+          grep -q 'last_scan_status' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
+          grep -q 'UPWARD TRAJECTORY • TOP 5' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/MainActivity.java
+          grep -q '"product","CNC"' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/GrowwClient.java
+          grep -q '"order_type","MARKET"' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/GrowwClient.java
+          cp delivery-momentum/app/build/reports/lint-results-debug.html delivery-momentum/out/LINT.html
+          cp -r delivery-momentum/app/build/reports/tests/testDebugUnitTest delivery-momentum/out/UNIT-TESTS
+      - name: Sign fresh-install release
+        run: |
+          set -e
+          STORE_PASS='FreshDeliveryMomentumV131!'
+          ALIAS='nse-delivery-momentum-v131'
+          keytool -genkeypair -v -keystore /tmp/delivery-momentum-v131.jks -storepass "$STORE_PASS" -keypass "$STORE_PASS" -alias "$ALIAS" -keyalg RSA -keysize 4096 -validity 10000 -dname "CN=NSE Delivery Momentum v1.3.1, OU=Private Fresh Install, O=Delivery Momentum, L=Bengaluru, ST=Karnataka, C=IN"
+          $ANDROID_HOME/build-tools/35.0.0/apksigner sign --ks /tmp/delivery-momentum-v131.jks --ks-key-alias "$ALIAS" --ks-pass pass:"$STORE_PASS" --key-pass pass:"$STORE_PASS" --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --out delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.3.1-TRAJECTORY-CALIBRATION-FRESH-SIGNED.apk delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.3.1-TRAJECTORY-CALIBRATION-UNSIGNED.apk
+          $ANDROID_HOME/build-tools/35.0.0/apksigner verify --verbose --print-certs delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.3.1-TRAJECTORY-CALIBRATION-FRESH-SIGNED.apk | tee delivery-momentum/out/SIGNATURE-VERIFICATION.txt
+          grep -q 'Verified using v2 scheme (APK Signature Scheme v2): true' delivery-momentum/out/SIGNATURE-VERIFICATION.txt
+          grep -q 'Verified using v3 scheme (APK Signature Scheme v3): true' delivery-momentum/out/SIGNATURE-VERIFICATION.txt
+          sha256sum delivery-momentum/out/NSE-Delivery-Momentum-S24-v1.3.1-TRAJECTORY-CALIBRATION-FRESH-SIGNED.apk > delivery-momentum/out/SHA256.txt
+      - name: Package source and release notes
+        run: |
+          cat > delivery-momentum/out/RELEASE-NOTES.txt <<'EOF'
+          NSE DELIVERY MOMENTUM v1.3.1 — TRAJECTORY CALIBRATION
+
+          WHY THIS PATCH EXISTS
+          v1.3.0 required every trajectory metric to pass simultaneously. A liquid stock could have a strong
+          upward session yet be rejected because one noisy 3-minute statistic missed its exact threshold.
+          That made the trajectory engine too sparse and could yield zero UPTREND calls even on active days.
+
+          TABLE 1
+          Existing ALL-NSE continuation engine is unchanged. Top 5 stays unchanged.
+
+          TABLE 2 — CALIBRATED UPWARD TRAJECTORY
+          - Keeps hard vetoes only for genuine safety/data-quality failures: insufficient day rise, non-positive
+            recent slope, materially below VWAP, very weak VWAP acceptance, >2.6% trajectory drawdown,
+            extreme spike-only/gap-only behavior, wide spread, or insufficient turnover.
+          - Trend features such as regression R2, hourly pace, 15m/30m persistence, higher lows, VWAP hold,
+            path efficiency, close-near-high and relative strength now vote together instead of each acting as
+            an independent veto.
+          - Dynamic maturity: early session requires score >=63 and 5/10 confirmations; mid-session >=65 and
+            6/10; late session >=67 and 6/10.
+          - BUILDING threshold lowered so promising trajectories stay visible before full qualification.
+          - Scanner status now reports UPTREND / BUILDING / WATCH counts.
+          - Last completed scan is persisted and shown after market close/restart instead of losing diagnostic context.
+
+          EXECUTION
+          Delivery only: Groww CASH + CNC + MARKET BUY. No MIS/F&O. No auto-sell.
+          LIVE OFF remains paper learning. 10 hits/day remains a benchmark, never a forced quota.
+          EOF
+          (cd delivery-momentum && zip -qr out/NSE-Delivery-Momentum-v1.3.1-SOURCE.zip app build.gradle settings.gradle gradle.properties)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NSE-Delivery-Momentum-S24-v1.3.1-TRAJECTORY-CALIBRATION
+          path: delivery-momentum/out/**
+          retention-days: 30
