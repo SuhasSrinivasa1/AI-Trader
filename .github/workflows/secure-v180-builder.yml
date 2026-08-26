@@ -1,0 +1,148 @@
+name: Secure temporary NSE Intraday v1.8.0 builder
+
+on:
+  pull_request:
+    branches:
+      - temp/v180-secure-builder-base
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  secure-build:
+    if: contains(github.event.pull_request.title, '[V180-SECURE-BUILD]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout builder branch
+        uses: actions/checkout@v4
+
+      - name: Generate one-time encryption key and publish public half
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:4096 -out /tmp/v180-private.pem >/dev/null 2>&1
+          openssl pkey -in /tmp/v180-private.pem -pubout -out /tmp/v180-public.pem
+          PUB_B64="$(base64 -w0 /tmp/v180-public.pem)"
+          gh api -X POST "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" -f body="[V180-PUBKEY]${PUB_B64}" >/dev/null
+          chmod 600 /tmp/v180-private.pem
+
+      - name: Wait for encrypted v1.8.0 source bundle
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+          found=0
+          for i in $(seq 1 120); do
+            if gh api "repos/${GITHUB_REPOSITORY}/contents/v180-source.enc.b64?ref=${HEAD_REF}" >/tmp/src-meta.json 2>/dev/null && \
+               gh api "repos/${GITHUB_REPOSITORY}/contents/v180-keys.enc.b64?ref=${HEAD_REF}" >/tmp/key-meta.json 2>/dev/null; then
+              found=1
+              break
+            fi
+            sleep 5
+          done
+          test "$found" = "1"
+          gh api "repos/${GITHUB_REPOSITORY}/contents/v180-source.enc.b64?ref=${HEAD_REF}" --jq '.content' | tr -d '\n' | base64 -d | tr -d '\n' | base64 -d > /tmp/v180-source.enc
+          gh api "repos/${GITHUB_REPOSITORY}/contents/v180-keys.enc.b64?ref=${HEAD_REF}" --jq '.content' | tr -d '\n' | base64 -d | tr -d '\n' | base64 -d > /tmp/v180-keys.enc
+          test -s /tmp/v180-source.enc
+          test -s /tmp/v180-keys.enc
+
+      - name: Decrypt source only inside ephemeral runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          openssl pkeyutl -decrypt -inkey /tmp/v180-private.pem \
+            -pkeyopt rsa_padding_mode:oaep \
+            -pkeyopt rsa_oaep_md:sha256 \
+            -in /tmp/v180-keys.enc -out /tmp/v180-keys.txt
+          SOURCE_PASS="$(grep '^SOURCE_PASS=' /tmp/v180-keys.txt | cut -d= -f2-)"
+          OUTPUT_PASS="$(grep '^OUTPUT_PASS=' /tmp/v180-keys.txt | cut -d= -f2-)"
+          test -n "$SOURCE_PASS"
+          test -n "$OUTPUT_PASS"
+          echo "::add-mask::$SOURCE_PASS"
+          echo "::add-mask::$OUTPUT_PASS"
+          echo "OUTPUT_PASS=$OUTPUT_PASS" >> "$GITHUB_ENV"
+          openssl enc -d -aes-256-cbc -pbkdf2 -pass pass:"$SOURCE_PASS" \
+            -in /tmp/v180-source.enc -out /tmp/NSE-Intraday-Momentum-v1.8.0-SOURCE.zip
+          mkdir -p "$GITHUB_WORKSPACE/private-src"
+          unzip -q /tmp/NSE-Intraday-Momentum-v1.8.0-SOURCE.zip -d "$GITHUB_WORKSPACE/private-src"
+          test -f "$GITHUB_WORKSPACE/private-src/nse-delivery-v180/app/build.gradle"
+          grep -q "versionCode 180" "$GITHUB_WORKSPACE/private-src/nse-delivery-v180/app/build.gradle"
+          grep -q "versionName '1.8.0'" "$GITHUB_WORKSPACE/private-src/nse-delivery-v180/app/build.gradle"
+          grep -q 'android.permission.POST_NOTIFICATIONS' "$GITHUB_WORKSPACE/private-src/nse-delivery-v180/app/src/main/AndroidManifest.xml"
+          grep -q 'notifySignal("LONG"' "$GITHUB_WORKSPACE/private-src/nse-delivery-v180/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java"
+          grep -q 'notifySignal("SHORT"' "$GITHUB_WORKSPACE/private-src/nse-delivery-v180/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java"
+          rm -f /tmp/v180-keys.txt /tmp/v180-source.enc /tmp/v180-keys.enc
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android API 36
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;35.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Unit tests, lint and release assembly
+        working-directory: private-src/nse-delivery-v180
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon testDebugUnitTest
+          gradle --no-daemon lintRelease
+          gradle --no-daemon assembleRelease
+
+      - name: Fresh-sign, verify and encrypt APK
+        working-directory: private-src/nse-delivery-v180
+        shell: bash
+        run: |
+          set -euo pipefail
+          UNSIGNED='app/build/outputs/apk/release/app-release-unsigned.apk'
+          SIGNED='NSE-Intraday-Momentum-v1.8.0-FRESH-SIGNED.apk'
+          test -s "$UNSIGNED"
+          keytool -genkeypair -v \
+            -keystore /tmp/fresh-v180.jks \
+            -storepass changeit \
+            -keypass changeit \
+            -alias nse-v180 \
+            -keyalg RSA \
+            -keysize 4096 \
+            -validity 3650 \
+            -dname 'CN=NSE Intraday Momentum v1.8.0, OU=Secure Temporary Build, O=NSE Intraday Momentum, L=Bengaluru, ST=Karnataka, C=IN'
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
+          "$APKSIGNER" sign --ks /tmp/fresh-v180.jks --ks-pass pass:changeit --key-pass pass:changeit --out "$SIGNED" "$UNSIGNED"
+          "$APKSIGNER" verify --verbose --print-certs "$SIGNED" | tee APK-SIGNATURE-VERIFY.txt
+          sha256sum "$SIGNED" | tee SHA256.txt
+          printf 'versionName=1.8.0\nversionCode=180\npackage=com.suhas.nsedeliverymomentum\n' > VERSION.txt
+          openssl enc -aes-256-cbc -salt -pbkdf2 -pass pass:"$OUTPUT_PASS" \
+            -in "$SIGNED" -out NSE-Intraday-Momentum-v1.8.0-FRESH-SIGNED.apk.enc
+          rm -f "$SIGNED" /tmp/fresh-v180.jks /tmp/v180-private.pem /tmp/NSE-Intraday-Momentum-v1.8.0-SOURCE.zip
+
+      - name: Upload encrypted APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NSE-Intraday-Momentum-v1.8.0-ENCRYPTED-OUTPUT
+          path: |
+            private-src/nse-delivery-v180/NSE-Intraday-Momentum-v1.8.0-FRESH-SIGNED.apk.enc
+            private-src/nse-delivery-v180/APK-SIGNATURE-VERIFY.txt
+            private-src/nse-delivery-v180/SHA256.txt
+            private-src/nse-delivery-v180/VERSION.txt
+          if-no-files-found: error
+          retention-days: 1
