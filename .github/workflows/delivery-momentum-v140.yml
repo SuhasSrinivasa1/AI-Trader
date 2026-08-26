@@ -165,3 +165,5 @@ jobs:
             private-v180/nse-delivery-v180/out/VERSION.txt
           if-no-files-found: error
           retention-days: 1
+
+# trigger-via-git-ref-update
