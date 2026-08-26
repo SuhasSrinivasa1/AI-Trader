@@ -5,6 +5,7 @@ on:
     branches: [nse-delivery-momentum-v1-build-final]
     paths:
       - '.github/scripts/v140_patch.part*'
+      - '.github/templates/v140/ReversalMathTest.java'
       - '.github/workflows/delivery-momentum-v140.yml'
 permissions:
   contents: write
@@ -52,6 +53,7 @@ jobs:
         run: |
           cat .github/scripts/v140_patch.part* | base64 -d | gzip -d > /tmp/v140.py
           python /tmp/v140.py
+          cp .github/templates/v140/ReversalMathTest.java delivery-momentum/app/src/test/java/com/suhas/nsedeliverymomentum/ReversalMathTest.java
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -79,6 +81,7 @@ jobs:
           grep -q 'compactRow' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/MainActivity.java
           grep -q '"product","CNC"' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/GrowwClient.java
           grep -q '"order_type","MARKET"' delivery-momentum/app/src/main/java/com/suhas/nsedeliverymomentum/GrowwClient.java
+          test -f delivery-momentum/app/src/test/java/com/suhas/nsedeliverymomentum/ReversalMathTest.java
           cp delivery-momentum/app/build/reports/lint-results-debug.html delivery-momentum/out/LINT.html
           cp -r delivery-momentum/app/build/reports/tests/testDebugUnitTest delivery-momentum/out/UNIT-TESTS
       - name: Sign fresh-install release
@@ -112,6 +115,9 @@ jobs:
           UI
           All three sections now use compact two-line rows so five stocks per section fit with much less scrolling.
           Tap a row to open the full metrics/reason dialog.
+
+          VALIDATION
+          Unit tests include dedicated clean-V, broad-U and falling-knife rejection cases for the new engine.
 
           EXECUTION
           Delivery only: Groww CASH + CNC + MARKET BUY. No MIS/F&O. No automatic sell.
