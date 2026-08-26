@@ -1,0 +1,129 @@
+name: NSE Intraday Momentum v1.8 Source Build
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'android-stable/nse-v180-build/**'
+
+permissions:
+  contents: read
+
+jobs:
+  build-verify-install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Materialize v1.8 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/nse-v180-src
+          tr -d '\r\n' < android-stable/nse-v180-build/source.zip.b64 | base64 -d > /tmp/nse-v180-source.zip
+          unzip -q /tmp/nse-v180-source.zip -d /tmp/nse-v180-src
+          test -f /tmp/nse-v180-src/nse-delivery-v180/app/build.gradle
+          grep -q "versionCode 180" /tmp/nse-v180-src/nse-delivery-v180/app/build.gradle
+          grep -q "versionName '1.8.0'" /tmp/nse-v180-src/nse-delivery-v180/app/build.gradle
+          grep -q 'notifySignal("LONG"' /tmp/nse-v180-src/nse-delivery-v180/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
+          grep -q 'notifySignal("SHORT"' /tmp/nse-v180-src/nse-delivery-v180/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java
+          grep -q 'android.permission.POST_NOTIFICATIONS' /tmp/nse-v180-src/nse-delivery-v180/app/src/main/AndroidManifest.xml
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android 16 SDK
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools" "emulator" "system-images;android-36;google_apis;x86_64"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Unit tests, lint and release compile
+        working-directory: /tmp/nse-v180-src/nse-delivery-v180
+        run: gradle --no-daemon --console=plain clean testDebugUnitTest lintDebug assembleRelease
+
+      - name: Fresh-sign and verify
+        working-directory: /tmp/nse-v180-src/nse-delivery-v180
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          UNSIGNED='app/build/outputs/apk/release/app-release-unsigned.apk'
+          SIGNED='out/NSE-Intraday-Momentum-S24-v1.8.0-FRESH-SIGNED.apk'
+          test -s "$UNSIGNED"
+          keytool -genkeypair -v -keystore /tmp/nse-v180.jks -storepass changeit -keypass changeit -alias nse-v180 -keyalg RSA -keysize 4096 -validity 10000 -dname 'CN=NSE Intraday Momentum v1.8.0, OU=Fresh Install, O=NSE Intraday Momentum, L=Bengaluru, ST=Karnataka, C=IN'
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks /tmp/nse-v180.jks --ks-key-alias nse-v180 --ks-pass pass:changeit --key-pass pass:changeit --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --out "$SIGNED" "$UNSIGNED"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$SIGNED" | tee out/APK-SIGNATURE-VERIFY.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$SIGNED" | tee out/APK-BADGING.txt
+          grep -q "package: name='com.suhas.nsedeliverymomentum'" out/APK-BADGING.txt
+          grep -q "versionCode='180'" out/APK-BADGING.txt
+          grep -q "versionName='1.8.0'" out/APK-BADGING.txt
+          grep -q 'Verified using v2 scheme (APK Signature Scheme v2): true' out/APK-SIGNATURE-VERIFY.txt
+          grep -q 'Verified using v3 scheme (APK Signature Scheme v3): true' out/APK-SIGNATURE-VERIFY.txt
+          sha256sum "$SIGNED" | tee out/SHA256.txt
+
+      - name: Android 16 install and cold-launch acceptance
+        working-directory: /tmp/nse-v180-src/nse-delivery-v180
+        timeout-minutes: 15
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=out
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/android-avd"
+          export ANDROID_SDK_HOME="$RUNNER_TEMP/android-sdk-home"
+          mkdir -p "$ANDROID_AVD_HOME" "$ANDROID_SDK_HOME/.android"
+          AVD_PATH="$ANDROID_AVD_HOME/nse_v180_api36.avd"
+          echo no | avdmanager create avd --force --name nse_v180_api36 --package 'system-images;android-36;google_apis;x86_64' --device 'pixel_8_pro' --path "$AVD_PATH" > "$OUT/avd-create.log" 2>&1
+          "$ANDROID_HOME/emulator/emulator" -avd nse_v180_api36 -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none > "$OUT/emulator.log" 2>&1 &
+          EMULATOR_PID=$!
+          trap 'adb emu kill >/dev/null 2>&1 || true; kill "$EMULATOR_PID" >/dev/null 2>&1 || true' EXIT
+          timeout 240 adb wait-for-device
+          booted=0
+          for i in $(seq 1 90); do
+            state=$(timeout 10 adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+            if [ "$state" = "1" ]; then booted=1; break; fi
+            sleep 3
+          done
+          test "$booted" = "1"
+          adb install "$OUT/NSE-Intraday-Momentum-S24-v1.8.0-FRESH-SIGNED.apk" | tee "$OUT/install-api36.txt"
+          grep -q Success "$OUT/install-api36.txt"
+          adb shell pm grant com.suhas.nsedeliverymomentum android.permission.POST_NOTIFICATIONS || true
+          adb logcat -c
+          adb shell am start -W -n com.suhas.nsedeliverymomentum/.MainActivity | tee "$OUT/cold-launch-api36.txt"
+          sleep 8
+          adb shell dumpsys activity activities > "$OUT/activity-api36.txt"
+          grep -Eq '(topResumedActivity|ResumedActivity|mResumedActivity).*com.suhas.nsedeliverymomentum/.MainActivity' "$OUT/activity-api36.txt"
+          pid=$(adb shell pidof com.suhas.nsedeliverymomentum | tr -d '\r')
+          test -n "$pid"
+          adb logcat -d -v threadtime > "$OUT/logcat-api36.txt"
+          if grep -E 'FATAL EXCEPTION|Process: com.suhas.nsedeliverymomentum|ClassNotFoundException.*com.suhas.nsedeliverymomentum' "$OUT/logcat-api36.txt"; then
+            echo 'Application crash detected' >&2
+            exit 1
+          fi
+          echo 'PASS: Android 16 install and cold launch' | tee "$OUT/INSTALL-ACCEPTANCE.txt"
+
+      - name: Upload verified APK
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: NSE-Intraday-Momentum-S24-v1.8.0-VERIFIED
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            /tmp/nse-v180-src/nse-delivery-v180/out/NSE-Intraday-Momentum-S24-v1.8.0-FRESH-SIGNED.apk
+            /tmp/nse-v180-src/nse-delivery-v180/out/APK-SIGNATURE-VERIFY.txt
+            /tmp/nse-v180-src/nse-delivery-v180/out/APK-BADGING.txt
+            /tmp/nse-v180-src/nse-delivery-v180/out/SHA256.txt
+            /tmp/nse-v180-src/nse-delivery-v180/out/INSTALL-ACCEPTANCE.txt
+            /tmp/nse-v180-src/nse-delivery-v180/out/install-api36.txt
+            /tmp/nse-v180-src/nse-delivery-v180/out/cold-launch-api36.txt
+            /tmp/nse-v180-src/nse-delivery-v180/out/logcat-api36.txt
