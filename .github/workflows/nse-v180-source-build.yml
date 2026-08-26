@@ -21,8 +21,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/nse-v180-src
-          cat android-stable/nse-v180-build/source.zip.b64.part* | tr -d '\r\n' | base64 -d > /tmp/nse-v180-source.zip
-          unzip -q /tmp/nse-v180-source.zip -d /tmp/nse-v180-src
+          cp -a android-stable/nse-v180-build/project /tmp/nse-v180-src/nse-delivery-v180
           test -f /tmp/nse-v180-src/nse-delivery-v180/app/build.gradle
           grep -q "versionCode 180" /tmp/nse-v180-src/nse-delivery-v180/app/build.gradle
           grep -q "versionName '1.8.0'" /tmp/nse-v180-src/nse-delivery-v180/app/build.gradle
