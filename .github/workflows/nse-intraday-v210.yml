@@ -24,7 +24,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
-      - name: Expand source payload
+      - name: Expand and patch source payload
         shell: bash
         run: |
           set -euo pipefail
@@ -32,6 +32,14 @@ jobs:
           mkdir nse-v210
           cat build-input/v210-part-00.b64 build-input/v210-part-01.b64 build-input/v210-part-02.b64 build-input/v210-part-03.b64 build-input/v210-part-04.b64 build-input/v210-part-05.b64 build-input/v210-part-06.b64 build-input/v210-part-07.b64 build-input/v210-part-08.b64 | base64 -d > "$RUNNER_TEMP/nse-v210.tgz"
           tar -xzf "$RUNNER_TEMP/nse-v210.tgz" -C nse-v210
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('nse-v210/v200src/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java')
+          s=p.read_text()
+          s=s.replace('c.recentPace','c.recent')
+          s=s.replace('c.lowerLows>=.50&&c.closeLocation<=.32','c.lowerLows>=.50&&c.loc<=.32')
+          p.write_text(s)
+          PY
           test -f nse-v210/v200src/settings.gradle
           test -f nse-v210/v200src/app/build.gradle
           grep -q "versionName '2.1.0'" nse-v210/v200src/app/build.gradle
