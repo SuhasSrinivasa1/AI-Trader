@@ -1,0 +1,78 @@
+--- a/README.md
++++ b/README.md
+@@ -1,4 +1,9 @@
+-# UC Sentinel v1.3.0
++# UC Sentinel v1.3.2
++
++
++## v1.3.2 verified rebuild release
++
++This release creates a clean successor build from the v1.3.1 hands-free source tree without changing the strategy generations or automatic order behavior. It bumps the Android package version to **1.3.2 / 132** and shows the running app version directly in Settings so installed builds are easy to verify.
+ 
+ UC Sentinel is a long-lived Android research application for two independent NSE cash-market models:
+ 
+@@ -40,8 +45,8 @@
+ ## Build
+ 
+ - Package: `com.suhas.ucsentinel`
+-- Version: `1.3.0`
+-- Version code: `130`
++- Version: `1.3.2`
++- Version code: `132`
+ - JDK: 17
+ - Compile / target SDK: 36
+ - Minimum SDK: 28
+--- a/SOURCE-VALIDATION.json
++++ b/SOURCE-VALIDATION.json
+@@ -1,7 +1,7 @@
+ {
+   "project": "UC Sentinel",
+-  "version": "1.3.1",
+-  "versionCode": 131,
++  "version": "1.3.2",
++  "versionCode": 132,
+   "package": "com.suhas.ucsentinel",
+   "source_files": 46,
+   "kotlin_files": 30,
+@@ -22,5 +22,6 @@
+   "background_scan_worker_minutes": 15,
+   "near_close_full_scan_min_gap_minutes": 25,
+   "learning_worker_hours": 24,
+-  "automatic_order_placement": false
+-}
+\ No newline at end of file
++  "automatic_order_placement": false,
++  "release_focus": "versioned rebuild and in-app version visibility"
++}
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -12,8 +12,8 @@
+         applicationId = "com.suhas.ucsentinel"
+         minSdk = 28
+         targetSdk = 36
+-        versionCode = 131
+-        versionName = "1.3.1"
++        versionCode = 132
++        versionName = "1.3.2"
+ 
+         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+         vectorDrawables.useSupportLibrary = true
+--- a/app/src/main/java/com/suhas/ucsentinel/ui/MoreScreen.kt
++++ b/app/src/main/java/com/suhas/ucsentinel/ui/MoreScreen.kt
+@@ -10,6 +10,7 @@
+ import androidx.compose.ui.Modifier
+ import androidx.compose.ui.platform.LocalContext
+ import androidx.compose.ui.unit.dp
++import com.suhas.ucsentinel.BuildConfig
+ import com.suhas.ucsentinel.domain.engine.DemandSignalEngine
+ import com.suhas.ucsentinel.domain.engine.SignalEngine
+ import com.suhas.ucsentinel.domain.model.*
+@@ -233,7 +234,7 @@
+         verticalArrangement=Arrangement.spacedBy(8.dp),
+         contentPadding=PaddingValues(bottom=28.dp)
+     ){
+-        item{AppHeader("Settings","Precision-first • versioned learning • bounded memory")}
++        item{AppHeader("Settings","UC Sentinel ${BuildConfig.VERSION_NAME} • precision-first • versioned learning")}
+         item{Text("UC continuation score ${uc.roundToInt()}")}
+         item{Slider(value=uc,onValueChange={uc=it},valueRange=60f..95f)}
+         item{Text("Pre-pressure prediction score ${prediction.roundToInt()}")}
