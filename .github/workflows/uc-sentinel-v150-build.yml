@@ -85,8 +85,14 @@ jobs:
           mv UC-Sentinel-v1.4.3-full-source UC-Sentinel-v1.4.4-full-source
           cd UC-Sentinel-v1.4.4-full-source
 
-          cat "$GITHUB_WORKSPACE/android-stable/uc-sentinel-v150-build/v144-to-v150.patch.gz.b64.part00" \
-              "$GITHUB_WORKSPACE/android-stable/uc-sentinel-v150-build/v144-to-v150.patch.gz.b64.part01" \
+          cat "$GITHUB_WORKSPACE/android-stable/uc-sentinel-v150-build/chunk00" \
+              "$GITHUB_WORKSPACE/android-stable/uc-sentinel-v150-build/chunk01" \
+              "$GITHUB_WORKSPACE/android-stable/uc-sentinel-v150-build/chunk02" \
+              "$GITHUB_WORKSPACE/android-stable/uc-sentinel-v150-build/chunk03" \
+              "$GITHUB_WORKSPACE/android-stable/uc-sentinel-v150-build/chunk04" \
+              "$GITHUB_WORKSPACE/android-stable/uc-sentinel-v150-build/chunk05" \
+              "$GITHUB_WORKSPACE/android-stable/uc-sentinel-v150-build/chunk06" \
+              "$GITHUB_WORKSPACE/android-stable/uc-sentinel-v150-build/chunk07" \
             | tr -d '\r\n ' | base64 -d > /tmp/v144-to-v150.patch.gz
           echo 'ff13ccadc143d0334f2bc0f203ac6b6da76548855078f7afc31ae3c4cb186500  /tmp/v144-to-v150.patch.gz' | sha256sum -c -
           gunzip -c /tmp/v144-to-v150.patch.gz > /tmp/v144-to-v150.patch
