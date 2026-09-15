@@ -8,6 +8,7 @@ on:
     paths:
       - 'android-stable/global-map/**'
       - 'android-stable/global-lead-mappings-v1.json'
+      - '.github/workflows/uc-sentinel-global-map-weekly.yml'
 
 permissions:
   contents: write
@@ -35,12 +36,13 @@ jobs:
       - name: Publish catalogue when changed
         shell: bash
         run: |
-          if git diff --quiet -- android-stable/global-lead-mappings-v2.json; then
+          FILE=android-stable/global-lead-mappings-v2.json
+          if [ -z "$(git status --porcelain -- "$FILE")" ]; then
             echo 'Global catalogue already current.'
             exit 0
           fi
           git config user.name 'uc-sentinel-map-bot'
           git config user.email 'uc-sentinel-map-bot@users.noreply.github.com'
-          git add android-stable/global-lead-mappings-v2.json
+          git add "$FILE"
           git commit -m 'Refresh weekly Global Lead catalogue'
           git push
