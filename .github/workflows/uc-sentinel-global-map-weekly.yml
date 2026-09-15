@@ -1,0 +1,46 @@
+name: UC Sentinel Weekly Global Map
+
+on:
+  schedule:
+    - cron: '30 5 * * 6'
+  workflow_dispatch:
+  push:
+    paths:
+      - 'android-stable/global-map/**'
+      - 'android-stable/global-lead-mappings-v1.json'
+
+permissions:
+  contents: write
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build and validate weekly catalogue
+        run: |
+          python android-stable/global-map/build_global_map.py
+          python - <<'PY'
+          import json
+          p='android-stable/global-lead-mappings-v2.json'
+          x=json.load(open(p))
+          c=x['coverage']
+          assert c['indianStocks'] >= 350, c
+          assert c['mappingLinks'] >= 800, c
+          print('validated',c)
+          PY
+      - name: Publish catalogue when changed
+        shell: bash
+        run: |
+          if git diff --quiet -- android-stable/global-lead-mappings-v2.json; then
+            echo 'Global catalogue already current.'
+            exit 0
+          fi
+          git config user.name 'uc-sentinel-map-bot'
+          git config user.email 'uc-sentinel-map-bot@users.noreply.github.com'
+          git add android-stable/global-lead-mappings-v2.json
+          git commit -m 'Refresh weekly Global Lead catalogue'
+          git push
