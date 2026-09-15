@@ -29,6 +29,7 @@ jobs:
         run: |
           set -euo pipefail
           export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
+          which sdkmanager
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
 
@@ -59,7 +60,10 @@ jobs:
           }
           EOF
           cat >/tmp/multyfi-warm/app/build.gradle.kts <<'EOF'
-          plugins { id("com.android.application"); id("org.jetbrains.kotlin.android") }
+          plugins {
+              id("com.android.application")
+              id("org.jetbrains.kotlin.android")
+          }
           android {
               namespace = "com.multyfi.warm"
               compileSdk = 35
@@ -73,62 +77,49 @@ jobs:
           EOF
           gradle --no-daemon --console=plain -p /tmp/multyfi-warm :app:assembleDebug
 
-      - name: Package split offline environment
+      - name: Package and split offline build environment
         shell: bash
         run: |
           set -euo pipefail
-          OUT="$RUNNER_TEMP/offline-parts"
+          OUT="$RUNNER_TEMP/multyfi-offline-env"
           mkdir -p "$OUT"
           GRADLE_REAL="$(readlink -f "$(command -v gradle)")"
           GRADLE_HOME="$(cd "$(dirname "$GRADLE_REAL")/.." && pwd)"
-
-          tar -C "$(dirname "$GRADLE_HOME")" -czf "$OUT/gradle-8.9.tgz" "$(basename "$GRADLE_HOME")"
-
-          SDK_STAGE="$RUNNER_TEMP/sdk-stage"
-          mkdir -p "$SDK_STAGE/android-sdk/platforms" "$SDK_STAGE/android-sdk/build-tools" "$SDK_STAGE/android-sdk/platform-tools"
-          cp -a "$ANDROID_HOME/platforms/android-35" "$SDK_STAGE/android-sdk/platforms/"
-          cp -a "$ANDROID_HOME/build-tools/35.0.0" "$SDK_STAGE/android-sdk/build-tools/"
-          cp -a "$ANDROID_HOME/platform-tools/." "$SDK_STAGE/android-sdk/platform-tools/"
-          tar -C "$SDK_STAGE" -czf "$OUT/android-sdk-35.tgz" android-sdk
-
-          CACHE_STAGE="$RUNNER_TEMP/cache-stage"
-          mkdir -p "$CACHE_STAGE/gradle-caches"
-          cp -a "$HOME/.gradle/caches/modules-2" "$CACHE_STAGE/gradle-caches/"
-          for d in "$HOME/.gradle/caches"/8.9 "$HOME/.gradle/caches"/jars-*; do
-            if [ -e "$d" ]; then cp -a "$d" "$CACHE_STAGE/gradle-caches/"; fi
-          done
-          tar -C "$CACHE_STAGE" -czf "$OUT/gradle-cache-core.tgz" gradle-caches
-
+          cp -a "$GRADLE_HOME" "$OUT/gradle-8.9"
+          mkdir -p "$OUT/android-sdk/platforms" "$OUT/android-sdk/build-tools" "$OUT/android-sdk/platform-tools"
+          cp -a "$ANDROID_HOME/platforms/android-35" "$OUT/android-sdk/platforms/"
+          cp -a "$ANDROID_HOME/build-tools/35.0.0" "$OUT/android-sdk/build-tools/"
+          cp -a "$ANDROID_HOME/platform-tools/." "$OUT/android-sdk/platform-tools/"
+          cp -a "$HOME/.gradle/caches" "$OUT/gradle-caches"
+          if [ -d "$HOME/.gradle/notifications" ]; then cp -a "$HOME/.gradle/notifications" "$OUT/gradle-notifications"; fi
           printf 'JAVA_VERSION=17\nGRADLE_VERSION=8.9\nCOMPILE_SDK=35\nBUILD_TOOLS=35.0.0\nAGP=8.7.3\nKOTLIN=2.0.21\n' > "$OUT/ENV.txt"
-          ls -lh "$OUT"
+          tar -C "$RUNNER_TEMP" -czf "$RUNNER_TEMP/multyfi-android-offline-env.tgz" multyfi-offline-env
+          split -b 400M "$RUNNER_TEMP/multyfi-android-offline-env.tgz" "$RUNNER_TEMP/multyfi-android-offline-env.part-"
+          ls -lh "$RUNNER_TEMP"/multyfi-android-offline-env.part-*
 
-      - name: Upload Gradle distribution
+      - name: Upload offline environment part AA
         uses: actions/upload-artifact@v4
         with:
-          name: multyfi-gradle-8.9
-          path: ${{ runner.temp }}/offline-parts/gradle-8.9.tgz
+          name: multyfi-android-offline-env-part-aa
+          path: ${{ runner.temp }}/multyfi-android-offline-env.part-aa
+          if-no-files-found: error
+          retention-days: 7
           compression-level: 0
-          retention-days: 7
 
-      - name: Upload Android SDK
+      - name: Upload offline environment part AB
         uses: actions/upload-artifact@v4
         with:
-          name: multyfi-android-sdk-35
-          path: ${{ runner.temp }}/offline-parts/android-sdk-35.tgz
+          name: multyfi-android-offline-env-part-ab
+          path: ${{ runner.temp }}/multyfi-android-offline-env.part-ab
+          if-no-files-found: error
+          retention-days: 7
           compression-level: 0
-          retention-days: 7
 
-      - name: Upload Gradle core cache
+      - name: Upload offline environment part AC
         uses: actions/upload-artifact@v4
         with:
-          name: multyfi-gradle-cache-core
-          path: ${{ runner.temp }}/offline-parts/gradle-cache-core.tgz
+          name: multyfi-android-offline-env-part-ac
+          path: ${{ runner.temp }}/multyfi-android-offline-env.part-ac
+          if-no-files-found: error
+          retention-days: 7
           compression-level: 0
-          retention-days: 7
-
-      - name: Upload environment metadata
-        uses: actions/upload-artifact@v4
-        with:
-          name: multyfi-offline-env-meta
-          path: ${{ runner.temp }}/offline-parts/ENV.txt
-          retention-days: 7
