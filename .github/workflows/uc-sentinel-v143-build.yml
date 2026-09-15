@@ -71,9 +71,9 @@ jobs:
           mv UC-Sentinel-v1.4.1-full-source UC-Sentinel-v1.4.2-full-source
           cd UC-Sentinel-v1.4.2-full-source
           cat "$GITHUB_WORKSPACE/android-stable/uc-sentinel-v143-build/v142-to-v143.patch.gz.b64" | tr -d '\r\n ' | base64 -d > /tmp/v142-to-v143.patch.gz
-          echo '83a819f0e0fb6f76c48dca992da32ff12ec51a0dfa2e68fccacd39aa3bc95aa8  /tmp/v142-to-v143.patch.gz' | sha256sum -c -
+          echo '51a25c3ef6a92e231317c1a4b48dcf4ba5ebd7b455c2caf881dab98251953fc6  /tmp/v142-to-v143.patch.gz' | sha256sum -c -
           gunzip -c /tmp/v142-to-v143.patch.gz > /tmp/v142-to-v143.patch
-          echo 'c155bbf377bcf363fbe8e92057d195d549cd8b3cc42edd99b084ed80a724737d  /tmp/v142-to-v143.patch' | sha256sum -c -
+          echo '4cc3426b9ce4a3ae0eff3277d40101b633801eb9ab40b1186c6b1ecad9370a1f  /tmp/v142-to-v143.patch' | sha256sum -c -
           patch -p1 --batch < /tmp/v142-to-v143.patch
 
           cd /tmp/uc-sentinel-v143
