@@ -1,0 +1,135 @@
+name: UC Sentinel v1.4.2 Android Build
+
+on:
+  push:
+    paths:
+      - 'android-stable/uc-sentinel-v142-build/**'
+      - '.github/workflows/uc-sentinel-v142-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconstruct v1.4.1 and apply v1.4.2 reliability release
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/uc-sentinel-v142
+          mkdir -p /tmp/uc-sentinel-v142
+
+          cat android-stable/uc-sentinel-v131-build/source.b64.part00 \
+              android-stable/uc-sentinel-v131-build/source.b64.part01 \
+              android-stable/uc-sentinel-v131-build/source.b64.part02 \
+              android-stable/uc-sentinel-v131-build/source.b64.part03 \
+              android-stable/uc-sentinel-v131-build/source.b64.part04 \
+              android-stable/uc-sentinel-v131-build/source.b64.part05 \
+              android-stable/uc-sentinel-v131-build/source.b64.part06 \
+              android-stable/uc-sentinel-v131-build/source.b64.part07 \
+            | tr -d '\r\n ' | base64 -d > /tmp/UC-Sentinel-v1.3.1-full-source.zip
+          echo 'f6c0aabbf204896125e2a4c7521b997520b84589fb74c3ce8ef63ae26d5d5019  /tmp/UC-Sentinel-v1.3.1-full-source.zip' | sha256sum -c -
+          unzip -q /tmp/UC-Sentinel-v1.3.1-full-source.zip -d /tmp/uc-sentinel-v142
+          mv /tmp/uc-sentinel-v142/UC-Sentinel-v1.3.1-full-source /tmp/uc-sentinel-v142/UC-Sentinel-v1.3.2-full-source
+          cd /tmp/uc-sentinel-v142/UC-Sentinel-v1.3.2-full-source
+          patch -p1 --batch < "$GITHUB_WORKSPACE/android-stable/uc-sentinel-v132-build/v131-to-v132.patch"
+
+          cat "$GITHUB_WORKSPACE/android-stable/uc-sentinel-v140-build/v132-to-v140.patch.gz.b64.part00" \
+              "$GITHUB_WORKSPACE/android-stable/uc-sentinel-v140-build/v132-to-v140.patch.gz.b64.part01" \
+              "$GITHUB_WORKSPACE/android-stable/uc-sentinel-v140-build/v132-to-v140.patch.gz.b64.part02" \
+            | tr -d '\r\n ' | base64 -d > /tmp/v132-to-v140.patch.gz
+          echo 'd4457813b26d0d01380360dca3ce0434d4aa8217e814870828d97ef13d131dcf  /tmp/v132-to-v140.patch.gz' | sha256sum -c -
+          gunzip -c /tmp/v132-to-v140.patch.gz > /tmp/v132-to-v140.patch
+          patch -p1 --batch < /tmp/v132-to-v140.patch
+
+          cd /tmp/uc-sentinel-v142
+          mv UC-Sentinel-v1.3.2-full-source UC-Sentinel-v1.4.0-full-source
+          cd UC-Sentinel-v1.4.0-full-source
+          cat "$GITHUB_WORKSPACE/android-stable/uc-sentinel-v141-build/v140-to-v141.patch.gz.b64" | tr -d '\r\n ' | base64 -d > /tmp/v140-to-v141.patch.gz
+          echo '36f4b163cb83b79b581652a7687cf169155a9433e1103ce9dca483907a6ed537  /tmp/v140-to-v141.patch.gz' | sha256sum -c -
+          gunzip -c /tmp/v140-to-v141.patch.gz > /tmp/v140-to-v141.patch
+          patch -p1 --batch < /tmp/v140-to-v141.patch
+
+          cd /tmp/uc-sentinel-v142
+          mv UC-Sentinel-v1.4.0-full-source UC-Sentinel-v1.4.1-full-source
+          cd UC-Sentinel-v1.4.1-full-source
+          cat "$GITHUB_WORKSPACE/android-stable/uc-sentinel-v142-build/v141-to-v142.patch.gz.b64" | tr -d '\r\n ' | base64 -d > /tmp/v141-to-v142.patch.gz
+          echo '3c65c34fd89ed1443b7b0460a57a342c7f2439760ef65b9d8fe88709014f0be3  /tmp/v141-to-v142.patch.gz' | sha256sum -c -
+          gunzip -c /tmp/v141-to-v142.patch.gz > /tmp/v141-to-v142.patch
+          echo 'bd8f631cd01a843a9635a028c9b5588b171b8602f25d3a863ce2793ade6e9242  /tmp/v141-to-v142.patch' | sha256sum -c -
+          patch -p3 --batch < /tmp/v141-to-v142.patch
+
+          cd /tmp/uc-sentinel-v142
+          mv UC-Sentinel-v1.4.1-full-source UC-Sentinel-v1.4.2-full-source
+          SRC=/tmp/uc-sentinel-v142/UC-Sentinel-v1.4.2-full-source
+          cd "$SRC"
+          grep -q 'versionCode = 142' app/build.gradle.kts
+          grep -q 'versionName = "1.4.2"' app/build.gradle.kts
+          grep -q 'PeriodicWorkRequestBuilder<ScanWorker>(15,TimeUnit.MINUTES)' app/src/main/java/com/suhas/ucsentinel/UCSentinelApplication.kt
+          grep -q 'LocalTime.of(15,20)' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'Groww network/DNS lookup failed after automatic retries' app/src/main/java/com/suhas/ucsentinel/data/remote/GrowwClient.kt
+          echo 'UC Sentinel v1.4.2 source verified'
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Unit tests and debug APK
+        working-directory: /tmp/uc-sentinel-v142/UC-Sentinel-v1.4.2-full-source
+        run: gradle --no-daemon --console=plain clean testDebugUnitTest assembleDebug
+
+      - name: Verify installable APK
+        working-directory: /tmp/uc-sentinel-v142/UC-Sentinel-v1.4.2-full-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          OUT=out/UC-Sentinel-S24-v1.4.2.apk
+          test -s "$APK"
+          cp "$APK" "$OUT"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$OUT" | tee out/APK-SIGNATURE-VERIFY.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$OUT" | tee out/APK-BADGING.txt
+          grep -q "package: name='com.suhas.ucsentinel'" out/APK-BADGING.txt
+          grep -q "versionCode='142'" out/APK-BADGING.txt
+          grep -q "versionName='1.4.2'" out/APK-BADGING.txt
+          sha256sum "$OUT" | tee out/SHA256.txt
+          cd ..
+          zip -qr UC-Sentinel-v1.4.2-full-source.zip UC-Sentinel-v1.4.2-full-source \
+            -x 'UC-Sentinel-v1.4.2-full-source/.gradle/*' \
+               'UC-Sentinel-v1.4.2-full-source/app/build/*' \
+               'UC-Sentinel-v1.4.2-full-source/build/*' \
+               'UC-Sentinel-v1.4.2-full-source/out/*'
+          mv UC-Sentinel-v1.4.2-full-source.zip UC-Sentinel-v1.4.2-full-source/out/
+
+      - name: Upload APK and source
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: UC-Sentinel-S24-v1.4.2
+          retention-days: 30
+          if-no-files-found: error
+          path: |
+            /tmp/uc-sentinel-v142/UC-Sentinel-v1.4.2-full-source/out/UC-Sentinel-S24-v1.4.2.apk
+            /tmp/uc-sentinel-v142/UC-Sentinel-v1.4.2-full-source/out/UC-Sentinel-v1.4.2-full-source.zip
+            /tmp/uc-sentinel-v142/UC-Sentinel-v1.4.2-full-source/out/APK-SIGNATURE-VERIFY.txt
+            /tmp/uc-sentinel-v142/UC-Sentinel-v1.4.2-full-source/out/APK-BADGING.txt
+            /tmp/uc-sentinel-v142/UC-Sentinel-v1.4.2-full-source/out/SHA256.txt
