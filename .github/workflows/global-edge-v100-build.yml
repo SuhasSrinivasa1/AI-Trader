@@ -91,6 +91,7 @@ jobs:
           gunzip -c /tmp/fresh-rel.patch.gz > /tmp/fresh-rel.patch
           echo 'df6b22b62e5416a8f907c2f9bdc388cfb4714e44205e5f47341ead7ff29ad72d  /tmp/fresh-rel.patch' | sha256sum -c -
           patch -p1 --batch < /tmp/fresh-rel.patch
+          bash "$GITHUB_WORKSPACE/fresh-global-edge/v100/post_patch_fixes.sh"
 
           cd /tmp/global-edge-v100
           mv UC-Sentinel-v1.4.4-full-source Global-Edge-AI-Trader-v1.0.0-source
