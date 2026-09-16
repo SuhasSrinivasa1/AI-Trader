@@ -1,0 +1,33 @@
+name: Probe Private Multyfi Access
+
+on:
+  push:
+    branches:
+      - build/multyfi-v310-private-access-probe-20260916
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe private repository access
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' https://api.github.com/repos/SuhasSrinivasa1/Suhas-Private-AI-Trader)
+          echo "repo_http=$code"
+          test "$code" = "200"
+      - name: Probe signing artifact access
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -L -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' https://api.github.com/repos/SuhasSrinivasa1/Suhas-Private-AI-Trader/actions/artifacts/10109117099/zip)
+          echo "artifact_http=$code"
+          test "$code" = "200"
