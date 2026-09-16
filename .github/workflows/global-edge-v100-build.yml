@@ -87,7 +87,7 @@ jobs:
           cat "$GITHUB_WORKSPACE/fresh-global-edge/v100/fresh-rel.patch.gz.b64.part00" \
               "$GITHUB_WORKSPACE/fresh-global-edge/v100/fresh-rel.patch.gz.b64.part01" \
             | tr -d '\r\n ' | base64 -d > /tmp/fresh-rel.patch.gz
-          echo 'f9c9ff37f828b7d11307ac8d3f7fc497aa5d19e4313cea306da78f4454284f72d  /tmp/fresh-rel.patch.gz' | sha256sum -c -
+          echo 'f9c9ff37f828b7d11307ac8d3f7fc497aa5d19e4313cea306da78f4454284f72  /tmp/fresh-rel.patch.gz' | sha256sum -c -
           gunzip -c /tmp/fresh-rel.patch.gz > /tmp/fresh-rel.patch
           echo 'df6b22b62e5416a8f907c2f9bdc388cfb4714e44205e5f47341ead7ff29ad72d  /tmp/fresh-rel.patch' | sha256sum -c -
           patch -p1 --batch < /tmp/fresh-rel.patch
@@ -147,7 +147,7 @@ jobs:
           test -n "$UNSIGNED"
           test -s "$UNSIGNED"
           KEYSTORE=/tmp/global-edge-v100-release.keystore
-          PASS='GEAI-v100-ci-2026!'
+          PASS=$(openssl rand -hex 16)
           keytool -genkeypair -v \
             -keystore "$KEYSTORE" \
             -storepass "$PASS" \
