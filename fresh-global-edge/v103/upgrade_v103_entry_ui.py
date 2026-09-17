@@ -28,4 +28,11 @@ s=must_replace(s,needle,replacement,'Global Lead entry price card')
 # Keep 15:00 only as an explicit risk/exit reassessment, not as an entry deadline.
 s=s.replace('continuation after entry; reassess before 15:00 IST.','continuation after entry; 3 PM is reassessment / exit management, not the entry deadline.')
 write(p,s)
-print('Global Edge v1.0.3 opening-entry UI patch applied')
+
+# GlobalLeadCandidate uses indianSymbol; StrategySetup uses symbol.
+p='app/src/main/java/com/suhas/ucsentinel/notifications/AppNotifier.kt'
+s=read(p)
+s=must_replace(s,'"${it.symbol}:${it.direction.name}:${String.format(Locale.US,"%.2f",it.indianPrice)}"','"${it.indianSymbol}:${it.direction.name}:${String.format(Locale.US,"%.2f",it.indianPrice)}"','Global notification fingerprint symbol')
+s=must_replace(s,'"$side ${c.symbol} • entry ₹${String.format(Locale.US,"%.2f",c.indianPrice)}$target"','"$side ${c.indianSymbol} • entry ₹${String.format(Locale.US,"%.2f",c.indianPrice)}$target"','Global notification display symbol')
+write(p,s)
+print('Global Edge v1.0.3 opening-entry UI and notification compile patch applied')
