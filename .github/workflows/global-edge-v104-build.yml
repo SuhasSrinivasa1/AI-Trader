@@ -30,6 +30,7 @@ jobs:
           SRC=/tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source
           python "$GITHUB_WORKSPACE/fresh-global-edge/v103/upgrade_v103_entry_ui.py" "$SRC"
           python "$GITHUB_WORKSPACE/fresh-global-edge/v104/upgrade_v104.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v104/fix_v104_notification.py" "$SRC"
           mv "$SRC" /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.4-source
           SRC=/tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.4-source
           grep -q 'versionCode = 104' "$SRC/app/build.gradle.kts"
