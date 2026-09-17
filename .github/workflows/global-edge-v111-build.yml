@@ -40,6 +40,7 @@ jobs:
           cat "$GITHUB_WORKSPACE/fresh-global-edge/v111/v110-to-v111.patch.gz.b64" | tr -d '\r\n ' | base64 -d > /tmp/v110-to-v111.patch.gz
           gunzip -c /tmp/v110-to-v111.patch.gz > /tmp/v110-to-v111.patch
           patch -p1 --batch < /tmp/v110-to-v111.patch
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v111/fix_v111_experimental.py" "$SRC"
 
           grep -q 'versionCode = 111' app/build.gradle.kts
           grep -q 'versionName = "1.1.1"' app/build.gradle.kts
