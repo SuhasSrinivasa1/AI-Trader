@@ -1,0 +1,118 @@
+name: Global Edge AI Trader v1.1.0 Build
+
+on:
+  push:
+    paths:
+      - 'fresh-global-edge/v110/**'
+      - '.github/workflows/global-edge-v110-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconstruct v1.0.4 and apply v1.1.0 changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp fresh-global-edge/v103/reconstruct_v103.sh /tmp/reconstruct_v103.sh
+          sed -i '/^grep -q /d' /tmp/reconstruct_v103.sh
+          bash /tmp/reconstruct_v103.sh
+          SRC=/tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v103/upgrade_v103_entry_ui.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v104/upgrade_v104.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v104/fix_v104_notification.py" "$SRC"
+
+          cat "$GITHUB_WORKSPACE/fresh-global-edge/v110/v104-to-v110.patch.gz.b64" | tr -d '\r\n ' | base64 -d > /tmp/v104-to-v110.patch.gz
+          gunzip -c /tmp/v104-to-v110.patch.gz > /tmp/v104-to-v110.patch
+          cd "$SRC"
+          patch -p1 --batch < /tmp/v104-to-v110.patch
+
+          grep -q 'versionCode = 110' app/build.gradle.kts
+          grep -q 'versionName = "1.1.0"' app/build.gradle.kts
+          grep -q 'strategy_live_ledger' app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt
+          grep -q 'q.lastPrice<20.0' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'q.volume<50_000L' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'sp>1.50' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'strategyInterval=15L' app/src/main/java/com/suhas/ucsentinel/worker/ScanWorker.kt
+          grep -q 'StrategyLiveCard' app/src/main/java/com/suhas/ucsentinel/ui/ScannerScreen.kt
+          echo 'v1.1.0 source verification passed'
+
+          mv "$SRC" /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.1.0-source
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Unit tests and release APK
+        working-directory: /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.1.0-source
+        run: gradle --no-daemon --console=plain clean testDebugUnitTest assembleRelease
+
+      - name: Sign and verify APK
+        working-directory: /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.1.0-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          UNSIGNED=$(find app/build/outputs/apk/release -maxdepth 1 -type f -name '*release*.apk' | head -n 1)
+          test -n "$UNSIGNED" && test -s "$UNSIGNED"
+          KEYSTORE=/tmp/global-edge-v110-release.keystore
+          PASS=$(openssl rand -hex 16)
+          keytool -genkeypair -v -keystore "$KEYSTORE" -storepass "$PASS" -keypass "$PASS" -alias globaledge -keyalg RSA -keysize 2048 -validity 10000 -dname 'CN=Global Edge AI Trader, O=Private Research, C=IN'
+          OUT=out/Global-Edge-AI-Trader-v1.1.0.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KEYSTORE" --ks-pass pass:"$PASS" --key-pass pass:"$PASS" --ks-key-alias globaledge --out "$OUT" "$UNSIGNED"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$OUT" | tee out/APK-SIGNATURE-VERIFY.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$OUT" | tee out/APK-BADGING.txt
+          grep -q "package: name='com.suhas.globaledgeai'" out/APK-BADGING.txt
+          grep -q "versionCode='110'" out/APK-BADGING.txt
+          grep -q "versionName='1.1.0'" out/APK-BADGING.txt
+          sha256sum "$OUT" | tee out/SHA256.txt
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Global-Edge-AI-Trader-v1.1.0
+          retention-days: 30
+          if-no-files-found: error
+          path: |
+            /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.1.0-source/out/Global-Edge-AI-Trader-v1.1.0.apk
+            /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.1.0-source/out/APK-SIGNATURE-VERIFY.txt
+            /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.1.0-source/out/APK-BADGING.txt
+            /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.1.0-source/out/SHA256.txt
+
+      - name: Publish APK for direct download
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p fresh-global-edge/v110/release
+          cp /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.1.0-source/out/Global-Edge-AI-Trader-v1.1.0.apk fresh-global-edge/v110/release/
+          cp /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.1.0-source/out/SHA256.txt fresh-global-edge/v110/release/
+          cp /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.1.0-source/out/APK-BADGING.txt fresh-global-edge/v110/release/
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add fresh-global-edge/v110/release
+          git commit -m 'Publish Global Edge AI Trader v1.1.0 APK [skip ci]'
+          git push
