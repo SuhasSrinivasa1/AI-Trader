@@ -1,0 +1,105 @@
+name: PS Shadow Trader v1.0.1 Android Build
+
+on:
+  push:
+    paths:
+      - 'android-stable/ps-shadow-trader-v101-patch/**'
+      - '.github/workflows/ps-shadow-trader-v101-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconstruct verified v1.0.0 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ps-shadow-trader
+          cat android-stable/ps-shadow-trader-v100-build/source.zip.b64.part* | tr -d '\r\n' | base64 -d > /tmp/ps-shadow-trader-source.zip
+          echo "76c3e3b152b4ae1889b4d61b3c4035a5133d1e444230a0d0f95b35ff747bbb74  /tmp/ps-shadow-trader-source.zip" | sha256sum -c -
+          unzip -q /tmp/ps-shadow-trader-source.zip -d /tmp/ps-shadow-trader
+          test -f /tmp/ps-shadow-trader/app/build.gradle
+
+      - name: Apply anti-churn v1.0.1 patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          P=android-stable/ps-shadow-trader-v101-patch
+          D=/tmp/ps-shadow-trader/app/src/main/java/com/ps/shadowtrader
+          cp "$P/Models.java" "$D/Models.java"
+          cp "$P/StrategyEngine.java" "$D/StrategyEngine.java"
+          cp "$P/TradeSimulator.java" "$D/TradeSimulator.java"
+          cp "$P/MainActivity.java" "$D/MainActivity.java"
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('/tmp/ps-shadow-trader/app/build.gradle')
+          s=p.read_text()
+          import re
+          s=re.sub(r'versionCode\s+\d+', 'versionCode 101', s)
+          s=re.sub(r"versionName\s+'[^']+'", "versionName '1.0.1'", s)
+          p.write_text(s)
+          PY
+          grep -q "versionCode 101" /tmp/ps-shadow-trader/app/build.gradle
+          grep -q "versionName '1.0.1'" /tmp/ps-shadow-trader/app/build.gradle
+          grep -q "MAX_REVERSALS_PER_DAY=3" "$D/TradeSimulator.java"
+          grep -q "OPPOSITE_CONFIRMATIONS=2" "$D/TradeSimulator.java"
+          grep -q "HOLD/WAIT — avoid churn" "$D/StrategyEngine.java"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build unsigned release APK
+        working-directory: /tmp/ps-shadow-trader
+        run: gradle --no-daemon --console=plain clean assembleRelease
+
+      - name: Verify APK metadata
+        working-directory: /tmp/ps-shadow-trader
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          APK="$(find app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' | head -1)"
+          test -s "$APK"
+          cp "$APK" out/PS-Shadow-Trader-v1.0.1-unsigned.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging out/PS-Shadow-Trader-v1.0.1-unsigned.apk | tee out/APK-BADGING.txt
+          grep -q "package: name='com.ps.shadowtrader'" out/APK-BADGING.txt
+          grep -q "versionCode='101'" out/APK-BADGING.txt
+          grep -q "versionName='1.0.1'" out/APK-BADGING.txt
+          sha256sum out/PS-Shadow-Trader-v1.0.1-unsigned.apk | tee out/SHA256-UNSIGNED.txt
+
+      - name: Upload unsigned APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PS-Shadow-Trader-v1.0.1-unsigned
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            /tmp/ps-shadow-trader/out/PS-Shadow-Trader-v1.0.1-unsigned.apk
+            /tmp/ps-shadow-trader/out/APK-BADGING.txt
+            /tmp/ps-shadow-trader/out/SHA256-UNSIGNED.txt
