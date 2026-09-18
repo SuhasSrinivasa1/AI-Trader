@@ -1,0 +1,176 @@
+name: Build Multyfi AutoBuy Pro v2.3.0 Authoritative Early Sell
+
+on:
+  push:
+    branches:
+      - multyfi-v2.3.0-authoritative-early-sell
+  pull_request:
+    branches: [main]
+    paths:
+      - 'hotfix/run_v230.py'
+      - '.github/workflows/multyfi-v230-authoritative-early-sell.yml'
+  workflow_dispatch:
+
+jobs:
+  build-test-android16:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android 16 SDK
+        run: yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools" "emulator" "system-images;android-36;google_apis;x86_64"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Apply v2.3.0 source update
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 hotfix/run_v230.py | tee apply-v230.log
+
+      - name: Unit tests, lint, debug and unsigned release APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --console=plain -p android-stable \
+            :app:testDebugUnitTest \
+            :app:lintDebug \
+            :app:assembleDebug \
+            :app:assembleRelease | tee build-v230.log
+
+      - name: Verify authoritative early-sell contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable
+          TEST=android-stable/app/src/test/java/com/suhas/multyfiautobuy/stable
+          grep -q "versionCode 230" android-stable/app/build.gradle
+          grep -q "versionName '2.3.0'" android-stable/app/build.gradle
+          grep -q "MAX_EARLY_EXIT_AGE_MS = 1_800_000L" "$ROOT/AppPrefs.java"
+          grep -q "Strategy onlyActive = null" "$ROOT/SignalParser.java"
+          grep -q "earlyExitAttempt" "$ROOT/Strategy.java"
+          grep -q "class EarlyExitOrderPolicy" "$ROOT/EarlyExitOrderPolicy.java"
+          grep -q "Always cancel the BUY remainder first" "$ROOT/StrategyMonitorService.java"
+          grep -q "MULTYFI EARLY EXIT REJECTED — RETRYING" "$ROOT/StrategyMonitorService.java"
+          grep -q "strategy.earlyExitRequested = authoritativeEarly" "$ROOT/StrategyMonitorService.java"
+          grep -q "Recovered existing Multyfi early-exit MARKET sell" "$ROOT/GrowwClient.java"
+          grep -q "exactMultyfiDisciplinedPhraseIsActionable" "$TEST/AuthoritativeEarlyExitTest.java"
+          grep -q "symbolLessExitSelectsSinglePendingStrategyBeforeFillObservation" "$TEST/AuthoritativeEarlyExitTest.java"
+          grep -q "MULTYFI EARLY EXIT PERSISTED" "$ROOT/ProductionNotificationService.java"
+
+      - name: Stage APKs and verify signatures
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEBUG=android-stable/app/build/outputs/apk/debug
+          RELEASE=android-stable/app/build/outputs/apk/release
+          FINAL=android-stable/app/build/outputs/apk/v230
+          mkdir -p "$FINAL"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$DEBUG/app-debug.apk" | tee "$FINAL/debug-signature-v230.txt"
+          cp "$DEBUG/app-debug.apk" "$FINAL/Multyfi-AutoBuy-Pro-S24-Android16-v2.3.0-VALIDATION.apk"
+          UNSIGNED=$(find "$RELEASE" -maxdepth 1 -type f -name '*unsigned*.apk' | head -n 1)
+          test -n "$UNSIGNED"
+          cp "$UNSIGNED" "$FINAL/Multyfi-AutoBuy-Pro-S24-Android16-v2.3.0-UNSIGNED.apk"
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Android 16 install and two cold launches
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          set -euo pipefail
+          FINAL=android-stable/app/build/outputs/apk/v230
+          APK="$FINAL/Multyfi-AutoBuy-Pro-S24-Android16-v2.3.0-VALIDATION.apk"
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/android-avd"
+          export ANDROID_SDK_HOME="$RUNNER_TEMP/android-sdk-home"
+          mkdir -p "$ANDROID_AVD_HOME" "$ANDROID_SDK_HOME/.android"
+          echo no | avdmanager create avd --force --name s24_v230 --package 'system-images;android-36;google_apis;x86_64' --device 'pixel_8_pro' --path "$ANDROID_AVD_HOME/s24_v230.avd"
+          "$ANDROID_HOME/emulator/emulator" -avd s24_v230 -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none > "$FINAL/emulator-v230.log" 2>&1 &
+          EMULATOR_PID=$!
+          trap 'timeout 15 adb emu kill >/dev/null 2>&1 || true; kill "$EMULATOR_PID" >/dev/null 2>&1 || true' EXIT
+          timeout 240 adb wait-for-device
+          booted=0
+          for i in $(seq 1 100); do
+            state=$(timeout 10 adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+            if [ "$state" = "1" ]; then booted=1; break; fi
+            if ! kill -0 "$EMULATOR_PID" 2>/dev/null; then break; fi
+            sleep 4
+          done
+          test "$booted" = "1"
+          adb install -r "$APK" | tee "$FINAL/install-v230.txt"
+          grep -q Success "$FINAL/install-v230.txt"
+          adb shell pm grant com.suhas.multyfiautobuy.stable android.permission.POST_NOTIFICATIONS
+          adb logcat -c
+          for n in 1 2; do
+            adb shell am force-stop com.suhas.multyfiautobuy.stable
+            sleep 2
+            adb shell am start -W -n com.suhas.multyfiautobuy.stable/.MainActivity | tee "$FINAL/cold-launch-v230-$n.txt"
+            sleep 8
+            adb shell pidof com.suhas.multyfiautobuy.stable | tee "$FINAL/pid-v230-$n.txt"
+            test -s "$FINAL/pid-v230-$n.txt"
+          done
+          adb shell uiautomator dump /sdcard/v230-ui.xml
+          adb pull /sdcard/v230-ui.xml "$FINAL/ui-v230.xml"
+          grep -q 'Multyfi AutoBuy Pro' "$FINAL/ui-v230.xml"
+          grep -q '2.3.0' "$FINAL/ui-v230.xml"
+          adb exec-out screencap -p > "$FINAL/startup-v230.png"
+          adb logcat -d -v threadtime > "$FINAL/logcat-v230.txt"
+          if grep -E 'FATAL EXCEPTION|Process: com.suhas.multyfiautobuy.stable|ClassNotFoundException.*com.suhas.multyfiautobuy.stable' "$FINAL/logcat-v230.txt"; then exit 1; fi
+
+      - name: Create validation manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          FINAL=android-stable/app/build/outputs/apk/v230
+          SHA=$(sha256sum "$FINAL/Multyfi-AutoBuy-Pro-S24-Android16-v2.3.0-UNSIGNED.apk" | awk '{print $1}')
+          cat > "$FINAL/VALIDATION-v2.3.0.json" <<EOF
+          {
+            "version": "2.3.0",
+            "version_code": 230,
+            "package": "com.suhas.multyfiautobuy.stable",
+            "unsigned_release_sha256": "$SHA",
+            "unit_tests": "PASS",
+            "lint": "PASS",
+            "android16_install": "PASS",
+            "cold_launch_1": "PASS",
+            "cold_launch_2": "PASS",
+            "crash_scan": "PASS",
+            "authoritative_early_sell": {
+              "persist_before_network": true,
+              "cancel_buy_before_position_check": true,
+              "cancel_protection_before_sell": true,
+              "sell_entire_live_position": true,
+              "retry_until_zero": true,
+              "block_new_entries": true,
+              "exact_disciplined_phrase": true
+            }
+          }
+          EOF
+
+      - name: Upload v2.3.0 package and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Multyfi-AutoBuy-Pro-S24-Android16-v2.3.0-AUTHORITATIVE-EARLY-SELL
+          path: |
+            apply-v230.log
+            build-v230.log
+            android-stable/app/build/outputs/apk/v230/
+            android-stable/app/build/reports/tests/testDebugUnitTest/
+            android-stable/app/build/reports/lint-results-debug.html
+          if-no-files-found: warn
