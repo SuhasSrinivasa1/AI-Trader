@@ -1,0 +1,134 @@
+name: PS Shadow Trader v1.3.0 Final Build
+
+on:
+  push:
+    paths:
+      - 'android-stable/ps-shadow-trader-v130-patch/**'
+      - '.github/workflows/ps-shadow-trader-v130-final-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconstruct verified base source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ps-shadow-trader
+          cat android-stable/ps-shadow-trader-v100-build/source.zip.b64.part* | tr -d '\r\n' | base64 -d > /tmp/ps-shadow-trader-source.zip
+          echo "76c3e3b152b4ae1889b4d61b3c4035a5133d1e444230a0d0f95b35ff747bbb74  /tmp/ps-shadow-trader-source.zip" | sha256sum -c -
+          unzip -q /tmp/ps-shadow-trader-source.zip -d /tmp/ps-shadow-trader
+
+      - name: Apply dashboard + TOTP + adaptive foundations
+        shell: bash
+        run: |
+          set -euo pipefail
+          D=/tmp/ps-shadow-trader/app/src/main/java/com/ps/shadowtrader
+          for P in android-stable/ps-shadow-trader-v110-patch android-stable/ps-shadow-trader-v111-patch android-stable/ps-shadow-trader-v120-patch; do
+            for f in "$P"/*.java; do [ -e "$f" ] && cp "$f" "$D/$(basename "$f")"; done
+          done
+          cp android-stable/ps-shadow-trader-v110-patch/AndroidManifest.xml /tmp/ps-shadow-trader/app/src/main/AndroidManifest.xml
+          cp android-stable/ps-shadow-trader-v110-patch/styles.xml /tmp/ps-shadow-trader/app/src/main/res/values/styles.xml
+          cp android-stable/ps-shadow-trader-v110-patch/strings.xml /tmp/ps-shadow-trader/app/src/main/res/values/strings.xml
+
+      - name: Apply final champion-challenger architecture
+        shell: bash
+        run: |
+          set -euo pipefail
+          P=android-stable/ps-shadow-trader-v130-patch
+          D=/tmp/ps-shadow-trader/app/src/main/java/com/ps/shadowtrader
+          for f in "$P"/*.java; do cp "$f" "$D/$(basename "$f")"; done
+
+          rm -f "$D/StrategyEngine.java" "$D/TradeSimulator.java" "$D/ModelConfig.java"
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          gradle=Path('/tmp/ps-shadow-trader/app/build.gradle')
+          s=gradle.read_text()
+          s=re.sub(r'versionCode\s+\d+', 'versionCode 130', s)
+          s=re.sub(r"versionName\s+'[^']+'", "versionName '1.3.0'", s)
+          gradle.write_text(s)
+
+          main=Path('/tmp/ps-shadow-trader/app/src/main/java/com/ps/shadowtrader/MainActivity.java')
+          s=main.read_text()
+          s=s.replace('Adaptive Multify engine + autonomous market learning','FINAL • Live learner + Champion–Challenger replay')
+          s=s.replace('Adaptive strategy ensemble","Weights change from actual shadow outcomes','Champion + live strategy ensemble","96 challengers • chronological holdout validation • live outcome learning')
+          old='strategy.addView(text(model.summary(),12,MUTED,false));'
+          new=old+'\n        strategy.addView(metric("Champion tournament",blankDash(s.getString("tournament_status","Runs automatically when replay history is ready and after market close"))));'
+          s=s.replace(old,new)
+          s=s.replace('Self-learning & logging","Persistent on-device feedback loop','Autonomous learning","No screenshots, blogs or manual strategy selection required')
+          s=s.replace('Each closed shadow trade stores its entry context, side, prices, net outcome and reason. Profitable contexts reinforce the strategies that supported them; losing contexts reduce those weights and increase the learned turnover penalty. EOD replay summarizes broader performance so one bad NSE day does not cause a large model change.',
+                      'Every closed shadow trade updates the live learner. Separately, the app generates strategy challengers, replays them chronologically, validates them on unseen holdout candles and promotes only a challenger that beats the champion after costs, drawdown and turnover penalties. One isolated NSE day cannot rewrite the champion.')
+          main.write_text(s)
+          PY
+
+          grep -q "versionCode 130" /tmp/ps-shadow-trader/app/build.gradle
+          grep -q "versionName '1.3.0'" /tmp/ps-shadow-trader/app/build.gradle
+          grep -q "Champion–Challenger" "$D/MainActivity.java"
+          grep -q "96 challengers" "$D/MainActivity.java"
+          grep -q "POPULATION=96" "$D/StrategyTournamentEngine.java"
+          grep -q "maybeLaunchTournament" "$D/AutomationService.java"
+          grep -q "blend" "$D/AdaptiveModel.java"
+          test -f "$D/ChampionStore.java"
+          test ! -f "$D/TradeSimulator.java"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build unsigned release APK
+        working-directory: /tmp/ps-shadow-trader
+        run: gradle --no-daemon --console=plain clean assembleRelease
+
+      - name: Verify final APK metadata
+        working-directory: /tmp/ps-shadow-trader
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          APK="$(find app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' | head -1)"
+          test -s "$APK"
+          cp "$APK" out/PS-Shadow-Trader-FINAL-v1.3.0-unsigned.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging out/PS-Shadow-Trader-FINAL-v1.3.0-unsigned.apk | tee out/APK-BADGING.txt
+          grep -q "package: name='com.ps.shadowtrader'" out/APK-BADGING.txt
+          grep -q "versionCode='130'" out/APK-BADGING.txt
+          grep -q "versionName='1.3.0'" out/APK-BADGING.txt
+          sha256sum out/PS-Shadow-Trader-FINAL-v1.3.0-unsigned.apk | tee out/SHA256-UNSIGNED.txt
+
+      - name: Upload unsigned final APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PS-Shadow-Trader-FINAL-v1.3.0-unsigned
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            /tmp/ps-shadow-trader/out/PS-Shadow-Trader-FINAL-v1.3.0-unsigned.apk
+            /tmp/ps-shadow-trader/out/APK-BADGING.txt
+            /tmp/ps-shadow-trader/out/SHA256-UNSIGNED.txt
