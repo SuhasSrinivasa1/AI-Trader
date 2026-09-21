@@ -69,7 +69,7 @@ jobs:
           grep -q 'runAutonomousLearningPass' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
           grep -q 'globalScoreAdjustment' app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt
           grep -q 'latestIndiaClose' app/src/main/java/com/suhas/ucsentinel/domain/engine/GlobalLeadEngine.kt
-          grep -q '15, TimeUnit.MINUTES' app/src/main/java/com/suhas/ucsentinel/GlobalEdgeApplication.kt
+          grep -q '15,TimeUnit.MINUTES' app/src/main/java/com/suhas/ucsentinel/GlobalEdgeApplication.kt
           grep -q 'Export weekly learning log' app/src/main/java/com/suhas/ucsentinel/ui/MoreScreen.kt
           grep -q 'closedMarketLiveCacheTtlMs' app/src/main/java/com/suhas/ucsentinel/data/remote/GrowwClient.kt
           grep -q 'NEXT SESSION' app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt
