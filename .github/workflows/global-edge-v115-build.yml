@@ -54,7 +54,9 @@ jobs:
           gunzip -c /tmp/v113-to-v114.patch.gz > /tmp/v113-to-v114.patch
           patch -p1 --batch < /tmp/v113-to-v114.patch
 
-          python "$GITHUB_WORKSPACE/fresh-global-edge/v115/upgrade_v115.py" "$SRC"\n\n          grep -q 'versionCode = 115' app/build.gradle.kts
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v115/upgrade_v115.py" "$SRC"
+
+          grep -q 'versionCode = 115' app/build.gradle.kts
           grep -q 'versionName = "1.1.5"' app/build.gradle.kts
           grep -q 'MIN_DISCOVERY_VOLUME = 10_000L' app/src/main/java/com/suhas/ucsentinel/domain/engine/ExecutionQuality.kt
           grep -q 'quoteCacheTtlMs = 2 \* 60 \* 1000L' app/src/main/java/com/suhas/ucsentinel/data/remote/GrowwClient.kt
