@@ -41,6 +41,11 @@ public final class LongHorizonChampionStore {
     public long lastTournament(){return p.getLong("last_tournament",0);}
     public int examples(){return p.getInt("examples",0);}
     public String summary(){return p.getString("summary","30-day champion tournament is waiting for enough labeled replay examples.");}
+    public String profileSummary(){
+        Profile x=current();
+        return x.id+" • generation "+generation()+" • threshold "+String.format(java.util.Locale.US,"%.0f%%",x.threshold*100)+
+                (x.holdoutSignals>0?" • holdout precision "+String.format(java.util.Locale.US,"%.0f%%",x.holdoutPrecision*100)+" • recall "+String.format(java.util.Locale.US,"%.0f%%",x.holdoutRecall*100)+" • signals "+x.holdoutSignals:" • awaiting validated holdout history");
+    }
     public boolean due(int exampleCount){return exampleCount>=120&&(System.currentTimeMillis()-lastTournament()>6L*3600000L||exampleCount>=examples()+120);}
 
     public Profile make(String id,Map<String,Double>w,double threshold,double precision,double recall,double score,int signals){
