@@ -1,0 +1,120 @@
+name: PS Shadow Trader v1.4.1 Lab Bootstrap Fix
+
+on:
+  push:
+    paths:
+      - 'android-stable/ps-shadow-trader-v141-patch/**'
+      - '.github/workflows/ps-shadow-trader-v141-labfix-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconstruct verified base source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ps-shadow-trader
+          cat android-stable/ps-shadow-trader-v100-build/source.zip.b64.part* | tr -d '\r\n' | base64 -d > /tmp/ps-shadow-trader-source.zip
+          echo "76c3e3b152b4ae1889b4d61b3c4035a5133d1e444230a0d0f95b35ff747bbb74  /tmp/ps-shadow-trader-source.zip" | sha256sum -c -
+          unzip -q /tmp/ps-shadow-trader-source.zip -d /tmp/ps-shadow-trader
+
+      - name: Apply full v1.4 dual-brain architecture
+        shell: bash
+        run: |
+          set -euo pipefail
+          D=/tmp/ps-shadow-trader/app/src/main/java/com/ps/shadowtrader
+          for P in android-stable/ps-shadow-trader-v110-patch android-stable/ps-shadow-trader-v111-patch android-stable/ps-shadow-trader-v120-patch android-stable/ps-shadow-trader-v130-patch android-stable/ps-shadow-trader-v140-patch; do
+            for f in "$P"/*.java; do [ -e "$f" ] && cp "$f" "$D/$(basename "$f")"; done
+          done
+          cp android-stable/ps-shadow-trader-v110-patch/AndroidManifest.xml /tmp/ps-shadow-trader/app/src/main/AndroidManifest.xml
+          cp android-stable/ps-shadow-trader-v110-patch/styles.xml /tmp/ps-shadow-trader/app/src/main/res/values/styles.xml
+          cp android-stable/ps-shadow-trader-v110-patch/strings.xml /tmp/ps-shadow-trader/app/src/main/res/values/strings.xml
+
+      - name: Apply v1.4.1 daily-history/bootstrap fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          P=android-stable/ps-shadow-trader-v141-patch
+          D=/tmp/ps-shadow-trader/app/src/main/java/com/ps/shadowtrader
+          for f in "$P"/*.java; do cp "$f" "$D/$(basename "$f")"; done
+          rm -f "$D/StrategyEngine.java" "$D/TradeSimulator.java" "$D/ModelConfig.java"
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('/tmp/ps-shadow-trader/app/build.gradle')
+          s=p.read_text()
+          s=re.sub(r'versionCode\s+\d+', 'versionCode 141', s)
+          s=re.sub(r"versionName\s+'[^']+'", "versionName '1.4.1'", s)
+          p.write_text(s)
+          PY
+
+          grep -q "versionCode 141" /tmp/ps-shadow-trader/app/build.gradle
+          grep -q "versionName '1.4.1'" /tmp/ps-shadow-trader/app/build.gradle
+          grep -q "interval_in_minutes=1440" "$D/GrowwClient.java"
+          grep -q "normalizeDailyBounds" "$D/GrowwClient.java"
+          grep -q "start=end-1000L" "$D/MomentumLabEngine.java"
+          grep -q "labeled examples" "$D/MomentumLabEngine.java"
+          grep -q "s.length()>700" "$D/AutomationService.java"
+          test -f "$D/ThirtyDayTournamentEngine.java"
+          test -f "$D/LongHorizonChampionStore.java"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build unsigned release APK
+        working-directory: /tmp/ps-shadow-trader
+        run: gradle --no-daemon --console=plain clean assembleRelease
+
+      - name: Verify APK metadata
+        working-directory: /tmp/ps-shadow-trader
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          APK="$(find app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' | head -1)"
+          test -s "$APK"
+          cp "$APK" out/PS-Shadow-Trader-FINAL-v1.4.1-unsigned.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging out/PS-Shadow-Trader-FINAL-v1.4.1-unsigned.apk | tee out/APK-BADGING.txt
+          grep -q "package: name='com.ps.shadowtrader'" out/APK-BADGING.txt
+          grep -q "versionCode='141'" out/APK-BADGING.txt
+          grep -q "versionName='1.4.1'" out/APK-BADGING.txt
+          sha256sum out/PS-Shadow-Trader-FINAL-v1.4.1-unsigned.apk | tee out/SHA256-UNSIGNED.txt
+
+      - name: Upload unsigned APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PS-Shadow-Trader-FINAL-v1.4.1-unsigned
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            /tmp/ps-shadow-trader/out/PS-Shadow-Trader-FINAL-v1.4.1-unsigned.apk
+            /tmp/ps-shadow-trader/out/APK-BADGING.txt
+            /tmp/ps-shadow-trader/out/SHA256-UNSIGNED.txt
