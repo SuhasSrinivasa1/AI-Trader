@@ -139,7 +139,8 @@ public class MainActivity extends Activity {
         LinearLayout strategy=card();
         strategy.addView(sectionTitle("Champion + live strategy ensemble","96 intraday challengers • holdout validation • live outcome learning"));
         strategy.addView(text("EMA trend • RSI/reversion • VWAP • MACD • volume expansion • candlestick structure • breakout/breakdown • persistence • relative strength vs NIFTY • 2-second micro momentum • acceleration",13,NAVY,false));
-        strategy.addView(text(model.summary(),12,MUTED,false));\n        strategy.addView(metric("Intraday champion tournament",blankDash(s.getString("tournament_status","Runs automatically when replay history is ready and after market close"))));
+        strategy.addView(text(model.summary(),12,MUTED,false));
+        strategy.addView(metric("Intraday champion tournament",blankDash(s.getString("tournament_status","Runs automatically when replay history is ready and after market close"))));
         content.addView(strategy,cardLp());
 
         LinearLayout learn=card();
@@ -165,13 +166,17 @@ public class MainActivity extends Activity {
 
     private void renderLab(){
         android.content.SharedPreferences p=getSharedPreferences("momentum",MODE_PRIVATE);
-        LinearLayout head=card();head.addView(sectionTitle("30-Day Momentum Lab","Experimental +50% target candidates"));
+        LongHorizonChampionStore labChampion=new LongHorizonChampionStore(this);
+        LinearLayout head=card();head.addView(sectionTitle("30-Day Champion Lab","Independent +50% within 30 days learner"));
         head.addView(text("This is a separate long-horizon brain. It learns specifically from whether historical stocks reached +50% within the following 30 days, and it does not reuse intraday champion weights.",13,NAVY,false));
         int cur=p.getInt("cursor",0),total=p.getInt("universe_size",0);
         head.addView(metric("Universe scan coverage",total==0?"Waiting for first automated scan":cur+" / "+total));
         head.addView(metric("Market regime",p.getString("market_regime","Pending")));
         head.addView(metric("Scanner","Autonomous full-universe rotating NSE scan • cached progress"));
-        head.addView(metric("Validation","Chronological replay • unseen holdout • confidence calibration • rejected-stock controls"));\n        head.addView(metric("30-day champion",labChampion.profileSummary()));\n        head.addView(metric("Tournament",labChampion.summary()));\n        head.addView(metric("Prediction scorecard",MomentumLabEngine.scorecard(this)));
+        head.addView(metric("Validation","Chronological replay • unseen holdout • confidence calibration • rejected-stock controls"));
+        head.addView(metric("30-day champion",labChampion.profileSummary()));
+        head.addView(metric("Tournament",labChampion.summary()));
+        head.addView(metric("Prediction scorecard",MomentumLabEngine.scorecard(this)));
         content.addView(head,cardLp());
 
         LinearLayout toggle=new LinearLayout(this);toggle.setOrientation(LinearLayout.HORIZONTAL);toggle.setWeightSum(2);
@@ -187,7 +192,9 @@ public class MainActivity extends Activity {
             content.addView(empty,cardLp());return;
         }
         ArrayList<JSONObject> list=new ArrayList<>();for(int i=0;i<a.length();i++)try{list.add(a.getJSONObject(i));}catch(Exception ignored){}
-        Collections.sort(list,(x,y)->Double.compare(y.optDouble("score"),x.optDouble("score")));
+        Collections.sort(list,(x,y)->Double.compare(
+                y.has("confidence")?y.optDouble("confidence"):y.optDouble("score"),
+                x.has("confidence")?x.optDouble("confidence"):x.optDouble("score")));
         for(JSONObject o:list)content.addView(candidateCard(o,showClosed),cardLp());
     }
 
@@ -196,7 +203,8 @@ public class MainActivity extends Activity {
         TextView name=text(o.optString("symbol"),20,NAVY,true);top.addView(name,new LinearLayout.LayoutParams(0,-2,1));
         TextView score=text(String.format(Locale.US,"%.0f%%",o.has("confidence")?o.optDouble("confidence")*100:o.optDouble("score")),15,closed?(o.optBoolean("success")?GREEN:RED):BLUE,true);top.addView(score);c.addView(top);
         c.addView(text(closed?(o.optBoolean("success")?"TARGET HIT":"TARGET NOT HIT"):"50% TARGET CANDIDATE",11,closed?(o.optBoolean("success")?GREEN:RED):GREEN,true));
-        c.addView(metric("Reference price","₹"+money(o.optDouble("price"))));c.addView(metric("+50% target","₹"+money(o.optDouble("target"))));\n        if(o.has("champion"))c.addView(metric("Snapshot","Champion "+o.optString("champion")+" • generation "+o.optInt("generation")+" • confidence "+String.format(Locale.US,"%.0f%%",o.optDouble("confidence")*100)));
+        c.addView(metric("Reference price","₹"+money(o.optDouble("price"))));c.addView(metric("+50% target","₹"+money(o.optDouble("target"))));
+        if(o.has("champion"))c.addView(metric("Snapshot","Champion "+o.optString("champion")+" • generation "+o.optInt("generation")+" • confidence "+String.format(Locale.US,"%.0f%%",o.optDouble("confidence")*100)));
         if(closed){c.addView(metric("Highest observed","₹"+money(o.optDouble("maxSeen"))));c.addView(metric("Outcome",String.format(Locale.US,"Max gain %+.1f%% • drawdown %.1f%% • close return %+.1f%%",o.optDouble("maxGain")*100,o.optDouble("maxDrawdown")*100,o.optDouble("closeReturn")*100)));}else c.addView(metric("Expires",date(o.optLong("expiry"))));
         c.addView(text(o.optString("reason","Pattern replay in progress"),12,MUTED,false));return c;
     }
