@@ -1,0 +1,42 @@
+name: Export Global Edge v1.1.1 Source
+
+on:
+  push:
+    paths:
+      - '.github/workflows/export-v111-source.yml'
+  workflow_dispatch:
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconstruct v1.1.1 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp fresh-global-edge/v103/reconstruct_v103.sh /tmp/reconstruct_v103.sh
+          sed -i '/^grep -q /d' /tmp/reconstruct_v103.sh
+          bash /tmp/reconstruct_v103.sh
+          SRC=/tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v103/upgrade_v103_entry_ui.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v104/upgrade_v104.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v104/fix_v104_notification.py" "$SRC"
+          cat "$GITHUB_WORKSPACE/fresh-global-edge/v110/v104-to-v110.patch.gz.b64" | tr -d '\r\n ' | base64 -d > /tmp/v104-to-v110.patch.gz
+          gunzip -c /tmp/v104-to-v110.patch.gz > /tmp/v104-to-v110.patch
+          cd "$SRC"
+          patch -p1 --batch < /tmp/v104-to-v110.patch
+          cat "$GITHUB_WORKSPACE/fresh-global-edge/v111/v110-to-v111.patch.gz.b64" | tr -d '\r\n ' | base64 -d > /tmp/v110-to-v111.patch.gz
+          gunzip -c /tmp/v110-to-v111.patch.gz > /tmp/v110-to-v111.patch
+          patch -p1 --batch < /tmp/v110-to-v111.patch
+          cd /tmp/global-edge-v103
+          mv Global-Edge-AI-Trader-v1.0.3-source Global-Edge-AI-Trader-v1.1.1-source
+          zip -qr Global-Edge-AI-Trader-v1.1.1-source.zip Global-Edge-AI-Trader-v1.1.1-source
+
+      - name: Upload source artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Global-Edge-AI-Trader-v1.1.1-source
+          retention-days: 7
+          path: /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.1.1-source.zip
