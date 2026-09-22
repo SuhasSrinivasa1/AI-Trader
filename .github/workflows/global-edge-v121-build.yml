@@ -1,0 +1,171 @@
+name: Global Edge AI Trader v1.2.1 Validation Learning UI Build
+
+on:
+  push:
+    paths:
+      - 'fresh-global-edge/v121/**'
+      - '.github/workflows/global-edge-v121-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconstruct v1.2.0 and apply v1.2.1 validation learning + UI
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp fresh-global-edge/v103/reconstruct_v103.sh /tmp/reconstruct_v103.sh
+          sed -i '/^grep -q /d' /tmp/reconstruct_v103.sh
+          bash /tmp/reconstruct_v103.sh
+          SRC=/tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source
+
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v103/upgrade_v103_entry_ui.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v104/upgrade_v104.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v104/fix_v104_notification.py" "$SRC"
+
+          cat "$GITHUB_WORKSPACE/fresh-global-edge/v110/v104-to-v110.patch.gz.b64" | tr -d '\r\n ' | base64 -d > /tmp/v104-to-v110.patch.gz
+          gunzip -c /tmp/v104-to-v110.patch.gz > /tmp/v104-to-v110.patch
+          cd "$SRC"
+          patch -p1 --batch < /tmp/v104-to-v110.patch
+
+          cat "$GITHUB_WORKSPACE/fresh-global-edge/v111/v110-to-v111.patch.gz.b64" | tr -d '\r\n ' | base64 -d > /tmp/v110-to-v111.patch.gz
+          gunzip -c /tmp/v110-to-v111.patch.gz > /tmp/v110-to-v111.patch
+          patch -p1 --batch < /tmp/v110-to-v111.patch
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v111/fix_v111_experimental.py" "$SRC"
+
+          cat "$GITHUB_WORKSPACE/fresh-global-edge/v112/v111-to-v112.patch.gz.b64" | tr -d '\r\n ' | base64 -d > /tmp/v111-to-v112.patch.gz
+          gunzip -c /tmp/v111-to-v112.patch.gz > /tmp/v111-to-v112.patch
+          patch -p1 --batch < /tmp/v111-to-v112.patch
+
+          cat "$GITHUB_WORKSPACE/fresh-global-edge/v113/v112-to-v113.patch.gz.b64" | tr -d '\r\n ' | base64 -d > /tmp/v112-to-v113.patch.gz
+          gunzip -c /tmp/v112-to-v113.patch.gz > /tmp/v112-to-v113.patch
+          patch -p1 --batch < /tmp/v112-to-v113.patch
+
+          cat "$GITHUB_WORKSPACE/fresh-global-edge/v114/v113-to-v114.patch.gz.b64" | tr -d '\r\n ' | base64 -d > /tmp/v113-to-v114.patch.gz
+          gunzip -c /tmp/v113-to-v114.patch.gz > /tmp/v113-to-v114.patch
+          patch -p1 --batch < /tmp/v113-to-v114.patch
+
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v115/upgrade_v115.py" "$SRC"
+
+          cat "$GITHUB_WORKSPACE/fresh-global-edge/v116/v115-to-v116.patch.gz.b64" | tr -d '\r\n ' | base64 -d > /tmp/v115-to-v116.patch.gz
+          gunzip -c /tmp/v115-to-v116.patch.gz > /tmp/v115-to-v116.patch
+          patch -p1 --batch < /tmp/v115-to-v116.patch
+
+          cat "$GITHUB_WORKSPACE/fresh-global-edge/v117/v116-to-v117.patch.gz.b64" | tr -d '\r\n ' | base64 -d > /tmp/v116-to-v117.patch.gz
+          gunzip -c /tmp/v116-to-v117.patch.gz > /tmp/v116-to-v117.patch
+          patch -p1 --batch < /tmp/v116-to-v117.patch
+
+          cat "$GITHUB_WORKSPACE/fresh-global-edge/v118/v117-to-v118.patch.gz.b64" | tr -d '\r\n ' | base64 -d > /tmp/v117-to-v118.patch.gz
+          gunzip -c /tmp/v117-to-v118.patch.gz > /tmp/v117-to-v118.patch
+          patch -p1 --batch < /tmp/v117-to-v118.patch
+
+          cat "$GITHUB_WORKSPACE/fresh-global-edge/v119/v118-to-v119.patch.gz.b64" | tr -d '\r\n ' | base64 -d > /tmp/v118-to-v119.patch.gz
+          gunzip -c /tmp/v118-to-v119.patch.gz > /tmp/v118-to-v119.patch
+          patch -p1 --batch < /tmp/v118-to-v119.patch
+
+          cat "$GITHUB_WORKSPACE/fresh-global-edge/v120/v119-to-v120.patch.gz.b64" | tr -d '\r\n ' | base64 -d > /tmp/v119-to-v120.patch.gz
+          gunzip -c /tmp/v119-to-v120.patch.gz > /tmp/v119-to-v120.patch
+          patch -p1 --batch < /tmp/v119-to-v120.patch
+
+          cat "$GITHUB_WORKSPACE/fresh-global-edge/v121/v120-to-v121.patch.gz.b64" | tr -d '\r\n ' | base64 -d > /tmp/v120-to-v121.patch.gz
+          gunzip -c /tmp/v120-to-v121.patch.gz > /tmp/v120-to-v121.patch
+          patch -p1 --batch < /tmp/v120-to-v121.patch
+
+          grep -q 'versionCode = 121' app/build.gradle.kts
+          grep -q 'versionName = "1.2.1"' app/build.gradle.kts
+          grep -q 'data class RejectedCandidateRecord' app/src/main/java/com/suhas/ucsentinel/domain/model/AutopsyModels.kt
+          grep -q 'rejected_shadow_candidates_v121' app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt
+          grep -q 'runMissedOpportunityAudit' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'confidenceCalibrationBins' app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt
+          grep -q 'class LearningValidationEngine' app/src/main/java/com/suhas/ucsentinel/domain/engine/LearningValidationEngine.kt
+          grep -q 'fun walkForward' app/src/main/java/com/suhas/ucsentinel/domain/engine/LearningValidationEngine.kt
+          grep -q 'LearningHealthStrip' app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt
+          grep -q 'WF stable' app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt
+          echo 'v1.2.1 source verification passed'
+
+          cd /tmp/global-edge-v103
+          mv Global-Edge-AI-Trader-v1.0.3-source Global-Edge-AI-Trader-v1.2.1-source
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Unit tests and release APK
+        working-directory: /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.2.1-source
+        run: gradle --no-daemon --console=plain clean testDebugUnitTest assembleRelease
+
+      - name: Sign and verify APK
+        working-directory: /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.2.1-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          UNSIGNED=$(find app/build/outputs/apk/release -maxdepth 1 -type f -name '*release*.apk' | head -n 1)
+          test -n "$UNSIGNED" && test -s "$UNSIGNED"
+
+          KEYSTORE=/tmp/global-edge-v121-release.keystore
+          PASS=$(openssl rand -hex 16)
+          keytool -genkeypair -v -keystore "$KEYSTORE" -storepass "$PASS" -keypass "$PASS" -alias globaledge -keyalg RSA -keysize 2048 -validity 10000 -dname 'CN=Global Edge AI Trader, O=Private Research, C=IN'
+
+          OUT=out/Global-Edge-AI-Trader-v1.2.1.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KEYSTORE" --ks-pass pass:"$PASS" --key-pass pass:"$PASS" --ks-key-alias globaledge --out "$OUT" "$UNSIGNED"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$OUT" | tee out/APK-SIGNATURE-VERIFY.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$OUT" | tee out/APK-BADGING.txt
+
+          grep -q "package: name='com.suhas.globaledgeai'" out/APK-BADGING.txt
+          grep -q "versionCode='121'" out/APK-BADGING.txt
+          grep -q "versionName='1.2.1'" out/APK-BADGING.txt
+
+          sha256sum "$OUT" | tee out/SHA256.txt
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Global-Edge-AI-Trader-v1.2.1
+          retention-days: 30
+          if-no-files-found: error
+          path: |
+            /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.2.1-source/out/Global-Edge-AI-Trader-v1.2.1.apk
+            /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.2.1-source/out/APK-SIGNATURE-VERIFY.txt
+            /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.2.1-source/out/APK-BADGING.txt
+            /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.2.1-source/out/SHA256.txt
+
+      - name: Publish APK for direct download
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p fresh-global-edge/v121/release
+          cp /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.2.1-source/out/Global-Edge-AI-Trader-v1.2.1.apk fresh-global-edge/v121/release/
+          cp /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.2.1-source/out/SHA256.txt fresh-global-edge/v121/release/
+          cp /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.2.1-source/out/APK-BADGING.txt fresh-global-edge/v121/release/
+
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add fresh-global-edge/v121/release
+          git commit -m 'Publish Global Edge AI Trader v1.2.1 APK [skip ci]'
+          git push
