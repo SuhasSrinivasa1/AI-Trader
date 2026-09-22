@@ -1,0 +1,44 @@
+name: Export Global Edge v1.1.9 Source
+
+on:
+  push:
+    paths:
+      - '.github/workflows/export-v119-source.yml'
+  workflow_dispatch:
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconstruct v1.1.9 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp fresh-global-edge/v103/reconstruct_v103.sh /tmp/reconstruct_v103.sh
+          sed -i '/^grep -q /d' /tmp/reconstruct_v103.sh
+          bash /tmp/reconstruct_v103.sh
+          SRC=/tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v103/upgrade_v103_entry_ui.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v104/upgrade_v104.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v104/fix_v104_notification.py" "$SRC"
+
+          for spec in             "v110:v104-to-v110.patch.gz.b64"             "v111:v110-to-v111.patch.gz.b64"             "v112:v111-to-v112.patch.gz.b64"             "v113:v112-to-v113.patch.gz.b64"             "v114:v113-to-v114.patch.gz.b64"             "v116:v115-to-v116.patch.gz.b64"             "v117:v116-to-v117.patch.gz.b64"             "v118:v117-to-v118.patch.gz.b64"             "v119:v118-to-v119.patch.gz.b64"; do
+              dir="${spec%%:*}"; file="${spec#*:}"
+              cat "$GITHUB_WORKSPACE/fresh-global-edge/$dir/$file" | tr -d '\r\n ' | base64 -d > /tmp/p.gz
+              gunzip -c /tmp/p.gz > /tmp/p.patch
+              cd "$SRC"; patch -p1 --batch < /tmp/p.patch
+          done
+
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v111/fix_v111_experimental.py" "$SRC" || true
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v115/upgrade_v115.py" "$SRC"
+
+          cd /tmp/global-edge-v103
+          mv Global-Edge-AI-Trader-v1.0.3-source Global-Edge-AI-Trader-v1.1.9-source
+          zip -qr Global-Edge-AI-Trader-v1.1.9-source.zip Global-Edge-AI-Trader-v1.1.9-source
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Global-Edge-AI-Trader-v1.1.9-source
+          retention-days: 7
+          path: /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.1.9-source.zip
