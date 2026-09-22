@@ -68,11 +68,11 @@ jobs:
 
           grep -q 'versionCode = 117' app/build.gradle.kts
           grep -q 'versionName = "1.1.7"' app/build.gradle.kts
-          grep -q 'val mode=if(indiaSessionOpen)"LIVE" else "NEXT SESSION"' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
-          grep -q 'strongForeignMove' app/src/main/java/com/suhas/ucsentinel/domain/engine/GlobalLeadEngine.kt
-          grep -q 'indian!=null&&indiaSessionOpen' app/src/main/java/com/suhas/ucsentinel/domain/engine/GlobalLeadEngine.kt
-          grep -q 'enum class GlobalView{NEXT_SESSION,LIVE,CLOSED}' app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt
-          grep -q 'preOpenUsesForeignSignalWithoutTreatingStaleIndiaAsLiveConfirmation' app/src/test/java/com/suhas/ucsentinel/GlobalLeadEngineTest.kt
+          grep -q 'val indiaMarketOpen=' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'if(indiaMarketOpen && (q==null||!ExecutionQuality.executableQuote(q)))continue' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'overnightImpulse' app/src/main/java/com/suhas/ucsentinel/domain/engine/GlobalLeadEngine.kt
+          grep -q 'enum class GlobalCompactView{NEXT_SESSION,LIVE,CLOSED}' app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt
+          grep -q 'preOpenForeignOnlyCanBecomeNextSession' app/src/test/java/com/suhas/ucsentinel/GlobalLeadEngineTest.kt
           echo 'v1.1.7 source verification passed'
 
           cd /tmp/global-edge-v103
