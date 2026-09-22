@@ -88,7 +88,7 @@ jobs:
           grep -q 'rejected_shadow_candidates_v121' app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt
           grep -q 'runMissedOpportunityAudit' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
           grep -q 'confidenceCalibrationBins' app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt
-          grep -q 'class LearningValidationEngine' app/src/main/java/com/suhas/ucsentinel/domain/engine/LearningValidationEngine.kt
+          grep -q 'object LearningValidationEngine' app/src/main/java/com/suhas/ucsentinel/domain/engine/LearningValidationEngine.kt
           grep -q 'fun walkForward' app/src/main/java/com/suhas/ucsentinel/domain/engine/LearningValidationEngine.kt
           grep -q 'LearningHealthStrip' app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt
           grep -q 'WF stable' app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt
