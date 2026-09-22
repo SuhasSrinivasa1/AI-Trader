@@ -23,15 +23,24 @@ jobs:
           python "$GITHUB_WORKSPACE/fresh-global-edge/v104/upgrade_v104.py" "$SRC"
           python "$GITHUB_WORKSPACE/fresh-global-edge/v104/fix_v104_notification.py" "$SRC"
 
-          for spec in             "v110:v104-to-v110.patch.gz.b64"             "v111:v110-to-v111.patch.gz.b64"             "v112:v111-to-v112.patch.gz.b64"             "v113:v112-to-v113.patch.gz.b64"             "v114:v113-to-v114.patch.gz.b64"             "v116:v115-to-v116.patch.gz.b64"             "v117:v116-to-v117.patch.gz.b64"             "v118:v117-to-v118.patch.gz.b64"             "v119:v118-to-v119.patch.gz.b64"; do
-              dir="${spec%%:*}"; file="${spec#*:}"
-              cat "$GITHUB_WORKSPACE/fresh-global-edge/$dir/$file" | tr -d '\r\n ' | base64 -d > /tmp/p.gz
-              gunzip -c /tmp/p.gz > /tmp/p.patch
-              cd "$SRC"; patch -p1 --batch < /tmp/p.patch
-          done
+          apply_patch_file() {
+            dir="$1"; file="$2"
+            cat "$GITHUB_WORKSPACE/fresh-global-edge/$dir/$file" | tr -d '\r\n ' | base64 -d > /tmp/p.gz
+            gunzip -c /tmp/p.gz > /tmp/p.patch
+            cd "$SRC"; patch -p1 --batch < /tmp/p.patch
+          }
 
-          python "$GITHUB_WORKSPACE/fresh-global-edge/v111/fix_v111_experimental.py" "$SRC" || true
+          apply_patch_file v110 v104-to-v110.patch.gz.b64
+          apply_patch_file v111 v110-to-v111.patch.gz.b64
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v111/fix_v111_experimental.py" "$SRC"
+          apply_patch_file v112 v111-to-v112.patch.gz.b64
+          apply_patch_file v113 v112-to-v113.patch.gz.b64
+          apply_patch_file v114 v113-to-v114.patch.gz.b64
           python "$GITHUB_WORKSPACE/fresh-global-edge/v115/upgrade_v115.py" "$SRC"
+          apply_patch_file v116 v115-to-v116.patch.gz.b64
+          apply_patch_file v117 v116-to-v117.patch.gz.b64
+          apply_patch_file v118 v117-to-v118.patch.gz.b64
+          apply_patch_file v119 v118-to-v119.patch.gz.b64
 
           cd /tmp/global-edge-v103
           mv Global-Edge-AI-Trader-v1.0.3-source Global-Edge-AI-Trader-v1.1.9-source
