@@ -1,1 +1,1 @@
-970a32b8442a27359cf7e634c606454d7bf89860319a4ff372ab438d8a0e47d3  out/Global-Edge-AI-Trader-v1.1.7.apk
+57992419a30e7caf1e330c193f66d71bc0806780fb67ed2bde1ae9b2eb8bbd4c  out/Global-Edge-AI-Trader-v1.1.7.apk
