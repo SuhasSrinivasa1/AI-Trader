@@ -68,7 +68,7 @@ jobs:
 
           grep -q 'versionCode = 117' app/build.gradle.kts
           grep -q 'versionName = "1.1.7"' app/build.gradle.kts
-          grep -q 'NEXT SESSION • foreign' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'val mode=if(indiaSessionOpen)"LIVE" else "NEXT SESSION"' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
           grep -q 'strongForeignMove' app/src/main/java/com/suhas/ucsentinel/domain/engine/GlobalLeadEngine.kt
           grep -q 'indian!=null&&indiaSessionOpen' app/src/main/java/com/suhas/ucsentinel/domain/engine/GlobalLeadEngine.kt
           grep -q 'enum class GlobalView{NEXT_SESSION,LIVE,CLOSED}' app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt
