@@ -68,7 +68,7 @@ jobs:
 
           grep -q "versionCode 142" /tmp/ps-shadow-trader/app/build.gradle
           grep -q "versionName '1.4.2'" /tmp/ps-shadow-trader/app/build.gradle
-          grep -q "BOOK\\\\s+PROFIT" "$D/NotificationParser.java"
+          grep -q "BOOK_PROFIT" "$D/NotificationParser.java"
           grep -q "MULTIBAGGER" "$D/NotificationParser.java"
           grep -q "RELEASED" "$D/WatchlistStore.java"
           grep -q "pending_multify_exit_symbol" "$D/AutomationService.java"
