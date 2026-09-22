@@ -1,0 +1,1 @@
+d552c54fe2174a7e76eef102cd5f407b6453ed64aeeb330a2c8be885bac205d6  out/Global-Edge-AI-Trader-v1.2.0.apk
