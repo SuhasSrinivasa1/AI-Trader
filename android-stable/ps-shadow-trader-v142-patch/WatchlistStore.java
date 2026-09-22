@@ -7,6 +7,9 @@ import java.util.*;
 public final class WatchlistStore {
     private static final int MAX=3;
     private static final long STALE_MS=10L*60L*60L*1000L;
+    private static final Set<String> INVALID=new HashSet<>(Arrays.asList(
+            "RELEASED","RELEASE","TRADE","TRADES","RELEASING","SOON","NEW","UPDATE","BOOK","PROFIT","INTRADAY","EQUITY","BUY","SELL","CALL"
+    ));
     private final android.content.SharedPreferences p;
     public WatchlistStore(Context c){p=c.getSharedPreferences("watchlist",Context.MODE_PRIVATE);}
 
@@ -58,7 +61,7 @@ public final class WatchlistStore {
             JSONArray a=new JSONArray(p.getString("items","[]"));JSONArray keep=new JSONArray();
             for(int i=0;i<a.length();i++){
                 JSONObject o=a.getJSONObject(i);String s=o.optString("symbol","");long ts=o.optLong("ts",0);
-                if(!s.isEmpty()&&now-ts<STALE_MS&&out.size()<MAX){out.add(s);keep.put(o);}
+                if(!s.isEmpty()&&!INVALID.contains(s)&&now-ts<STALE_MS&&out.size()<MAX){out.add(s);keep.put(o);}
             }
             p.edit().putString("items",keep.toString()).apply();
         }catch(Exception ignored){}
