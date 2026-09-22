@@ -309,6 +309,9 @@ public class MainActivity extends Activity {
                         .append(o.optString("symbol")).append(" ").append(o.optString("side"))
                         .append("  ").append(net>0?"WIN ":"LOSS ")
                         .append(String.format(Locale.US,"%+.2f%%",net*100));
+                if(o.has("capture"))b.append(" • cap ").append(String.format(Locale.US,"%.0f%%",o.optDouble("capture")*100));
+                String pm=o.optString("postmortem","");
+                if(!pm.isEmpty()&&!pm.equals("WIN"))b.append(" • ").append(pm);
             }
             return b.toString();
         }catch(Exception e){return "Closed-trade history unavailable.";}
