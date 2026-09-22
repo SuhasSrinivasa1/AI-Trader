@@ -79,7 +79,7 @@ jobs:
           grep -q 'closeExpiredStrategyCalls' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
           grep -q 'THREE_PM' app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt
           grep -q 'PressureCompactView{NEXT_SESSION,LIVE,CLOSED}' app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt
-          grep -q 'TradeCallOutcome.WIN' app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt
+          grep -q 'WIN or LOSS' app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt
           echo 'v1.1.8 source verification passed'
 
           cd /tmp/global-edge-v103
