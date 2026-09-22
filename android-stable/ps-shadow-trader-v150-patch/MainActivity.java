@@ -68,7 +68,7 @@ public class MainActivity extends Activity {
         page.addView(card,cardLp());
     }
 
-    private EditText secretField    private EditText secretField(String hint){
+    private EditText secretField(String hint){
         EditText e=new EditText(this);e.setHint(hint);e.setSingleLine(true);
         e.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);
         e.setPadding(dp(14),dp(12),dp(14),dp(12));
@@ -187,7 +187,7 @@ public class MainActivity extends Activity {
         content.addView(log,cardLp());
     }
 
-    private void renderLab(){    private void renderLab(){
+    private void renderLab(){
         android.content.SharedPreferences p=getSharedPreferences("momentum",MODE_PRIVATE);
         LongHorizonChampionStore labChampion=new LongHorizonChampionStore(this);
         LinearLayout head=card();head.addView(sectionTitle("30-Day Champion Lab","Independent +50% within 30 days learner"));
