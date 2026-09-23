@@ -1,4 +1,5 @@
 name: PS Shadow Trader v1.6.0 Professional UI
+# rebuild after compile fix
 
 on:
   push:
