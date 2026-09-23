@@ -103,8 +103,8 @@ jobs:
           cp "$APK" out/PS-Shadow-Trader-FINAL-v1.6.1-unsigned.apk
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging out/PS-Shadow-Trader-FINAL-v1.6.1-unsigned.apk | tee out/APK-BADGING.txt
           grep -q "package: name='com.ps.shadowtrader'" out/APK-BADGING.txt
-          grep -q "versionCode='160'" out/APK-BADGING.txt
-          grep -q "versionName='1.6.0'" out/APK-BADGING.txt
+          grep -q "versionCode='161'" out/APK-BADGING.txt
+          grep -q "versionName='1.6.1'" out/APK-BADGING.txt
           sha256sum out/PS-Shadow-Trader-FINAL-v1.6.1-unsigned.apk | tee out/SHA256-UNSIGNED.txt
 
       - name: Upload unsigned APK
