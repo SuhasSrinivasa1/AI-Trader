@@ -342,7 +342,7 @@ public class AutomationService extends Service {
 
         long last=state.getLong("last_lab_ts",0);
         long interval=market?30L*60000L:2L*60000L;
-        boolean first=last<=0||state.getInt("universe_size",0)<=0;
+        boolean first=last<=0;
 
         if(!first&&now-last<interval)return;
 
