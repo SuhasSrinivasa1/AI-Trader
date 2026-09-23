@@ -81,7 +81,7 @@ s=one(s,r'\s+val pct = \(o\.high / o\.close - 1\.0\) \* 100\.0.*?if \(candidate\
                 val closeFromOpen=if(o.open>0.0)(o.close/o.open-1.0)*100.0 else 0.0
                 val rangePct=if(o.low>0.0)(o.high/o.low-1.0)*100.0 else 0.0
                 val holdingHigh=belowHighPct<=if(nextSessionMode)2.0 else 1.25
-                val candidate=holdingHigh && (closeFromOpen>=if(nextSessionMode)0.30 else 0.75 || rangePct>=1.5)
+                val candidate=holdingHigh && (closeFromOpen>=(if(nextSessionMode)0.30 else 0.75) || rangePct>=1.5)
                 if(candidate)prelim+=instrument to o''','prelim')
 s=one(s,r'val rankedPrelim = prelim\s*\.sortedByDescending \{ \(_, o\) ->.*?\.take\(settings\.maxQuotesPerScan\)','''val rankedPrelim=prelim.sortedByDescending{(_,o)->
             if(o.close<=0.0||o.open<=0.0)-999.0 else ((o.close/o.open-1.0)*150.0-(o.high/o.close-1.0)*100.0)
