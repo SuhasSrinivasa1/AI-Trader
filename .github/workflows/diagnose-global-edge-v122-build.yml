@@ -86,9 +86,19 @@ jobs:
           find app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' -printf '%f %s bytes\n' \
             > "$GITHUB_WORKSPACE/fresh-global-edge/v122/build-diagnostic/apks.txt" 2>/dev/null || true
 
+          if [ "$RC" -eq 0 ]; then
+            EXPORT="$GITHUB_WORKSPACE/fresh-global-edge/v122/export"
+            mkdir -p "$EXPORT"
+            APK=$(find app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' | head -n 1)
+            cp "$APK" "$EXPORT/Global-Edge-AI-Trader-v1.2.2-UNSIGNED.apk"
+            cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" "$EXPORT/apksigner-35.0.0.jar"
+            "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" > "$EXPORT/APK-BADGING-UNSIGNED.txt"
+            sha256sum "$EXPORT/Global-Edge-AI-Trader-v1.2.2-UNSIGNED.apk" > "$EXPORT/SHA256-UNSIGNED.txt"
+          fi
+
           cd "$GITHUB_WORKSPACE"
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add fresh-global-edge/v122/build-diagnostic
+          git add fresh-global-edge/v122/build-diagnostic fresh-global-edge/v122/export
           git commit -m 'Publish v1.2.2 build diagnostic [skip ci]'
           git push
