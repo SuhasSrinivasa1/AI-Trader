@@ -171,7 +171,8 @@ public class MainActivity extends Activity {
         LinearLayout learning=card();
         ChampionStore champion=new ChampionStore(this);
         learning.addView(sectionTitle("LEARNING","Adaptive outcome engine"));
-        ChampionStore.Profile cp=champion.current();\n        learning.addView(kpiRow("ENTRY CHAMPION",cp.id+" • G"+champion.generation(),"EXIT LEARNER",model.trades()+" outcomes"));
+        ChampionStore.Profile cp=champion.current();
+        learning.addView(kpiRow("ENTRY CHAMPION",cp.id+" • G"+champion.generation(),"EXIT LEARNER",model.trades()+" outcomes"));
         learning.addView(kpiRow("HIT RATE",model.trades()==0?"—":String.format(Locale.US,"%.0f%%",model.hitRate()*100),"TURNOVER",String.format(Locale.US,"%.2fx",model.turnoverPenalty())));
         learning.addView(metric("Tournament",blankDash(st.getString("tournament_status","Waiting for replay history"))));
         content.addView(learning,cardLp());
