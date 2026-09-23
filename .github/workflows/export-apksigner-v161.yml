@@ -1,0 +1,39 @@
+name: Export Android APK Signer v1.6.1
+
+on:
+  push:
+    paths:
+      - '.github/workflows/export-apksigner-v161.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Android build-tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "build-tools;35.0.0"
+      - name: Collect apksigner
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out/lib
+          cp "$ANDROID_HOME/build-tools/35.0.0/apksigner" out/apksigner
+          cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" out/lib/apksigner.jar
+          chmod +x out/apksigner
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apksigner-35-v161
+          retention-days: 1
+          path: out
