@@ -1,5 +1,5 @@
 name: PS Shadow Trader v1.6.0 Professional UI
-# rebuild after compile fix 2
+# unsigned CI artifact; private signing remains off-repo
 
 on:
   push:
@@ -114,8 +114,8 @@ jobs:
           grep -q "package: name='com.ps.shadowtrader'" out/APK-BADGING.txt
           grep -q "versionCode='160'" out/APK-BADGING.txt
           grep -q "versionName='1.6.0'" out/APK-BADGING.txt
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs out/PS-Shadow-Trader-FINAL-v1.6.0.apk | tee out/APK-SIGNATURE.txt
-          sha256sum out/PS-Shadow-Trader-FINAL-v1.6.0.apk | tee out/SHA256.txt
+          echo "CI artifact intentionally unsigned; final signing occurs off-repository." | tee out/SIGNING-STATUS.txt
+          sha256sum out/PS-Shadow-Trader-FINAL-v1.6.0.apk | tee out/SHA256-UNSIGNED.txt
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
@@ -126,5 +126,5 @@ jobs:
           path: |
             /tmp/ps-shadow-trader/out/PS-Shadow-Trader-FINAL-v1.6.0.apk
             /tmp/ps-shadow-trader/out/APK-BADGING.txt
-            /tmp/ps-shadow-trader/out/APK-SIGNATURE.txt
-            /tmp/ps-shadow-trader/out/SHA256.txt
+            /tmp/ps-shadow-trader/out/SIGNING-STATUS.txt
+            /tmp/ps-shadow-trader/out/SHA256-UNSIGNED.txt
