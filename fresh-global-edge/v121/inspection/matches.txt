@@ -1,0 +1,490 @@
+app/src/main/java/com/suhas/ucsentinel/GlobalEdgeApplication.kt:22:        val wm=WorkManager.getInstance(this)
+app/src/main/java/com/suhas/ucsentinel/GlobalEdgeApplication.kt:24:        val scan=PeriodicWorkRequestBuilder<ScanWorker>(15,TimeUnit.MINUTES).setConstraints(network).build()
+app/src/main/java/com/suhas/ucsentinel/GlobalEdgeApplication.kt:25:        wm.enqueueUniquePeriodicWork("global_edge_ai_periodic_scan",ExistingPeriodicWorkPolicy.UPDATE,scan)
+app/src/main/java/com/suhas/ucsentinel/GlobalEdgeApplication.kt:34:        // WorkManager remains a 15-minute safety net. The persistent market foreground service
+app/src/main/java/com/suhas/ucsentinel/GlobalEdgeApplication.kt:35:        // owns the one-minute heartbeat and continues when the activity is closed.
+app/src/main/java/com/suhas/ucsentinel/GlobalEdgeApplication.kt:40:            val wake=PeriodicWorkRequestBuilder<ScanWorker>(24,TimeUnit.HOURS)
+app/src/main/java/com/suhas/ucsentinel/GlobalEdgeApplication.kt:42:            wm.enqueueUniquePeriodicWork("global_edge_ai_market_anchor_$idx",ExistingPeriodicWorkPolicy.UPDATE,wake)
+app/src/main/java/com/suhas/ucsentinel/GlobalEdgeApplication.kt:46:        val learning=PeriodicWorkRequestBuilder<LearningWorker>(15,TimeUnit.MINUTES).setConstraints(network).build()
+app/src/main/java/com/suhas/ucsentinel/GlobalEdgeApplication.kt:47:        wm.enqueueUniquePeriodicWork("global_edge_ai_15m_learning",ExistingPeriodicWorkPolicy.UPDATE,learning)
+app/src/main/java/com/suhas/ucsentinel/ui/MoreScreen.kt:45:private fun StrategyLab(state:UiState,vm:MainViewModel){
+app/src/main/java/com/suhas/ucsentinel/ui/MoreScreen.kt:49:    val metrics=state.strategyMetrics.filter{it.section==section && it.modelVersion==modelVersion}
+app/src/main/java/com/suhas/ucsentinel/ui/MoreScreen.kt:65:        item{AppHeader("Strategy Lab","Shows the exact model generation, active strategy families and learned precision")}
+app/src/main/java/com/suhas/ucsentinel/ui/MoreScreen.kt:110:        item{Text("Active strategy families",style=MaterialTheme.typography.titleMedium)}
+app/src/main/java/com/suhas/ucsentinel/ui/MoreScreen.kt:301:                "Automation: live-market engines use 5-minute scans. Upper Circuit and Global Lead continue 24h research outside NSE hours. Every 15 minutes the learning worker reconciles calls, runs post-trade autopsies, classifies the market regime, checks relevant exchange/global news, replays shadow strategies without look-ahead, and only adapts production thresholds after minimum-sample safeguards. The weekly log includes the full autopsy + shadow-strategy audit trail. Force-stopping the app pauses Android background work until it is opened again.",
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:17:private enum class CompactView{LIVE,CLOSED}
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:18:private enum class UcCompactView{NEXT_SESSION,LIVE,THREE_PM,CLOSED}
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:19:private enum class PressureCompactView{NEXT_SESSION,LIVE,CLOSED}
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:20:private enum class GlobalCompactView{NEXT_SESSION,LIVE,CLOSED}
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:39:private fun ViewSwitch(view:CompactView,onChange:(CompactView)->Unit,liveCount:Int,closedCount:Int){
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:42:        FilterChip(selected=view==CompactView.CLOSED,onClick={onChange(CompactView.CLOSED)},label={Text("CLOSED $closedCount")})
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:51:    val shadow=best?.let{" • shadow ${it.strategyName}: ${it.outcome.name.replace('_',' ')}"}.orEmpty()
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:52:    return "Autopsy • ${a.regime.name.replace('_',' ')} • ${a.dominantCause.name.replace('_',' ')} ${"%.0f".format(a.causeConfidencePct)}%$shadow"
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:65:private fun strategyPlan(s:StrategySetup):SimplePlan{
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:149:    val closed=calls.filter{it.outcome!=TradeCallOutcome.OPEN}.sortedByDescending{it.closedAt}
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:158:                FilterChip(modifier=Modifier.weight(1f),selected=view==UcCompactView.CLOSED,onClick={view=UcCompactView.CLOSED},label={Text("DONE ${closed.size}",style=MaterialTheme.typography.labelSmall,maxLines=1)})
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:178:            UcCompactView.CLOSED->{
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:179:                if(closed.isEmpty())item{EmptyState("No closed UC calls yet","Every timestamped UC call will finish here as WIN or LOSS.")}
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:180:                else items(closed.take(200),key={it.id}){r->
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:181:                    val base="${"%+.2f".format(r.returnPct)}% • ${r.closeReason} • opened ${formatIstTimestamp(r.openedAt)} • closed ${formatIstTimestamp(r.closedAt)}"
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:196:    val closed=calls.filter{it.outcome!=TradeCallOutcome.OPEN}.sortedByDescending{it.closedAt}
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:204:                FilterChip(modifier=Modifier.weight(1f),selected=view==PressureCompactView.CLOSED,onClick={view=PressureCompactView.CLOSED},label={Text("DONE ${closed.size}",maxLines=1)})
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:216:            PressureCompactView.CLOSED->{
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:217:                if(closed.isEmpty())item{EmptyState("No closed pressure calls","Every pressure call will finish here as WIN or LOSS.")}
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:218:                else items(closed.take(200),key={it.id}){r->
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:230:    val visibleLive=if(state.marketSession.isOpen)state.strategyLive else emptyList()
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:231:    val visibleWatch=if(state.marketSession.isOpen)state.strategyTournamentSummary?.topSetups.orEmpty().filter{w->visibleLive.none{it.setup.symbol==w.symbol&&it.setup.direction==w.direction}} else emptyList()
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:233:        item{CompactHeader("Trading Strategies",state,state.lastStrategyScanAt,vm::refreshTradingStrategies)}
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:235:            val attempt=if(state.lastStrategyAttemptAt>0)formatIstTimestamp(state.lastStrategyAttemptAt) else "not yet"
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:236:            val success=if(state.lastStrategyScanAt>0)formatIstTimestamp(state.lastStrategyScanAt) else "not yet"
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:237:            val errorSuffix=if(state.lastStrategyError.isNotBlank())" • last error ${if(state.lastStrategyErrorAt>0)formatIstTimestamp(state.lastStrategyErrorAt) else ""}: ${state.lastStrategyError.take(110)}" else ""
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:238:            Text("Scheduler • attempt $attempt • success $success$errorSuffix",style=MaterialTheme.typography.labelSmall,
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:239:                color=if(state.lastStrategyError.isNotBlank())MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:241:        state.strategyTournamentSummary?.message?.takeIf{it.isNotBlank()}?.let{msg->item{Text("Engine • $msg",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}}
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:242:        item{ViewSwitch(view,{view=it},visibleLive.size,state.strategyClosed.size)}
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:244:            if(visibleLive.isEmpty()&&visibleWatch.isEmpty())item{EmptyState(if(state.marketSession.isOpen)"No live strategy call" else "Market closed • no LIVE strategy calls",if(state.marketSession.isOpen)"Scanner is running; no liquid setup has reached the LIVE threshold yet." else "Intraday strategy calls are closed and scored after the session; they never remain LIVE overnight.")}
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:248:                    TradeCard(s.symbol,"${s.direction.name} • ${s.strategyName}",s.score,strategyPlan(s),s.evidence,"LIVE • opened ${formatIstTimestamp(r.openedAt)} • spread ${"%.2f".format(r.spreadPct)}%")
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:252:                    items(visibleWatch.take(5),key={"watch-${it.symbol}-${it.direction}"}){s->TradeCard(s.symbol,"WATCH • ${s.direction.name} • ${s.strategyName}",s.score,strategyPlan(s),s.evidence,"Monitoring only • not counted as a call")}
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:256:            if(state.strategyClosed.isEmpty())item{EmptyState("No closed strategy calls","Every intraday strategy call will finish here as WIN or LOSS.")}
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:257:            else items(state.strategyClosed.take(200),key={it.id}){r->
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:258:                val s=r.setup;val outcome=if(r.status==StrategyRecommendationStatus.WIN)"WIN" else "LOSS"
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:259:                val base="${"%+.2f".format(r.returnPct)}% • ${r.closeReason} • opened ${formatIstTimestamp(r.openedAt)} • closed ${formatIstTimestamp(r.closedAt)}"
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:260:                TradeCard(s.symbol,"$outcome • ${s.direction.name} • ${s.strategyName}",s.score,strategyPlan(s),s.evidence,listOfNotNull(base,autopsyStatus(state,"STRATEGY|${r.id}")).joinToString("\n"))
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:273:    val closed=state.tradeCalls.filter{it.engine==TradeCallEngine.GLOBAL&&it.outcome!=TradeCallOutcome.OPEN}.sortedByDescending{it.closedAt}
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:282:                FilterChip(modifier=Modifier.weight(1f),selected=view==GlobalCompactView.CLOSED,onClick={view=GlobalCompactView.CLOSED},label={Text("DONE ${closed.size}",maxLines=1)})
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:303:            GlobalCompactView.CLOSED->{
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:304:                if(closed.isEmpty())item{EmptyState("No closed global calls","Every price-specific Global call will finish here as WIN or LOSS, including repeated calls for the same stock.")}
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:305:                else items(closed.take(250),key={it.id}){r->
+app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt:306:                    val base="${"%+.2f".format(r.returnPct)}% • ${r.closeReason} • opened ${formatIstTimestamp(r.openedAt)} • closed ${formatIstTimestamp(r.closedAt)}"
+app/src/main/java/com/suhas/ucsentinel/ui/DashboardScreen.kt:32:            MetricCard("Strategy live",state.strategyLive.size.toString(),Modifier.weight(1f))
+app/src/main/java/com/suhas/ucsentinel/ui/DashboardScreen.kt:59:            val t=state.strategyTournamentSummary
+app/src/main/java/com/suhas/ucsentinel/ui/DashboardScreen.kt:62:                Text("${state.strategyLive.size} live • ${state.strategyClosed.size} closed • 15-minute intraday scanning",color=MaterialTheme.colorScheme.onSurfaceVariant)
+app/src/main/java/com/suhas/ucsentinel/ui/DashboardScreen.kt:74:                Icon(Icons.Default.LockClock,null);Spacer(Modifier.width(5.dp));Text(if(state.marketSession.isOpen)"Scan both" else "Market closed")
+app/src/main/java/com/suhas/ucsentinel/ui/ScannerScreen.kt:19:    var strategyView by remember{mutableIntStateOf(0)}
+app/src/main/java/com/suhas/ucsentinel/ui/ScannerScreen.kt:35:                    Icon(Icons.Default.Radar,null);Spacer(Modifier.width(5.dp));Text(if(state.marketSession.isOpen)"Scan all" else "Market closed")
+app/src/main/java/com/suhas/ucsentinel/ui/ScannerScreen.kt:71:                    val t=state.strategyTournamentSummary
+app/src/main/java/com/suhas/ucsentinel/ui/ScannerScreen.kt:80:                        Button(vm::refreshTradingStrategies,enabled=!state.busy&&state.authenticated&&state.marketSession.isOpen,modifier=Modifier.weight(1f)){Text(if(state.marketSession.isOpen)"Scan now" else "Market closed")}
+app/src/main/java/com/suhas/ucsentinel/ui/ScannerScreen.kt:81:                        OutlinedButton(vm::refreshStrategyCatalog,enabled=!state.busy,modifier=Modifier.weight(1f)){Text("Strategies")}
+app/src/main/java/com/suhas/ucsentinel/ui/ScannerScreen.kt:84:                        MetricCard("LIVE",state.strategyLive.size.toString(),Modifier.weight(1f))
+app/src/main/java/com/suhas/ucsentinel/ui/ScannerScreen.kt:85:                        MetricCard("CLOSED",state.strategyClosed.size.toString(),Modifier.weight(1f))
+app/src/main/java/com/suhas/ucsentinel/ui/ScannerScreen.kt:88:                    item{TabRow(selectedTabIndex=strategyView){
+app/src/main/java/com/suhas/ucsentinel/ui/ScannerScreen.kt:89:                        Tab(selected=strategyView==0,onClick={strategyView=0},text={Text("Live")})
+app/src/main/java/com/suhas/ucsentinel/ui/ScannerScreen.kt:90:                        Tab(selected=strategyView==1,onClick={strategyView=1},text={Text("Closed")})
+app/src/main/java/com/suhas/ucsentinel/ui/ScannerScreen.kt:92:                    if(strategyView==0){
+app/src/main/java/com/suhas/ucsentinel/ui/ScannerScreen.kt:93:                        if(state.strategyLive.isEmpty())item{EmptyState("NO LIVE STRATEGY CALL","No executable setup has cleared the strategy + liquidity gates. Existing calls are never removed just because a later scan ranks something else.")}
+app/src/main/java/com/suhas/ucsentinel/ui/ScannerScreen.kt:94:                        else items(state.strategyLive,key={it.id}){r->StrategyLiveCard(r)}
+app/src/main/java/com/suhas/ucsentinel/ui/ScannerScreen.kt:96:                        if(state.strategyClosed.isEmpty())item{EmptyState("NO CLOSED CALLS YET","Completed strategy calls will stay here with their outcome and realized model return.")}
+app/src/main/java/com/suhas/ucsentinel/ui/ScannerScreen.kt:97:                        else items(state.strategyClosed.take(100),key={it.id}){r->StrategyClosedCard(r)}
+app/src/main/java/com/suhas/ucsentinel/ui/ScannerScreen.kt:100:                        item{Text("Strategy learning",style=MaterialTheme.typography.titleMedium)}
+app/src/main/java/com/suhas/ucsentinel/ui/ScannerScreen.kt:117:private fun StrategyLiveCard(r:StrategyRecommendation){
+app/src/main/java/com/suhas/ucsentinel/ui/ScannerScreen.kt:126:        Text(s.strategyName,style=MaterialTheme.typography.bodyMedium)
+app/src/main/java/com/suhas/ucsentinel/ui/ScannerScreen.kt:135:private fun StrategyClosedCard(r:StrategyRecommendation){
+app/src/main/java/com/suhas/ucsentinel/ui/ScannerScreen.kt:138:        StrategyRecommendationStatus.WIN->"WIN"
+app/src/main/java/com/suhas/ucsentinel/ui/ScannerScreen.kt:139:        StrategyRecommendationStatus.LOSS->"LOSS"
+app/src/main/java/com/suhas/ucsentinel/ui/ScannerScreen.kt:140:        StrategyRecommendationStatus.INVALIDATED->"INVALIDATED"
+app/src/main/java/com/suhas/ucsentinel/ui/ScannerScreen.kt:141:        StrategyRecommendationStatus.EXPIRED->"EXPIRED"
+app/src/main/java/com/suhas/ucsentinel/ui/ScannerScreen.kt:142:        StrategyRecommendationStatus.LIVE->"LIVE"
+app/src/main/java/com/suhas/ucsentinel/ui/ScannerScreen.kt:147:            Text(label,color=if(r.status==StrategyRecommendationStatus.WIN)MaterialTheme.colorScheme.primary else if(r.status==StrategyRecommendationStatus.LOSS)MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+app/src/main/java/com/suhas/ucsentinel/ui/ScannerScreen.kt:149:        Text("${s.direction.name} • ${s.strategyName}",style=MaterialTheme.typography.bodyMedium)
+app/src/main/java/com/suhas/ucsentinel/ui/ScannerScreen.kt:152:        if(r.closedAt>0)Text("Closed ${formatIstTimestamp(r.closedAt)}",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+app/src/main/java/com/suhas/ucsentinel/ui/Components.kt:115:                    "Active strategy mix: " + candidate.activeStrategies.joinToString(" • "),
+app/src/main/java/com/suhas/ucsentinel/ui/MainViewModel.kt:17:    val strategyMetrics:List<StrategyMetric> = emptyList(),val accuracies:Map<ScannerSection,SectionAccuracy> = emptyMap(),
+app/src/main/java/com/suhas/ucsentinel/ui/MainViewModel.kt:24:    val strategyTournamentSummary:StrategyTournamentSummary?=null,val lastStrategyScanAt:Long=0L,val lastStrategyAttemptAt:Long=0L,val lastStrategyErrorAt:Long=0L,val lastStrategyError:String="",val lastStrategyCatalogRefreshAt:Long=0L,val strategyCatalogVersion:String="",
+app/src/main/java/com/suhas/ucsentinel/ui/MainViewModel.kt:25:    val strategyLive:List<StrategyRecommendation> = emptyList(),val strategyClosed:List<StrategyRecommendation> = emptyList(),
+app/src/main/java/com/suhas/ucsentinel/ui/MainViewModel.kt:26:    val globalClosed:List<GlobalLeadClosedRecord> = emptyList(),val tradeCalls:List<TradeCallRecord> = emptyList(),val tradeAutopsies:List<TradeAutopsyRecord> = emptyList()
+app/src/main/java/com/suhas/ucsentinel/ui/MainViewModel.kt:33:    private var lastForegroundStrategyScanAt=0L
+app/src/main/java/com/suhas/ucsentinel/ui/MainViewModel.kt:50:        // v1.1.9: the foreground scheduler used to exist but was never invoked. Keep it in its own
+app/src/main/java/com/suhas/ucsentinel/ui/MainViewModel.kt:80:        if(settings.strategyTournamentEnabled && now-lastForegroundStrategyScanAt>=liveCadenceMs){
+app/src/main/java/com/suhas/ucsentinel/ui/MainViewModel.kt:81:            lastForegroundStrategyScanAt=now
+app/src/main/java/com/suhas/ucsentinel/ui/MainViewModel.kt:82:            repo.markStrategyScanAttempt(now)
+app/src/main/java/com/suhas/ucsentinel/ui/MainViewModel.kt:84:                _state.value=_state.value.copy(strategyTournamentSummary=summary,lastStrategyScanAt=summary.generatedAt,
+app/src/main/java/com/suhas/ucsentinel/ui/MainViewModel.kt:85:                    lastStrategyAttemptAt=repo.lastStrategyAttemptAt(),lastStrategyErrorAt=0L,lastStrategyError="",
+app/src/main/java/com/suhas/ucsentinel/ui/MainViewModel.kt:86:                    strategyLive=repo.strategyLiveRecommendations(),strategyClosed=repo.strategyClosedRecommendations(),error=null)
+app/src/main/java/com/suhas/ucsentinel/ui/MainViewModel.kt:88:                repo.markStrategyScanError(t)
+app/src/main/java/com/suhas/ucsentinel/ui/MainViewModel.kt:89:                _state.value=_state.value.copy(lastStrategyAttemptAt=repo.lastStrategyAttemptAt(),lastStrategyErrorAt=repo.lastStrategyErrorAt(),lastStrategyError=repo.lastStrategyError())
+app/src/main/java/com/suhas/ucsentinel/ui/MainViewModel.kt:112:            dualSummary=repo.lastSavedDualSummary(),frozenUc=uc.candidates,frozenDemand=d.candidates,newListings=repo.newListings(),strategyMetrics=repo.strategyMetrics(),
+app/src/main/java/com/suhas/ucsentinel/ui/MainViewModel.kt:116:            strategyTournamentSummary=repo.strategyTournamentSummary(),lastStrategyScanAt=repo.lastStrategyScanAt(),lastStrategyAttemptAt=repo.lastStrategyAttemptAt(),lastStrategyErrorAt=repo.lastStrategyErrorAt(),lastStrategyError=repo.lastStrategyError(),lastStrategyCatalogRefreshAt=repo.lastStrategyCatalogRefreshAt(),strategyCatalogVersion=repo.strategyCatalogVersion(),
+app/src/main/java/com/suhas/ucsentinel/ui/MainViewModel.kt:117:            strategyLive=repo.strategyLiveRecommendations(),strategyClosed=repo.strategyClosedRecommendations(),globalClosed=repo.globalLeadClosedRecommendations(),tradeCalls=repo.tradeCalls(),tradeAutopsies=repo.tradeAutopsies())
+app/src/main/java/com/suhas/ucsentinel/ui/MainViewModel.kt:127:            strategyTournamentSummary=repo.strategyTournamentSummary(),lastStrategyScanAt=repo.lastStrategyScanAt(),lastStrategyAttemptAt=repo.lastStrategyAttemptAt(),lastStrategyErrorAt=repo.lastStrategyErrorAt(),lastStrategyError=repo.lastStrategyError(),lastStrategyCatalogRefreshAt=repo.lastStrategyCatalogRefreshAt(),strategyCatalogVersion=repo.strategyCatalogVersion(),
+app/src/main/java/com/suhas/ucsentinel/ui/MainViewModel.kt:128:            strategyLive=repo.strategyLiveRecommendations(),strategyClosed=repo.strategyClosedRecommendations(),globalClosed=repo.globalLeadClosedRecommendations(),tradeCalls=repo.tradeCalls(),tradeAutopsies=repo.tradeAutopsies())
+app/src/main/java/com/suhas/ucsentinel/ui/MainViewModel.kt:140:                _state.value=_state.value.copy(busy=false,authenticated=true,status=message,error=null,accuracies=repo.accuracies(),strategyMetrics=repo.strategyMetrics())
+app/src/main/java/com/suhas/ucsentinel/ui/MainViewModel.kt:169:            _state.value=_state.value.copy(busy=false,dualSummary=dual,newListings=dual.newListings,status="UC: ${dual.uc.candidates.size} • Pre-pressure: ${dual.demand.candidates.size}",strategyMetrics=repo.strategyMetrics(),accuracies=repo.accuracies())
+app/src/main/java/com/suhas/ucsentinel/ui/MainViewModel.kt:196:        repo.markStrategyScanAttempt()
+app/src/main/java/com/suhas/ucsentinel/ui/MainViewModel.kt:198:            _state.value=_state.value.copy(busy=false,strategyTournamentSummary=summary,lastStrategyScanAt=summary.generatedAt,lastStrategyAttemptAt=repo.lastStrategyAttemptAt(),lastStrategyErrorAt=0L,lastStrategyError="",
+app/src/main/java/com/suhas/ucsentinel/ui/MainViewModel.kt:199:                strategyCatalogVersion=summary.catalogVersion,lastStrategyCatalogRefreshAt=repo.lastStrategyCatalogRefreshAt(),
+app/src/main/java/com/suhas/ucsentinel/ui/MainViewModel.kt:200:                strategyLive=repo.strategyLiveRecommendations(),strategyClosed=repo.strategyClosedRecommendations(),status=summary.message,error=null)
+app/src/main/java/com/suhas/ucsentinel/ui/MainViewModel.kt:201:        }.onFailure{t->repo.markStrategyScanError(t);_state.value=_state.value.copy(busy=false,status="Strategy scan failed",error=t.message,lastStrategyAttemptAt=repo.lastStrategyAttemptAt(),lastStrategyErrorAt=repo.lastStrategyErrorAt(),lastStrategyError=repo.lastStrategyError())}
+app/src/main/java/com/suhas/ucsentinel/ui/MainViewModel.kt:203:    fun refreshStrategyCatalog()=viewModelScope.launch{
+app/src/main/java/com/suhas/ucsentinel/ui/MainViewModel.kt:204:        _state.value=_state.value.copy(busy=true,status="Refreshing weekly strategy catalogue…",error=null)
+app/src/main/java/com/suhas/ucsentinel/ui/MainViewModel.kt:205:        runCatching{repo.refreshStrategyCatalog(true)}.onSuccess{count->
+app/src/main/java/com/suhas/ucsentinel/ui/MainViewModel.kt:206:            _state.value=_state.value.copy(busy=false,lastStrategyCatalogRefreshAt=repo.lastStrategyCatalogRefreshAt(),strategyCatalogVersion=repo.strategyCatalogVersion(),status="Strategy catalogue refreshed: $count rules",error=null)
+app/src/main/java/com/suhas/ucsentinel/ui/MainViewModel.kt:208:        }.onFailure{_state.value=_state.value.copy(busy=false,status="Strategy catalogue refresh failed",error=it.message)}
+app/src/main/java/com/suhas/ucsentinel/ui/MainViewModel.kt:214:    fun runLearningNow()=viewModelScope.launch{_state.value=_state.value.copy(busy=true,status="Running autonomous learning pass…",error=null);runCatching{repo.runAutonomousLearningPass(force=true)}.onSuccess{msg->_state.value=_state.value.copy(busy=false,accuracies=repo.accuracies(),strategyMetrics=repo.strategyMetrics(),status=msg);reliabilityRefresh(error=null)}.onFailure{_state.value=_state.value.copy(busy=false,error=it.message)}}
+app/src/main/java/com/suhas/ucsentinel/data/remote/StrategyCatalogClient.kt:4:import com.suhas.globaledgeai.domain.model.TradingStrategyDefinition
+app/src/main/java/com/suhas/ucsentinel/data/remote/StrategyCatalogClient.kt:10:class StrategyCatalogClient(private val context:Context){
+app/src/main/java/com/suhas/ucsentinel/data/remote/StrategyCatalogClient.kt:11:    data class Bundle(val version:String,val strategies:List<TradingStrategyDefinition>)
+app/src/main/java/com/suhas/ucsentinel/data/remote/StrategyCatalogClient.kt:13:    private val remoteUrl="https://raw.githubusercontent.com/SuhasSrinivasa1/AI-Trader/main/android-stable/strategy-catalog-v1.json"
+app/src/main/java/com/suhas/ucsentinel/data/remote/StrategyCatalogClient.kt:14:    fun embedded():Bundle=parse(context.assets.open("trading_strategy_catalog.json").bufferedReader().use{it.readText()})
+app/src/main/java/com/suhas/ucsentinel/data/remote/StrategyCatalogClient.kt:17:        http.newCall(req).execute().use{r->require(r.isSuccessful){"Strategy catalogue HTTP ${r.code}"};return parse(r.body?.string().orEmpty())}
+app/src/main/java/com/suhas/ucsentinel/data/remote/StrategyCatalogClient.kt:21:        val list=buildList{for(i in 0 until a.length()){val x=a.optJSONObject(i)?:continue;add(TradingStrategyDefinition(x.optString("id"),x.optString("name"),x.optString("kind"),x.optString("family"),x.optString("description"),x.optString("source"),x.optInt("priority")))}}
+app/src/main/java/com/suhas/ucsentinel/data/remote/ApiRateLimiter.kt:19:            val now = System.nanoTime()
+app/src/main/java/com/suhas/ucsentinel/data/remote/ApiRateLimiter.kt:25:            lastPermitNs = System.nanoTime()
+app/src/main/java/com/suhas/ucsentinel/data/remote/GrowwClient.kt:59:    private val closedMarketLiveCacheTtlMs = 60 * 60 * 1000L
+app/src/main/java/com/suhas/ucsentinel/data/remote/GrowwClient.kt:127:                val ttl=if(indianMarketHot())ohlcCacheTtlMs else closedMarketLiveCacheTtlMs
+app/src/main/java/com/suhas/ucsentinel/data/remote/GrowwClient.kt:173:            val ttl=if(indianMarketHot())quoteCacheTtlMs else closedMarketLiveCacheTtlMs
+app/src/main/java/com/suhas/ucsentinel/data/remote/GlobalMarketClient.kt:72:        val url=HttpUrl.Builder().scheme("https").host("query1.finance.yahoo.com")
+app/src/main/java/com/suhas/ucsentinel/data/remote/GlobalMarketClient.kt:73:            .addPathSegment("v8").addPathSegment("finance").addPathSegment("chart").addPathSegment(ticker)
+app/src/main/java/com/suhas/ucsentinel/data/remote/GlobalMarketClient.kt:95:        val url=HttpUrl.Builder().scheme("https").host("query1.finance.yahoo.com")
+app/src/main/java/com/suhas/ucsentinel/data/remote/GlobalMarketClient.kt:96:            .addPathSegment("v8").addPathSegment("finance").addPathSegment("chart").addPathSegment(ticker)
+app/src/main/java/com/suhas/ucsentinel/data/remote/GlobalMarketClient.kt:150:        val v=optDouble(i,Double.NaN);return v.takeIf{!it.isNaN()}
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:43:        strategyTournamentEnabled=prefs.getBoolean("strategy_tournament_enabled",true),strategyActiveCount=prefs.getInt("strategy_active_count",20),
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:44:        strategyTopCandidates=prefs.getInt("strategy_top_candidates",10),strategyMinChampionAccuracy=prefs.getFloat("strategy_min_champion_accuracy",60f).toDouble(),
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:45:        strategyMinChampionSamples=prefs.getInt("strategy_min_champion_samples",30),strategyCatalogRefreshDays=prefs.getInt("strategy_catalog_refresh_days",7),
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:46:        strategyHistorySymbolsPerPass=prefs.getInt("strategy_history_symbols_per_pass",80)
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:59:        .putBoolean("strategy_tournament_enabled",s.strategyTournamentEnabled).putInt("strategy_active_count",s.strategyActiveCount)
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:60:        .putInt("strategy_top_candidates",s.strategyTopCandidates).putFloat("strategy_min_champion_accuracy",s.strategyMinChampionAccuracy.toFloat())
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:61:        .putInt("strategy_min_champion_samples",s.strategyMinChampionSamples).putInt("strategy_catalog_refresh_days",s.strategyCatalogRefreshDays)
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:62:        .putInt("strategy_history_symbols_per_pass",s.strategyHistorySymbolsPerPass).apply()}
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:65:    fun lastStrategyScanAt():Long=prefs.getLong("last_strategy_scan_at",0L)
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:66:    fun lastStrategyAttemptAt():Long=prefs.getLong("last_strategy_attempt_at",0L)
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:67:    fun lastStrategyErrorAt():Long=prefs.getLong("last_strategy_error_at",0L)
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:68:    fun lastStrategyError():String=prefs.getString("last_strategy_error","").orEmpty()
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:69:    fun markStrategyAttempt(v:Long=System.currentTimeMillis()){prefs.edit().putLong("last_strategy_attempt_at",v).apply()}
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:70:    fun markStrategyError(message:String,v:Long=System.currentTimeMillis()){
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:71:        prefs.edit().putLong("last_strategy_error_at",v).putString("last_strategy_error",message.take(240)).apply()
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:73:    fun clearStrategyError(){prefs.edit().putLong("last_strategy_error_at",0L).remove("last_strategy_error").apply()}
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:74:    fun lastStrategyCatalogRefreshAt():Long=prefs.getLong("last_strategy_catalog_refresh_at",0L)
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:75:    fun setLastStrategyCatalogRefreshAt(v:Long){prefs.edit().putLong("last_strategy_catalog_refresh_at",v).apply()}
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:76:    fun strategyCatalogVersion():String=prefs.getString("strategy_catalog_version","embedded").orEmpty()
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:77:    fun savedStrategyCatalogJson():String?=prefs.getString("strategy_catalog_json",null)
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:78:    fun saveStrategyCatalog(version:String,raw:String){prefs.edit().putString("strategy_catalog_version",version).putString("strategy_catalog_json",raw).putLong("last_strategy_catalog_refresh_at",System.currentTimeMillis()).apply()}
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:80:    private fun strategySetupToJson(x:StrategySetup):JSONObject = JSONObject()
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:81:        .put("symbol",x.symbol).put("companyName",x.companyName).put("strategyId",x.strategyId).put("strategyName",x.strategyName)
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:86:    private fun strategySetupFromJson(x:JSONObject):StrategySetup = StrategySetup(
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:87:        x.optString("symbol"),x.optString("companyName"),x.optString("strategyId"),x.optString("strategyName"),
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:93:    private fun recommendationToJson(r:StrategyRecommendation):JSONObject = JSONObject()
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:94:        .put("id",r.id).put("setup",strategySetupToJson(r.setup)).put("openedAt",r.openedAt).put("lastSeenAt",r.lastSeenAt)
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:95:        .put("lastPrice",finite(r.lastPrice)).put("closedAt",r.closedAt).put("exitPrice",finite(r.exitPrice)).put("status",r.status.name)
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:99:    private fun recommendationFromJson(j:JSONObject):StrategyRecommendation? = runCatching{
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:100:        val setup=strategySetupFromJson(j.optJSONObject("setup")?:return@runCatching null)
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:101:        StrategyRecommendation(
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:103:            lastPrice=j.optDouble("lastPrice",setup.entryPrice),closedAt=j.optLong("closedAt"),exitPrice=j.optDouble("exitPrice"),
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:104:            status=runCatching{StrategyRecommendationStatus.valueOf(j.optString("status"))}.getOrDefault(StrategyRecommendationStatus.LIVE),
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:110:    fun saveStrategySummary(summary:StrategyTournamentSummary){
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:111:        val setups=JSONArray();summary.topSetups.forEach{x->setups.put(strategySetupToJson(x))}
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:112:        val active=JSONArray();summary.activeStrategies.forEach{x->active.put(strategyDefToJson(x))}
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:113:        val perfs=JSONArray();summary.performances.forEach{x->perfs.put(JSONObject().put("strategyId",x.strategyId).put("name",x.name).put("observations",x.observations).put("wins",x.wins).put("accuracyPct",finite(x.accuracyPct)).put("avgReturnPct",finite(x.avgReturnPct)).put("expectancyPct",finite(x.expectancyPct)).put("maxDrawdownPct",finite(x.maxDrawdownPct)).put("confidenceFloorPct",finite(x.confidenceFloorPct)).put("status",x.status.name))}
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:116:        // strategy list on every scan; that was the reason notified ideas appeared to vanish.
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:117:        prefs.edit().putString("strategy_tournament_summary",root.toString()).putLong("last_strategy_scan_at",summary.generatedAt)
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:118:            .putLong("last_strategy_attempt_at",summary.generatedAt).putLong("last_strategy_error_at",0L).remove("last_strategy_error").apply()
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:120:    fun loadStrategySummary():StrategyTournamentSummary?{val raw=prefs.getString("strategy_tournament_summary",null)?:return null;return runCatching{val j=JSONObject(raw);val setups=jsonToSetups(j.optJSONArray("topSetups")?:JSONArray());val defs=jsonToDefs(j.optJSONArray("activeStrategies")?:JSONArray());val pfs=j.optJSONArray("performances")?:JSONArray();val perfs=buildList{for(i in 0 until pfs.length()){val x=pfs.optJSONObject(i)?:continue;add(StrategyPerformance(x.optString("strategyId"),x.optString("name"),x.optInt("observations"),x.optInt("wins"),x.optDouble("accuracyPct"),x.optDouble("avgReturnPct"),x.optDouble("expectancyPct"),x.optDouble("maxDrawdownPct"),x.optDouble("confidenceFloorPct"),runCatching{StrategyStatus.valueOf(x.optString("status"))}.getOrDefault(StrategyStatus.CHALLENGER)))}};StrategyTournamentSummary(j.optLong("generatedAt"),j.optInt("universeCount"),j.optInt("strategiesRun"),j.optInt("symbolsEnriched"),setups,defs,perfs,j.optString("catalogVersion"),j.optString("message"))}.getOrNull()}
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:122:    fun loadStrategyLive():List<StrategyRecommendation>{
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:123:        val a=runCatching{JSONArray(prefs.getString("strategy_live_ledger","[]")?:"[]")}.getOrElse{JSONArray()}
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:125:            .filter{it.status==StrategyRecommendationStatus.LIVE}.sortedByDescending{it.openedAt}
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:127:    fun loadStrategyClosed(limit:Int=250):List<StrategyRecommendation>{
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:128:        val a=runCatching{JSONArray(prefs.getString("strategy_closed_ledger","[]")?:"[]")}.getOrElse{JSONArray()}
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:130:            .filter{it.status!=StrategyRecommendationStatus.LIVE}.sortedByDescending{it.closedAt}.take(limit)
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:132:    fun saveStrategyLedger(live:List<StrategyRecommendation>,closed:List<StrategyRecommendation>){
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:134:        val ca=JSONArray();closed.sortedByDescending{it.closedAt}.take(500).forEach{ca.put(recommendationToJson(it))}
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:135:        prefs.edit().putString("strategy_live_ledger",la.toString()).putString("strategy_closed_ledger",ca.toString()).apply()
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:143:        .put("outcome",r.outcome.name).put("closedAt",r.closedAt).put("exitPrice",finite(r.exitPrice)).put("returnPct",finite(r.returnPct)).put("closeReason",r.closeReason)
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:155:            outcome=runCatching{TradeCallOutcome.valueOf(j.optString("outcome"))}.getOrDefault(TradeCallOutcome.OPEN),closedAt=j.optLong("closedAt"),exitPrice=j.optDouble("exitPrice"),
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:174:        .put("closedAt",r.closedAt).put("exitPrice",finite(r.exitPrice)).put("returnPct",finite(r.returnPct))
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:180:            runCatching{RejectedShadowOutcome.valueOf(j.optString("outcome"))}.getOrDefault(RejectedShadowOutcome.PENDING),j.optLong("closedAt"),j.optDouble("exitPrice"),j.optDouble("returnPct"))
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:199:        if(normalized=="STRATEGY")return loadStrategyClosed(1000).filter{it.status==StrategyRecommendationStatus.WIN||it.status==StrategyRecommendationStatus.LOSS}.map{
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:200:            AccuracyLearningEngine.Observation(it.setup.score,it.status==StrategyRecommendationStatus.WIN,it.closedAt,
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:205:            AccuracyLearningEngine.Observation(it.score,it.outcome==TradeCallOutcome.WIN,it.closedAt,it.targetSessionDate)
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:215:    private fun shadowToJson(x:ShadowStrategyResult)=JSONObject().put("strategyId",x.strategyId).put("strategyName",x.strategyName)
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:217:    private fun shadowFromJson(j:JSONObject)=ShadowStrategyResult(j.optString("strategyId"),j.optString("strategyName"),j.optBoolean("traded"),runCatching{ShadowOutcome.valueOf(j.optString("outcome"))}.getOrDefault(ShadowOutcome.NO_TRADE),j.optDouble("returnPct"),j.optString("evidence"))
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:221:            .put("originalReturnPct",finite(a.originalReturnPct)).put("openedAt",a.openedAt).put("closedAt",a.closedAt).put("generatedAt",a.generatedAt)
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:222:            .put("regime",a.regime.name).put("regimeConfidencePct",finite(a.regimeConfidencePct)).put("dominantCause",a.dominantCause.name).put("causeConfidencePct",finite(a.causeConfidencePct))
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:229:            j.optLong("openedAt"),j.optLong("closedAt"),j.optLong("generatedAt"),runCatching{MarketRegime.valueOf(j.optString("regime"))}.getOrDefault(MarketRegime.MIXED),j.optDouble("regimeConfidencePct"),
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:230:            runCatching{AutopsyCause.valueOf(j.optString("dominantCause"))}.getOrDefault(AutopsyCause.NO_DOMINANT_CAUSE),j.optDouble("causeConfidencePct"),strings(j.optJSONArray("evidence")?:JSONArray()),
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:244:        val root=runCatching{JSONObject(prefs.getString("shadow_strategy_stats_v120","{}")?:"{}")}.getOrElse{JSONObject()}
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:246:            val key="${record.engineLabel}|${record.regime.name}|${x.strategyId}";val j=root.optJSONObject(key)?:JSONObject()
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:247:            j.put("strategyName",x.strategyName).put("observations",j.optInt("observations")+1)
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:255:        prefs.edit().putString("shadow_strategy_stats_v120",root.toString()).apply()
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:260:        loadAutopsies(800).sortedBy{it.closedAt}.forEach{a->a.shadowResults.forEach{x->
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:261:            val key="${a.engineLabel}|${a.regime.name}|${x.strategyId}";groups.getOrPut(key){mutableListOf()}+=Row(a.sessionDate,x.outcome)
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:276:        val systematic=rows.count{it.dominantCause in setOf(AutopsyCause.VOLUME_FAILURE,AutopsyCause.MOMENTUM_FAILURE,AutopsyCause.ENTRY_TIMING,AutopsyCause.INDEX_DIVERGENCE,AutopsyCause.MARKET_REVERSAL)}
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:281:    fun pendingStrategyDates():List<LocalDate>{val p="strategy_pending_";return prefs.all.keys.asSequence().filter{it.startsWith(p)}.mapNotNull{runCatching{LocalDate.parse(it.removePrefix(p))}.getOrNull()}.sorted().toList()}
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:282:    fun pendingStrategySetups(date:String):List<StrategySetup> =jsonToSetups(runCatching{JSONArray(prefs.getString("strategy_pending_$date","[]"))}.getOrElse{JSONArray()})
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:283:    fun strategyDateEvaluated(date:String)=prefs.getBoolean("strategy_evaluated_$date",false)
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:284:    fun markStrategyDateEvaluated(date:String){prefs.edit().putBoolean("strategy_evaluated_$date",true).apply()}
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:285:    fun updateStrategyResult(strategyId:String,name:String,returnPct:Double,win:Boolean){val safeReturn=finite(returnPct);val root=runCatching{JSONObject(prefs.getString("strategy_stats","{}")?:"{}")}.getOrElse{JSONObject()};val x=root.optJSONObject(strategyId)?:JSONObject();val n=x.optInt("observations")+1;val wins=x.optInt("wins")+(if(win)1 else 0);val sum=x.optDouble("sumReturn")+safeReturn;val equity=x.optDouble("equity",0.0)+safeReturn;val peak=maxOf(x.optDouble("peak",0.0),equity);val dd=minOf(x.optDouble("maxDrawdown",0.0),equity-peak);x.put("name",name).put("observations",n).put("wins",wins).put("sumReturn",sum).put("equity",equity).put("peak",peak).put("maxDrawdown",dd);root.put(strategyId,x);prefs.edit().putString("strategy_stats",root.toString()).apply()}
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:286:    fun strategyPerformances(defs:List<TradingStrategyDefinition>,settings:AppSettings):List<StrategyPerformance>{val root=runCatching{JSONObject(prefs.getString("strategy_stats","{}")?:"{}")}.getOrElse{JSONObject()};return defs.map{d->val x=root.optJSONObject(d.id)?:JSONObject();val n=x.optInt("observations");val w=x.optInt("wins");val acc=if(n==0)0.0 else w*100.0/n;val avg=if(n==0)0.0 else x.optDouble("sumReturn")/n;val floor=wilsonLower(w,n)*100.0;val status=when{n>=settings.strategyMinChampionSamples&&acc>=settings.strategyMinChampionAccuracy&&avg>0&&floor>=50.0->StrategyStatus.CHAMPION;n>=10&&avg<=0->StrategyStatus.PROBATION;n>=5->StrategyStatus.ACTIVE;else->StrategyStatus.CHALLENGER};StrategyPerformance(d.id,d.name,n,w,acc,avg,avg,kotlin.math.abs(x.optDouble("maxDrawdown")),floor,status)}.sortedWith(compareBy<StrategyPerformance>{it.status.ordinal}.thenByDescending{it.expectancyPct}.thenByDescending{it.accuracyPct})}
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:288:    private fun strategyDefToJson(x:TradingStrategyDefinition)=JSONObject().put("id",x.id).put("name",x.name).put("kind",x.kind).put("family",x.family).put("description",x.description).put("source",x.source).put("priority",x.priority)
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:289:    private fun jsonToDefs(a:JSONArray):List<TradingStrategyDefinition> =buildList{for(i in 0 until a.length()){val x=a.optJSONObject(i)?:continue;add(TradingStrategyDefinition(x.optString("id"),x.optString("name"),x.optString("kind"),x.optString("family"),x.optString("description"),x.optString("source"),x.optInt("priority")))}}
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:290:    private fun jsonToSetups(a:JSONArray):List<StrategySetup> =buildList{for(i in 0 until a.length()){val x=a.optJSONObject(i)?:continue;add(strategySetupFromJson(x))}}
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:330:    private fun globalClosedToJson(r:GlobalLeadClosedRecord):JSONObject{
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:332:        return JSONObject().put("closedAt",r.closedAt).put("closeReason",r.reason)
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:343:    private fun globalClosedFromJson(j:JSONObject):GlobalLeadClosedRecord?=runCatching{
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:352:        GlobalLeadClosedRecord(c,j.optLong("closedAt"),j.optString("closeReason","Signal closed"))
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:354:    fun loadGlobalLeadClosed(limit:Int=250):List<GlobalLeadClosedRecord>{
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:355:        val a=runCatching{JSONArray(prefs.getString("global_lead_closed_ledger","[]")?:"[]")}.getOrElse{JSONArray()}
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:356:        return buildList{for(i in 0 until a.length()){globalClosedFromJson(a.optJSONObject(i)?:continue)?.let(::add)}}.sortedByDescending{it.closedAt}.take(limit)
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:358:    fun appendGlobalLeadClosed(records:List<GlobalLeadClosedRecord>){
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:360:        val merged=(loadGlobalLeadClosed(500)+records).distinctBy{"${it.candidate.direction}|${it.candidate.indianSymbol}|${it.candidate.generatedAt}"}.sortedByDescending{it.closedAt}.take(500)
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:361:        val a=JSONArray();merged.forEach{a.put(globalClosedToJson(it))};prefs.edit().putString("global_lead_closed_ledger",a.toString()).apply()
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:405:    fun signalMetrics():List<StrategyMetric> = loadSignalStats().mapNotNull{(k,pair)->val p=parseStatKey(k)?:return@mapNotNull null;StrategyMetric(p.first,p.third,p.third,pair.first,pair.second,if(pair.first==0)0.0 else pair.second.toDouble()/pair.first*100,p.second)}.sortedWith(compareByDescending<StrategyMetric>{it.observations>=5}.thenByDescending{it.precision})
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:412:        val closed=loadStrategyClosed(500).filter{it.closedAt==0L||it.closedAt>=cutoff}
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:413:        val closedJson=JSONArray();closed.forEach{closedJson.put(recommendationToJson(it))}
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:414:        val trade=loadTradeCalls(1500).filter{it.outcome==TradeCallOutcome.OPEN||it.closedAt>=cutoff||it.openedAt>=cutoff}
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:416:        val aut=loadAutopsies(800).filter{it.generatedAt>=cutoff||it.closedAt>=cutoff};val autJson=JSONArray();aut.forEach{autJson.put(autopsyToJson(it))}
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:417:        val e=prefs.edit().putString("outcomes",kept.toString()).putString("strategy_closed_ledger",closedJson.toString()).putString("trade_call_ledger_v118",tradeJson.toString()).putString("trade_autopsies_v120",autJson.toString())
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:418:        prefs.all.keys.filter{it.startsWith("frozen_")||it.startsWith("freeze_meta_")||it.startsWith("evaluated_")||it.startsWith("strategy_pending_")||it.startsWith("strategy_evaluated_")}.forEach{k->
+app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt:478:    private fun JSONObject.optNullableDouble(name:String):Double?{if(!has(name)||isNull(name))return null;val v=optDouble(name,Double.NaN);return v.takeIf{it.isFinite()}}
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:30:    private val strategyEngine=TradingStrategyEngine()
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:32:    private val strategyCatalogClient=StrategyCatalogClient(context)
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:33:    private var strategyCatalog:StrategyCatalogClient.Bundle?=null
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:36:    private val strategyMutex=Mutex()
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:51:    fun strategyMetrics()=prefs.signalMetrics()
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:67:    fun globalLeadClosedRecommendations()=prefs.loadGlobalLeadClosed()
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:71:    fun strategyTournamentSummary()=prefs.loadStrategySummary()
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:72:    fun strategyLiveRecommendations()=prefs.loadStrategyLive()
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:73:    fun strategyClosedRecommendations()=prefs.loadStrategyClosed()
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:74:    fun lastStrategyScanAt()=prefs.lastStrategyScanAt()
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:75:    fun lastStrategyAttemptAt()=prefs.lastStrategyAttemptAt()
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:76:    fun lastStrategyErrorAt()=prefs.lastStrategyErrorAt()
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:77:    fun lastStrategyError()=prefs.lastStrategyError()
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:78:    fun markStrategyScanAttempt(value:Long=System.currentTimeMillis())=prefs.markStrategyAttempt(value)
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:79:    fun markStrategyScanError(t:Throwable){prefs.markStrategyError(t.message.orEmpty().ifBlank{t::class.java.simpleName})}
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:80:    fun lastStrategyCatalogRefreshAt()=prefs.lastStrategyCatalogRefreshAt()
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:81:    fun strategyCatalogVersion()=strategyCatalog?.version?:prefs.strategyCatalogVersion()
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:89:    fun closedTradeCalls(engine:TradeCallEngine?=null):List<TradeCallRecord> = tradeCalls().filter{it.outcome!=TradeCallOutcome.OPEN&&(engine==null||it.engine==engine)}.sortedByDescending{it.closedAt}
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:102:            MarketPhase.WEEKEND->"Market closed • weekend"
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:103:            MarketPhase.PRE_OPEN->"Market closed • pre-open"
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:105:            MarketPhase.POST_CLOSE->"Market closed • showing last valid session data"
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:157:        if(prefs.loadSettings().strategyTournamentEnabled){
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:158:            progress("Automation: refreshing weekly strategy catalogue")
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:159:            runCatching{refreshStrategyCatalog(false)}
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:169:            if(prefs.loadSettings().strategyTournamentEnabled) runCatching{scanTradingStrategies(progress)}
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:193:    suspend fun refreshStrategyCatalog(force:Boolean=false):Int{
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:194:        val settings=prefs.loadSettings();val now=System.currentTimeMillis();val last=prefs.lastStrategyCatalogRefreshAt()
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:195:        val due=last==0L||now-last>=settings.strategyCatalogRefreshDays.coerceIn(1,30).toLong()*24*60*60*1000
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:197:        if(strategyCatalog==null)strategyCatalog=strategyCatalogClient.embedded()
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:198:        if(!force&&(!due||(last>0&&!weekend)))return strategyCatalog!!.strategies.size
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:199:        val bundle=runCatching{strategyCatalogClient.remote()}.getOrElse{strategyCatalogClient.embedded()}
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:200:        strategyCatalog=bundle;prefs.setLastStrategyCatalogRefreshAt(now)
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:204:    private fun activeStrategyDefinitions(settings:AppSettings):Pair<StrategyCatalogClient.Bundle,List<TradingStrategyDefinition>>{
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:205:        val bundle=strategyCatalog?:strategyCatalogClient.embedded().also{strategyCatalog=it}
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:206:        val perfs=prefs.strategyPerformances(bundle.strategies,settings).associateBy{it.strategyId}
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:207:        val champions=bundle.strategies.filter{perfs[it.id]?.status==StrategyStatus.CHAMPION}.sortedByDescending{it.priority}
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:208:        val pool=bundle.strategies.filter{it.id !in champions.map{c->c.id}.toSet() && perfs[it.id]?.status!=StrategyStatus.PROBATION}.sortedByDescending{it.priority}
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:209:        val need=(settings.strategyActiveCount.coerceIn(20,40)-champions.size).coerceAtLeast(0)
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:212:        val active=(champions+rotated.take(need)).distinctBy{it.id}.take(settings.strategyActiveCount.coerceIn(20,40))
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:314:    private fun recordRejectedStrategyShadow(s:StrategySetup,reason:String,nowMs:Long=System.currentTimeMillis()){
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:323:            id="REJECT|STRATEGY|${s.direction.name}|${s.symbol}|$nowMs",engineLabel="STRATEGY",symbol=s.symbol,direction=s.direction,
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:356:    suspend fun reconcileRejectedShadows():Int{
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:374:            val(out,exit)=result!!;changed++;r.copy(outcome=out,closedAt=System.currentTimeMillis(),exitPrice=exit,returnPct=shadowReturnPct(r,exit))
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:396:    suspend fun reconcileTradeCallLedger():Int{
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:432:            call.copy(outcome=out,closedAt=System.currentTimeMillis(),exitPrice=exit,returnPct=ret,closeReason=when(out){TradeCallOutcome.WIN->"Target reached";TradeCallOutcome.LOSS->if(expired)"Target not reached by session close" else "Stop reached";else->""})
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:434:        if(changed>0){prefs.saveTradeCalls(updated);DiagnosticLog.log(appContext,"CALL-LEDGER","closed $changed calls with WIN/LOSS")}
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:438:    suspend fun closeExpiredStrategyCalls():Int{
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:440:        val live=prefs.loadStrategyLive();if(live.isEmpty())return 0
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:442:        val token=accessToken();val closed=prefs.loadStrategyClosed(500).toMutableList();val surviving=mutableListOf<StrategyRecommendation>();var changed=0
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:459:            val done=r.copy(lastSeenAt=System.currentTimeMillis(),lastPrice=exit,closedAt=System.currentTimeMillis(),exitPrice=exit,status=if(win)StrategyRecommendationStatus.WIN else StrategyRecommendationStatus.LOSS,returnPct=ret,closeReason=if(win)"Target reached" else if(stopHit)"Stop reached" else "Target not reached by session close")
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:460:            closed.removeAll{it.id==done.id};closed.add(done);prefs.updateStrategyResult(r.setup.strategyId,r.setup.strategyName,ret,win);changed++
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:462:        prefs.saveStrategyLedger(surviving,closed)
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:463:        if(changed>0)DiagnosticLog.log(appContext,"STRATEGY","closed $changed expired intraday calls with WIN/LOSS")
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:467:    suspend fun scanTradingStrategies(progress:suspend(String)->Unit={}):StrategyTournamentSummary=strategyMutex.withLock{
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:468:        prefs.markStrategyAttempt()
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:469:        val settings=prefs.loadSettings();require(settings.strategyTournamentEnabled){"Strategy tournament is disabled"}
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:471:        if(strategyCatalog==null)runCatching{refreshStrategyCatalog(false)}
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:472:        val(bundle,active)=activeStrategyDefinitions(settings)
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:475:        // Intraday strategy execution is deliberately stricter than the broad UC universe.
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:492:        val selected=(movers.sortedByDescending{it.second}.map{it.first}.take(settings.strategyHistorySymbolsPerPass.coerceIn(24,40))+
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:501:        fun returnPct(setup:StrategySetup,exit:Double):Double{
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:506:        // First reconcile already-open recommendations. A recommendation never disappears because a later
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:507:        // scan no longer ranks it; it stays LIVE until target, stop, invalidation, or end-of-day governance.
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:508:        val existingLive=prefs.loadStrategyLive().toMutableList()
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:509:        val closed=prefs.loadStrategyClosed(500).toMutableList()
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:510:        val surviving=mutableListOf<StrategyRecommendation>()
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:522:                hitTarget->StrategyRecommendationStatus.WIN
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:523:                hitStop->StrategyRecommendationStatus.LOSS
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:524:                oldDay||eod->StrategyRecommendationStatus.LOSS
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:525:                else->StrategyRecommendationStatus.LIVE
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:527:            if(status==StrategyRecommendationStatus.LIVE){
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:533:                    StrategyRecommendationStatus.WIN->"Target reached"
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:534:                    StrategyRecommendationStatus.LOSS->if(hitStop)"Stop reached" else "Target not reached by session close"
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:535:                    StrategyRecommendationStatus.EXPIRED->"Legacy expired call"
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:536:                    else->"Closed"
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:538:                val done=r.copy(lastSeenAt=System.currentTimeMillis(),lastPrice=px,closedAt=System.currentTimeMillis(),exitPrice=px,status=status,returnPct=ret,closeReason=reason,
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:540:                closed.removeAll{it.id==done.id};closed.add(done)
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:541:                if(status==StrategyRecommendationStatus.WIN||status==StrategyRecommendationStatus.LOSS){
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:542:                    prefs.updateStrategyResult(r.setup.strategyId,r.setup.strategyName,ret,status==StrategyRecommendationStatus.WIN)
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:547:        val rawSetups=mutableListOf<Pair<StrategySetup,Quote>>();var enriched=0;var quoteRejected=0;var historyFailed=0;var candleShort=0;var rulesMatched=0
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:551:            // Execution-quality gates requested for the strategy engine.
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:558:                val e=strategyEngine.evaluate(def,candles)?:continue;rulesMatched++
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:567:                rawSetups+=StrategySetup(inst.tradingSymbol,inst.name,def.id,def.name,e.direction,score,q.lastPrice,e.targetPct,e.stopPct,
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:576:            val names=agree.map{it.first.strategyName}.distinct()
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:579:                strategyName=names.joinToString(" + "),
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:581:                evidence="${names.size} strategy confirmation • "+agree.joinToString(" | "){it.first.evidence.take(110)}
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:586:            .sortedByDescending{it.first.score}.take(settings.strategyTopCandidates.coerceIn(10,20))
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:588:        top.filter{it.first.score<72.0}.take(8).forEach{(setup,_)->recordRejectedStrategyShadow(setup,"BELOW_LIVE_THRESHOLD ${"%.1f".format(setup.score)} < 72.0")}
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:591:        val newlyOpened=mutableListOf<StrategySetup>()
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:596:                val sp=spreadPct(q);val id="${date}|$key|${setup.strategyId}"
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:597:                surviving+=StrategyRecommendation(id,setup,System.currentTimeMillis(),System.currentTimeMillis(),q.lastPrice,
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:602:        prefs.saveStrategyLedger(surviving,closed)
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:605:        val perfs=prefs.strategyPerformances(bundle.strategies,settings)
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:606:        val summary=StrategyTournamentSummary(System.currentTimeMillis(),cash.size,active.size,enriched,top.map{it.first},active,perfs,bundle.version,
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:608:        DiagnosticLog.log(appContext,"STRATEGY","${summary.message}")
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:609:        prefs.saveStrategySummary(summary);summary
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:696:        val closedNow=previousCandidates.filter(::isLiveAction).filter{"${it.direction.name}|${it.indianSymbol}" !in currentLiveKeys}.map{c->
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:697:            GlobalLeadClosedRecord(c,System.currentTimeMillis(),if(now.toLocalTime()>LocalTime.of(15,30))"Session closed" else "Signal no longer confirmed")
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:699:        prefs.appendGlobalLeadClosed(closedNow)
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:700:        if(closedNow.isNotEmpty())DiagnosticLog.log(appContext,"GLOBAL","closed ${closedNow.size}: ${closedNow.joinToString{it.candidate.indianSymbol}}")
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:815:                prefs.saveFreezeRecord(dateKey,section,list,outcome,last.completedAt,if(list.isEmpty())"End-of-day audit: scan completed, no qualifying signal" else "End-of-day audit: latest live scan closed")
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:817:                // WorkManager is inexact. Allow a brief post-close grace window for the final market scan.
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:833:        val closedCalls=prefs.loadTradeCalls(1500).filter{it.outcome!=TradeCallOutcome.OPEN&&it.id !in existing}
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:834:            .sortedWith(compareByDescending<TradeCallRecord>{it.outcome==TradeCallOutcome.LOSS}.thenByDescending{it.closedAt}).take(limit)
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:835:        val left=(limit-closedCalls.size).coerceAtLeast(0)
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:836:        val closedStrategies=prefs.loadStrategyClosed(500).filter{"STRATEGY|${it.id}" !in existing}
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:837:            .sortedWith(compareByDescending<StrategyRecommendation>{it.status==StrategyRecommendationStatus.LOSS}.thenByDescending{it.closedAt}).take(left)
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:838:        if(closedCalls.isEmpty()&&closedStrategies.isEmpty())return 0
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:849:        for(call in closedCalls){
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:854:            val end=Instant.ofEpochMilli(call.closedAt.takeIf{it>0}?:targetDate.atTime(15,31).atZone(ist).toInstant().toEpochMilli()).atZone(ist)
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:860:                entryPrice=call.entryPrice,stopPrice=call.stopPrice,targetPrice=call.targetPrice,openedAt=call.openedAt,executionStartAt=executionStart.toInstant().toEpochMilli(),closedAt=call.closedAt,
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:866:        for(r in closedStrategies){
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:867:            val s=r.setup;val sourceId="STRATEGY|${r.id}";val opened=Instant.ofEpochMilli(r.openedAt).atZone(ist);val sessionDate=opened.toLocalDate();val executionStart=opened
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:868:            val end=Instant.ofEpochMilli(r.closedAt.takeIf{it>0}?:sessionDate.atTime(15,31).atZone(ist).toInstant().toEpochMilli()).atZone(ist)
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:872:            val outcome=if(r.status==StrategyRecommendationStatus.WIN)"WIN" else "LOSS"
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:874:            val record=autopsyEngine.analyze(TradeAutopsyEngine.Input(sourceId,"STRATEGY",s.symbol,outcome,r.returnPct,s.direction,s.entryPrice,stop,target,r.openedAt,executionStart.toInstant().toEpochMilli(),r.closedAt,sessionDate.toString(),candles,nifty,sensex,bank,indiaVix,spy,globalVix,(context+marketNews).distinctBy{it.title}))
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:877:        if(saved>0)DiagnosticLog.log(appContext,"AUTOPSY","Generated $saved post-trade autopsies with regime + shadow-strategy replay")
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:885:            evaluatePendingStrategyOutcomes(accessToken())
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:898:            runCatching{closeExpiredStrategyCalls()}.onFailure{DiagnosticLog.log(appContext,"LEARNING15M","Strategy ledger reconciliation failed",it)}
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:899:            runCatching{reconcileTradeCallLedger()}.onFailure{DiagnosticLog.log(appContext,"LEARNING15M","Trade call ledger reconciliation failed",it)}
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:900:            runCatching{reconcileRejectedShadows()}.onFailure{DiagnosticLog.log(appContext,"LEARNING15M","Rejected-candidate shadow reconciliation failed",it)}
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:907:        val strategySummary=prefs.loadStrategySummary();val live=prefs.loadStrategyLive().size;val closed=prefs.loadStrategyClosed(500)
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:909:        val ledger=prefs.loadTradeCalls(1500);val ucDone=ledger.filter{it.engine==TradeCallEngine.UPPER_CIRCUIT&&it.outcome!=TradeCallOutcome.OPEN};val prDone=ledger.filter{it.engine==TradeCallEngine.PRESSURE&&it.outcome!=TradeCallOutcome.OPEN};val glDone=ledger.filter{it.engine==TradeCallEngine.GLOBAL&&it.outcome!=TradeCallOutcome.OPEN}
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:910:        val champions=strategySummary?.performances?.count{it.status==StrategyStatus.CHAMPION}?:0
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:912:        val autopsies=prefs.loadAutopsies(800);val lossesExplained=autopsies.count{it.originalOutcome=="LOSS"&&it.dominantCause!=AutopsyCause.NO_DOMINANT_CAUSE}
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:914:        val msg="auth=$auth • UC calls ${wl(ucDone)} • Pressure calls ${wl(prDone)} • Strategies live=$live closed=${closed.size} champions=$champions • Global active=$globalLive calls ${wl(glDone)} • autopsies=${autopsies.size} loss-diagnostics=$lossesExplained • rejected-shadow=${rejected.size} missed-winners=$missed"
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:924:        fun callStats(engine:TradeCallEngine):Pair<Int,Double>{val d=ledger.filter{it.engine==engine&&it.outcome!=TradeCallOutcome.OPEN&&it.closedAt>=cutoff};return d.size to if(d.isEmpty())0.0 else d.count{it.outcome==TradeCallOutcome.WIN}*100.0/d.size}
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:945:        appendLine("Strategy LIVE: ${prefs.loadStrategyLive().size} • CLOSED: ${prefs.loadStrategyClosed(500).size}")
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:946:        prefs.loadStrategySummary()?.performances?.sortedByDescending{it.observations}?.take(20)?.forEach{appendLine("Strategy ${it.strategyId} • n=${it.observations} • win=${"%.1f".format(it.accuracyPct)}% • avg=${"%.2f".format(it.avgReturnPct)}% • ${it.status}")}
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:947:        appendLine("Global LIVE/NEXT: ${prefs.loadGlobalLeadSummary()?.candidates.orEmpty().size} • CLOSED research signals: ${prefs.loadGlobalLeadClosed(500).size}")
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:949:            val calls=prefs.loadTradeCalls(1500).filter{it.engine==engine};val done=calls.filter{it.outcome!=TradeCallOutcome.OPEN};val wins=done.count{it.outcome==TradeCallOutcome.WIN}
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:950:            appendLine("${engine.name} calls: open=${calls.count{it.outcome==TradeCallOutcome.OPEN}} closed=${done.size} wins=$wins losses=${done.size-wins} accuracy=${if(done.isEmpty())"0.0" else "%.1f".format(wins*100.0/done.size)}%")
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:954:        for(engine in listOf(TradeCallEngine.UPPER_CIRCUIT.name,TradeCallEngine.PRESSURE.name,TradeCallEngine.GLOBAL.name,"STRATEGY")){
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:964:            appendLine("${a.sessionDate} • ${a.engineLabel} • ${a.symbol} • ${a.originalOutcome} ${"%+.2f".format(a.originalReturnPct)}% • regime=${a.regime} • cause=${a.dominantCause} ${"%.0f".format(a.causeConfidencePct)}%")
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:965:            a.newsEvidence.take(2).forEach{appendLine("  news: $it")};a.shadowResults.take(5).forEach{x->appendLine("  shadow ${x.strategyId}: ${x.outcome} ${"%+.2f".format(x.returnPct)}% • ${x.evidence}")}
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:968:        appendLine("--- SHADOW STRATEGY LAB ---")
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:984:                val exact=selectPredictionAndNext(candles,date);if(exact==null){allProcessed=false;continue};val(predictionDay,nextDay,previousDay)=exact
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:997:    private suspend fun evaluatePendingStrategyOutcomes(token:String){
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:999:        for(date in prefs.pendingStrategyDates().filter{it<today}){
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:1000:            val key=date.toString();if(prefs.strategyDateEvaluated(key))continue
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:1001:            val setups=prefs.pendingStrategySetups(key);if(setups.isEmpty()){prefs.markStrategyDateEvaluated(key);continue}
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:1009:                prefs.updateStrategyResult(x.strategyId,x.strategyName,ret,win)
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:1011:            if(all)prefs.markStrategyDateEvaluated(key)
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:1016:    private fun selectPredictionAndNext(candles:List<Candle>,date:LocalDate):Triple<Candle,Candle,Candle?>?{val dated=candles.map{Instant.ofEpochSecond(it.epochSeconds).atZone(ist).toLocalDate() to it}.sortedBy{it.first};val prediction=dated.lastOrNull{it.first==date}?:return null;val next=dated.firstOrNull{it.first>date}?:return null;return Triple(prediction.second,next.second,dated.lastOrNull{it.first<date}?.second)}
+app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt:1017:    private fun JSONObject.optNullableDouble(name:String):Double?{if(!has(name)||isNull(name))return null;val v=optDouble(name,Double.NaN);return v.takeIf{!it.isNaN()}}
+app/src/main/java/com/suhas/ucsentinel/domain/model/Models.kt:12:enum class StrategyStatus { CHAMPION, ACTIVE, CHALLENGER, PROBATION }
+app/src/main/java/com/suhas/ucsentinel/domain/model/Models.kt:51:data class StrategyMetric(val section:ScannerSection,val signalId:String,val signalName:String,val observations:Int,val wins:Int,val precision:Double,val modelVersion:String="")
+app/src/main/java/com/suhas/ucsentinel/domain/model/Models.kt:75:data class TradingStrategyDefinition(
+app/src/main/java/com/suhas/ucsentinel/domain/model/Models.kt:79:data class StrategyPerformance(
+app/src/main/java/com/suhas/ucsentinel/domain/model/Models.kt:80:    val strategyId:String,val name:String,val observations:Int,val wins:Int,val accuracyPct:Double,val avgReturnPct:Double,
+app/src/main/java/com/suhas/ucsentinel/domain/model/Models.kt:81:    val expectancyPct:Double,val maxDrawdownPct:Double,val confidenceFloorPct:Double,val status:StrategyStatus
+app/src/main/java/com/suhas/ucsentinel/domain/model/Models.kt:84:data class StrategySetup(
+app/src/main/java/com/suhas/ucsentinel/domain/model/Models.kt:85:    val symbol:String,val companyName:String,val strategyId:String,val strategyName:String,val direction:TradeDirection,
+app/src/main/java/com/suhas/ucsentinel/domain/model/Models.kt:90:enum class StrategyRecommendationStatus { LIVE, WIN, LOSS, EXPIRED, INVALIDATED }
+app/src/main/java/com/suhas/ucsentinel/domain/model/Models.kt:114:    val closedAt:Long=0L,
+app/src/main/java/com/suhas/ucsentinel/domain/model/Models.kt:120:data class StrategyRecommendation(
+app/src/main/java/com/suhas/ucsentinel/domain/model/Models.kt:122:    val setup:StrategySetup,
+app/src/main/java/com/suhas/ucsentinel/domain/model/Models.kt:126:    val closedAt:Long=0L,
+app/src/main/java/com/suhas/ucsentinel/domain/model/Models.kt:128:    val status:StrategyRecommendationStatus=StrategyRecommendationStatus.LIVE,
+app/src/main/java/com/suhas/ucsentinel/domain/model/Models.kt:136:data class StrategyTournamentSummary(
+app/src/main/java/com/suhas/ucsentinel/domain/model/Models.kt:138:    val topSetups:List<StrategySetup>,val activeStrategies:List<TradingStrategyDefinition>,
+app/src/main/java/com/suhas/ucsentinel/domain/model/Models.kt:139:    val performances:List<StrategyPerformance>,val catalogVersion:String,val message:String
+app/src/main/java/com/suhas/ucsentinel/domain/model/Models.kt:151:    val strategyTournamentEnabled:Boolean=true,val strategyActiveCount:Int=20,val strategyTopCandidates:Int=10,
+app/src/main/java/com/suhas/ucsentinel/domain/model/Models.kt:152:    val strategyMinChampionAccuracy:Double=60.0,val strategyMinChampionSamples:Int=30,val strategyCatalogRefreshDays:Int=7,
+app/src/main/java/com/suhas/ucsentinel/domain/model/Models.kt:153:    val strategyHistorySymbolsPerPass:Int=80
+app/src/main/java/com/suhas/ucsentinel/domain/model/AutopsyModels.kt:4:enum class AutopsyCause { COMPANY_NEWS, MARKET_REVERSAL, INDEX_DIVERGENCE, GLOBAL_RISK, VOLUME_FAILURE, MOMENTUM_FAILURE, ENTRY_TIMING, LIQUIDITY_NOISE, STATISTICAL_FAILURE, NO_DOMINANT_CAUSE, WIN_CONFIRMED }
+app/src/main/java/com/suhas/ucsentinel/domain/model/AutopsyModels.kt:25:data class ShadowStrategyResult(
+app/src/main/java/com/suhas/ucsentinel/domain/model/AutopsyModels.kt:26:    val strategyId:String,
+app/src/main/java/com/suhas/ucsentinel/domain/model/AutopsyModels.kt:27:    val strategyName:String,
+app/src/main/java/com/suhas/ucsentinel/domain/model/AutopsyModels.kt:42:    val closedAt:Long,
+app/src/main/java/com/suhas/ucsentinel/domain/model/AutopsyModels.kt:46:    val dominantCause:AutopsyCause,
+app/src/main/java/com/suhas/ucsentinel/domain/model/AutopsyModels.kt:50:    val shadowResults:List<ShadowStrategyResult>,
+app/src/main/java/com/suhas/ucsentinel/domain/model/AccuracyLearningModels.kt:18:    val closedAt:Long=0L,
+app/src/main/java/com/suhas/ucsentinel/domain/model/GlobalModels.kt:76:data class GlobalLeadClosedRecord(
+app/src/main/java/com/suhas/ucsentinel/domain/model/GlobalModels.kt:78:    val closedAt:Long,
+app/src/main/java/com/suhas/ucsentinel/domain/engine/DemandSignalEngine.kt:281:            // --- Strategy combinations: intentionally cross-family ---
+app/src/main/java/com/suhas/ucsentinel/domain/engine/AccuracyLearningEngine.kt:12: * only on already-closed outcomes, and confidence changes are deliberately bounded.
+app/src/main/java/com/suhas/ucsentinel/domain/engine/AccuracyLearningEngine.kt:15:    data class Observation(val score:Double,val win:Boolean,val closedAt:Long,val sessionDate:String)
+app/src/main/java/com/suhas/ucsentinel/domain/engine/AccuracyLearningEngine.kt:32:        val sorted=observations.sortedBy{it.closedAt}.filter{it.sessionDate.isNotBlank()}
+app/src/main/java/com/suhas/ucsentinel/domain/engine/AccuracyLearningEngine.kt:34:        if(sorted.size<12||days.size<4)return WalkForwardValidation(engineLabel,0,0,0.0,0.0,false,"INSUFFICIENT • need 12 closed calls across 4 days")
+app/src/main/java/com/suhas/ucsentinel/domain/engine/AccuracyLearningEngine.kt:48:        val recent=observations.sortedByDescending{it.closedAt}.take(60)
+app/src/main/java/com/suhas/ucsentinel/domain/engine/ReplayEngine.kt:55:            val avgVol = recent.dropLast(1).map { it.volume }.average().takeIf { !it.isNaN() } ?: 0.0
+app/src/main/java/com/suhas/ucsentinel/domain/engine/TradingStrategyEngine.kt:6:class TradingStrategyEngine{
+app/src/main/java/com/suhas/ucsentinel/domain/engine/TradingStrategyEngine.kt:8:    fun evaluate(def:TradingStrategyDefinition,candles:List<Candle>):Eval?{
+app/src/main/java/com/suhas/ucsentinel/domain/engine/TradeAutopsyEngine.kt:66:        val closedAt:Long,
+app/src/main/java/com/suhas/ucsentinel/domain/engine/TradeAutopsyEngine.kt:82:        val nWindow=window(i.niftyBars,i.executionStartAt,i.closedAt)
+app/src/main/java/com/suhas/ucsentinel/domain/engine/TradeAutopsyEngine.kt:83:        val sWindow=window(i.sensexBars,i.executionStartAt,i.closedAt)
+app/src/main/java/com/suhas/ucsentinel/domain/engine/TradeAutopsyEngine.kt:84:        val bWindow=window(i.bankBars,i.executionStartAt,i.closedAt)
+app/src/main/java/com/suhas/ucsentinel/domain/engine/TradeAutopsyEngine.kt:123:        val best=shadows.sortedWith(compareByDescending<ShadowStrategyResult>{it.outcome==ShadowOutcome.AVOIDED_LOSS}.thenByDescending{it.outcome==ShadowOutcome.WIN}.thenByDescending{it.returnPct}).firstOrNull()
+app/src/main/java/com/suhas/ucsentinel/domain/engine/TradeAutopsyEngine.kt:125:            best?.outcome==ShadowOutcome.AVOIDED_LOSS->"Shadow ${best.strategyName} would have filtered this loss; keep in shadow until sample-size promotion gate is met."
+app/src/main/java/com/suhas/ucsentinel/domain/engine/TradeAutopsyEngine.kt:126:            best?.outcome==ShadowOutcome.WIN&&!isWin->"Shadow ${best.strategyName} produced a better counterfactual; collect more regime-matched samples before promotion."
+app/src/main/java/com/suhas/ucsentinel/domain/engine/TradeAutopsyEngine.kt:133:            originalOutcome=i.outcome,originalReturnPct=i.originalReturnPct,openedAt=i.openedAt,closedAt=i.closedAt,generatedAt=System.currentTimeMillis(),
+app/src/main/java/com/suhas/ucsentinel/domain/engine/TradeAutopsyEngine.kt:134:            regime=regime.regime,regimeConfidencePct=regime.confidencePct,dominantCause=cause,causeConfidencePct=confidence,
+app/src/main/java/com/suhas/ucsentinel/domain/engine/TradeAutopsyEngine.kt:139:    private fun shadowLab(i:Input,pre:List<Candle>,post:List<Candle>,nifty:List<GlobalBar>,momentum:Double,volRatio:Double,vwap:Double):List<ShadowStrategyResult>{
+app/src/main/java/com/suhas/ucsentinel/domain/engine/TradeAutopsyEngine.kt:141:        fun guarded(id:String,name:String,pass:Boolean,evidence:String):ShadowStrategyResult{
+app/src/main/java/com/suhas/ucsentinel/domain/engine/TradeAutopsyEngine.kt:142:            if(!pass)return ShadowStrategyResult(id,name,false,if(originalWin)ShadowOutcome.MISSED_WIN else ShadowOutcome.AVOIDED_LOSS,0.0,evidence)
+app/src/main/java/com/suhas/ucsentinel/domain/engine/TradeAutopsyEngine.kt:144:            return ShadowStrategyResult(id,name,true,sim.first,sim.second,evidence)
+app/src/main/java/com/suhas/ucsentinel/domain/engine/TradeAutopsyEngine.kt:150:        val out=mutableListOf<ShadowStrategyResult>()
+app/src/main/java/com/suhas/ucsentinel/domain/engine/TradeAutopsyEngine.kt:161:    private fun waitFiveMinutes(i:Input,post:List<Candle>):ShadowStrategyResult{
+app/src/main/java/com/suhas/ucsentinel/domain/engine/TradeAutopsyEngine.kt:163:            ?:return ShadowStrategyResult("WAIT_5M_CONFIRM","Wait 5m confirmation",false,ShadowOutcome.NO_TRADE,0.0,"No 5-minute confirmation candle")
+app/src/main/java/com/suhas/ucsentinel/domain/engine/TradeAutopsyEngine.kt:165:        if(!favorable)return ShadowStrategyResult("WAIT_5M_CONFIRM","Wait 5m confirmation",false,if(i.outcome.equals("WIN",true))ShadowOutcome.MISSED_WIN else ShadowOutcome.AVOIDED_LOSS,0.0,"First 5m confirmation disagreed with trade")
+app/src/main/java/com/suhas/ucsentinel/domain/engine/TradeAutopsyEngine.kt:169:        return ShadowStrategyResult("WAIT_5M_CONFIRM","Wait 5m confirmation",true,sim.first,sim.second,"Entry ${"%.2f".format(entry)} after first 5m directional confirmation")
+app/src/main/java/com/suhas/ucsentinel/domain/engine/TradeAutopsyEngine.kt:172:    private fun breakoutConfirm(i:Input,pre:List<Candle>,post:List<Candle>):ShadowStrategyResult{
+app/src/main/java/com/suhas/ucsentinel/domain/engine/TradeAutopsyEngine.kt:173:        if(pre.isEmpty())return ShadowStrategyResult("BREAKOUT_CONFIRM","Breakout confirmation",false,ShadowOutcome.NO_TRADE,0.0,"Insufficient pre-call candles")
+app/src/main/java/com/suhas/ucsentinel/domain/engine/TradeAutopsyEngine.kt:176:        if(trigger==null)return ShadowStrategyResult("BREAKOUT_CONFIRM","Breakout confirmation",false,if(i.outcome.equals("WIN",true))ShadowOutcome.MISSED_WIN else ShadowOutcome.AVOIDED_LOSS,0.0,"No breakout in first 30m")
+app/src/main/java/com/suhas/ucsentinel/domain/engine/TradeAutopsyEngine.kt:180:        return ShadowStrategyResult("BREAKOUT_CONFIRM","Breakout confirmation",true,sim.first,sim.second,"Confirmed beyond prior 30m ${if(i.direction==TradeDirection.LONG)"high" else "low"}")
+app/src/main/java/com/suhas/ucsentinel/domain/engine/GlobalLeadEngine.kt:76:        val latestIndiaCloseDate=when{
+app/src/main/java/com/suhas/ucsentinel/domain/engine/GlobalLeadEngine.kt:81:        val latestIndiaClose=latestIndiaCloseDate.atTime(15,30).atZone(ist).toInstant().toEpochMilli()
+app/src/main/java/com/suhas/ucsentinel/notifications/AppNotifier.kt:16:import com.suhas.globaledgeai.domain.model.StrategySetup
+app/src/main/java/com/suhas/ucsentinel/notifications/AppNotifier.kt:23:    private const val STRATEGY_CHANNEL = "strategy_entry_alerts"
+app/src/main/java/com/suhas/ucsentinel/notifications/AppNotifier.kt:37:            manager.createNotificationChannel(NotificationChannel(STRATEGY_CHANNEL,"Trading strategy entry alerts",NotificationManager.IMPORTANCE_HIGH).apply {
+app/src/main/java/com/suhas/ucsentinel/notifications/AppNotifier.kt:38:                description="Alerts only when a new persistent LIVE intraday strategy call clears price, volume and liquidity gates."
+app/src/main/java/com/suhas/ucsentinel/notifications/AppNotifier.kt:119:    fun notifyStrategySetups(context:Context,setups:List<StrategySetup>){
+app/src/main/java/com/suhas/ucsentinel/notifications/AppNotifier.kt:124:        val fingerprint=top.joinToString("|"){"${it.strategyId}:${it.symbol}:${it.direction.name}:${String.format(Locale.US,"%.2f",it.entryPrice)}"}
+app/src/main/java/com/suhas/ucsentinel/notifications/AppNotifier.kt:125:        if(!shouldNotify(context,"strategy",fingerprint))return
+app/src/main/java/com/suhas/ucsentinel/notifications/AppNotifier.kt:130:            "${s.direction.name} ${s.symbol} • entry ₹${String.format(Locale.US,"%.2f",s.entryPrice)} • SL ₹${String.format(Locale.US,"%.2f",stop)} • target ₹${String.format(Locale.US,"%.2f",target)} • ${s.strategyName}"
+app/src/main/java/com/suhas/ucsentinel/notifications/AppNotifier.kt:132:        val n=NotificationCompat.Builder(context,STRATEGY_CHANNEL)
+app/src/main/java/com/suhas/ucsentinel/notifications/AppNotifier.kt:134:            .setContentTitle("New LIVE trading-strategy call")
+app/src/main/java/com/suhas/ucsentinel/worker/ScanWorker.kt:21:        if(settings.strategyTournamentEnabled){ runCatching{repo.refreshStrategyCatalog(false)} }
+app/src/main/java/com/suhas/ucsentinel/worker/ScanWorker.kt:34:            // 15-minute WorkManager safety net for the two 24h research engines.
+app/src/main/java/com/suhas/ucsentinel/worker/ScanWorker.kt:36:            runCatching{repo.closeExpiredStrategyCalls()}
+app/src/main/java/com/suhas/ucsentinel/worker/ScanWorker.kt:37:            runCatching{repo.reconcileTradeCallLedger()}
+app/src/main/java/com/suhas/ucsentinel/worker/ScanWorker.kt:47:            // WorkManager's supported periodic minimum is 15 minutes. Every heartbeat now runs
+app/src/main/java/com/suhas/ucsentinel/worker/ScanWorker.kt:66:            if(settings.strategyTournamentEnabled){
+app/src/main/java/com/suhas/ucsentinel/worker/ScanWorker.kt:67:                // v1.1.0: strategy discovery is an all-session engine, not a near-3-PM engine.
+app/src/main/java/com/suhas/ucsentinel/worker/ScanWorker.kt:68:                val strategyInterval=15L
+app/src/main/java/com/suhas/ucsentinel/worker/ScanWorker.kt:69:                if(forceMarketPass||nowMs-repo.lastStrategyScanAt()>=strategyInterval*60*1000){
+app/src/main/java/com/suhas/ucsentinel/worker/ScanWorker.kt:70:                    repo.markStrategyScanAttempt(nowMs)
+app/src/main/java/com/suhas/ucsentinel/worker/ScanWorker.kt:72:                        val freshLive=repo.strategyLiveRecommendations()
+app/src/main/java/com/suhas/ucsentinel/worker/ScanWorker.kt:75:                        AppNotifier.notifyStrategySetups(applicationContext,freshLive)
+app/src/main/java/com/suhas/ucsentinel/worker/ScanWorker.kt:76:                    }.onFailure{repo.markStrategyScanError(it)}
+app/src/main/java/com/suhas/ucsentinel/worker/MarketScanService.kt:23:    private var lastStrategyPass = 0L
+app/src/main/java/com/suhas/ucsentinel/worker/MarketScanService.kt:27:    private var lastGovernancePass = 0L
+app/src/main/java/com/suhas/ucsentinel/worker/MarketScanService.kt:29:    private var strategyJob:Job?=null
+app/src/main/java/com/suhas/ucsentinel/worker/MarketScanService.kt:53:                // Call governance is independent from model learning: it closes intraday ledgers,
+app/src/main/java/com/suhas/ucsentinel/worker/MarketScanService.kt:55:                if (nowMs-lastGovernancePass >= 15L*60_000L) {
+app/src/main/java/com/suhas/ucsentinel/worker/MarketScanService.kt:56:                    lastGovernancePass=nowMs
+app/src/main/java/com/suhas/ucsentinel/worker/MarketScanService.kt:57:                    runCatching { repo.closeExpiredStrategyCalls() }
+app/src/main/java/com/suhas/ucsentinel/worker/MarketScanService.kt:58:                        .onFailure { DiagnosticLog.log(this,"GOVERNANCE","strategy reconciliation failed",it) }
+app/src/main/java/com/suhas/ucsentinel/worker/MarketScanService.kt:59:                    runCatching { repo.reconcileTradeCallLedger() }
+app/src/main/java/com/suhas/ucsentinel/worker/MarketScanService.kt:60:                        .onFailure { DiagnosticLog.log(this,"GOVERNANCE","call-ledger reconciliation failed",it) }
+app/src/main/java/com/suhas/ucsentinel/worker/MarketScanService.kt:64:                // it evaluates closed outcomes, adapts learned weights/thresholds and writes a weekly-audit line.
+app/src/main/java/com/suhas/ucsentinel/worker/MarketScanService.kt:78:                        // the Strategy cadence or the service heartbeat anymore.
+app/src/main/java/com/suhas/ucsentinel/worker/MarketScanService.kt:79:                        if (settings.strategyTournamentEnabled && nowMs-lastStrategyPass >= 5L*60_000L && strategyJob?.isActive!=true) {
+app/src/main/java/com/suhas/ucsentinel/worker/MarketScanService.kt:80:                            lastStrategyPass = nowMs
+app/src/main/java/com/suhas/ucsentinel/worker/MarketScanService.kt:81:                            repo.markStrategyScanAttempt(nowMs)
+app/src/main/java/com/suhas/ucsentinel/worker/MarketScanService.kt:82:                            strategyJob=scope.launch{
+app/src/main/java/com/suhas/ucsentinel/worker/MarketScanService.kt:91:                                    val fresh = repo.strategyLiveRecommendations().filter { it.openedAt >= summary.generatedAt-120_000L }.map { it.setup }
+app/src/main/java/com/suhas/ucsentinel/worker/MarketScanService.kt:92:                                    AppNotifier.notifyStrategySetups(this@MarketScanService,fresh)
+app/src/main/java/com/suhas/ucsentinel/worker/MarketScanService.kt:93:                                    DiagnosticLog.log(this@MarketScanService,"STRATEGY","pass live=${repo.strategyLiveRecommendations().size} watch=${summary.topSetups.size} enriched=${summary.symbolsEnriched} strategies=${summary.strategiesRun} msg=${summary.message}")
+app/src/main/java/com/suhas/ucsentinel/worker/MarketScanService.kt:95:                                    repo.markStrategyScanError(t)
+app/src/main/java/com/suhas/ucsentinel/worker/MarketScanService.kt:96:                                    DiagnosticLog.log(this@MarketScanService,"STRATEGY","scan failed",t)
+app/src/main/java/com/suhas/ucsentinel/worker/MarketScanService.kt:135:                    // Global markets keep moving while India is closed. Re-rank them every 15 minutes;
+app/src/main/java/com/suhas/ucsentinel/worker/MarketScanService.kt:156:                    description="Keeps Global Edge market scanning and learning active while the app is closed."
