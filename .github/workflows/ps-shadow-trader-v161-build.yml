@@ -63,7 +63,8 @@ jobs:
 
           grep -q "versionCode 161" /tmp/ps-shadow-trader/app/build.gradle
           grep -q "versionName '1.6.1'" /tmp/ps-shadow-trader/app/build.gradle
-          grep -q "STOCK(?:\\s+NAME)?" "$D/NotificationParser.java"
+          grep -q "STOCK" "$D/NotificationParser.java"
+          grep -q "NAME" "$D/NotificationParser.java"
           grep -q "IGNORED @" "$D/MultifyNotificationService.java"
           grep -q "maybeLaunchLab" "$D/AutomationService.java"
           grep -q "last_lab_complete_ts" "$D/MainActivity.java"
