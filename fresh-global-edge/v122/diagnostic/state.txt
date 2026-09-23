@@ -1,4 +1,4 @@
-patch_exit=1
+patch_exit=0
 15:        versionCode = 122
 16:        versionName = "1.2.2"
 28:    private fun finiteNumber(value:Double,fallback:Double=0.0):Double =
@@ -7,3 +7,8 @@ patch_exit=1
 236:                val high=finiteNumber(row.optDouble(2))
 237:                val low=finiteNumber(row.optDouble(3))
 238:                val close=finiteNumber(row.optDouble(4))
+464:                        forcedExpiry&&candles==null->"Prediction horizon expired • historical replay unavailable"
+542:                    !replayAvailable->"Prediction horizon expired • historical replay unavailable"
+35:    private var lastForegroundGovernanceAt=0L
+69:        if(now-lastForegroundGovernanceAt>=5L*60_000L){
+70:            lastForegroundGovernanceAt=now

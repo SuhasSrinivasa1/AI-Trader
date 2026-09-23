@@ -1,9 +1,1 @@
-/home/runner/work/AI-Trader/AI-Trader/fresh-global-edge/v122/fix_v122.py:222: SyntaxWarning: invalid escape sequence '\$'
-  """    private fun updateShadowLearning(record:TradeAutopsyRecord){
-/home/runner/work/AI-Trader/AI-Trader/fresh-global-edge/v122/fix_v122.py:253: SyntaxWarning: invalid escape sequence '\$'
-  """    suspend fun reconcileTradeCallLedger():Int{
-/home/runner/work/AI-Trader/AI-Trader/fresh-global-edge/v122/fix_v122.py:346: SyntaxWarning: invalid escape sequence '\$'
-  """    suspend fun closeExpiredStrategyCalls():Int{
-/home/runner/work/AI-Trader/AI-Trader/fresh-global-edge/v122/fix_v122.py:468: SyntaxWarning: invalid escape sequence '\$'
-  """        prefs.saveStrategyLedger(surviving,closed)
-scanTradingStrategies range not found
+Global Edge v1.2.2 reliability patch applied
