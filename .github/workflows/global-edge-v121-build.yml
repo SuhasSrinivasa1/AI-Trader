@@ -1,4 +1,4 @@
-name: Global Edge AI Trader v1.2.1 Validation Learning UI Build
+name: Global Edge AI Trader v1.2.1 Accuracy Learning + UI Build
 
 on:
   push:
@@ -21,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Reconstruct v1.2.0 and apply v1.2.1 validation learning + UI
+      - name: Reconstruct v1.2.0 and apply v1.2.1 accuracy learning + UI
         shell: bash
         run: |
           set -euo pipefail
@@ -78,20 +78,22 @@ jobs:
           gunzip -c /tmp/v119-to-v120.patch.gz > /tmp/v119-to-v120.patch
           patch -p1 --batch < /tmp/v119-to-v120.patch
 
-          cat "$GITHUB_WORKSPACE"/fresh-global-edge/v121/chunks/part*.txt | tr -d '\r\n ' | base64 -d > /tmp/v120-to-v121.patch.gz
+          cat "$GITHUB_WORKSPACE/fresh-global-edge/v121/v120-to-v121.patch.gz.b64" | tr -d '\r\n ' | base64 -d > /tmp/v120-to-v121.patch.gz
           gunzip -c /tmp/v120-to-v121.patch.gz > /tmp/v120-to-v121.patch
           patch -p1 --batch < /tmp/v120-to-v121.patch
 
           grep -q 'versionCode = 121' app/build.gradle.kts
           grep -q 'versionName = "1.2.1"' app/build.gradle.kts
-          grep -q 'data class RejectedCandidateRecord' app/src/main/java/com/suhas/ucsentinel/domain/model/AutopsyModels.kt
-          grep -q 'rejected_shadow_candidates_v121' app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt
-          grep -q 'runMissedOpportunityAudit' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
-          grep -q 'confidenceCalibrationBins' app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt
-          grep -q 'object LearningValidationEngine' app/src/main/java/com/suhas/ucsentinel/domain/engine/LearningValidationEngine.kt
-          grep -q 'fun walkForward' app/src/main/java/com/suhas/ucsentinel/domain/engine/LearningValidationEngine.kt
-          grep -q 'LearningHealthStrip' app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt
-          grep -q 'WF stable' app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt
+          grep -q 'data class RejectedCandidateRecord' app/src/main/java/com/suhas/ucsentinel/domain/model/AccuracyLearningModels.kt
+          grep -q 'class AccuracyLearningEngine' app/src/main/java/com/suhas/ucsentinel/domain/engine/AccuracyLearningEngine.kt
+          grep -q 'rejected_shadow_v121' app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt
+          grep -q 'walkForwardValidation' app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt
+          grep -q 'reconcileRejectedShadows' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'CALIBRATION + WALK-FORWARD' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'MISSED-OPPORTUNITY' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'rejectedShadow:' app/src/main/java/com/suhas/ucsentinel/domain/engine/ScannerEngine.kt
+          grep -q 'rejectedShadow:' app/src/main/java/com/suhas/ucsentinel/domain/engine/DemandScannerEngine.kt
+          grep -q 'ScoreBadge' app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt
           echo 'v1.2.1 source verification passed'
 
           cd /tmp/global-edge-v103
