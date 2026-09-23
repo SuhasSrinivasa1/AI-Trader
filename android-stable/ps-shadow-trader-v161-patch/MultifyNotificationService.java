@@ -24,6 +24,8 @@ public class MultifyNotificationService extends NotificationListenerService {
                 title==null?"":title.toString(),body,wl.knownSymbols());
 
         long now=System.currentTimeMillis();
+        android.content.SharedPreferences state=getSharedPreferences("state",MODE_PRIVATE);
+        String stamp=new SimpleDateFormat("HH:mm:ss",Locale.getDefault()).format(new Date(now));
         if(p==null){
             String raw=((title==null?"":title.toString())+" "+body).replace("\n"," ").trim();
             if(raw.length()>220)raw=raw.substring(0,220);
@@ -33,10 +35,6 @@ public class MultifyNotificationService extends NotificationListenerService {
             new EventStore(this).add("MULTIFY","IGNORED "+stamp+" • unsupported notification format • "+raw);
             return;
         }
-
-
-        android.content.SharedPreferences state=getSharedPreferences("state",MODE_PRIVATE);
-        String stamp=new SimpleDateFormat("HH:mm:ss",Locale.getDefault()).format(new Date(now));
 
         if(p.kind==NotificationParser.Kind.NEW_CALL){
             wl.add(p.symbol,p.raw);
