@@ -81,7 +81,7 @@ jobs:
           RC=$?
           set -e
           mkdir -p "$GITHUB_WORKSPACE/fresh-global-edge/v122/build-diagnostic"
-          echo "gradle_exit=$RC" > "$GITHUB_WORKSPACE/fresh-global-edge/v122/build-diagnostic/status.txt"
+          { echo "gradle_exit=$RC"; echo "run_id=$GITHUB_RUN_ID"; } > "$GITHUB_WORKSPACE/fresh-global-edge/v122/build-diagnostic/status.txt"
           tail -n 500 /tmp/v122-gradle.log > "$GITHUB_WORKSPACE/fresh-global-edge/v122/build-diagnostic/gradle-tail.txt"
           find app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' -printf '%f %s bytes\n' \
             > "$GITHUB_WORKSPACE/fresh-global-edge/v122/build-diagnostic/apks.txt" 2>/dev/null || true
@@ -102,3 +102,15 @@ jobs:
           git add fresh-global-edge/v122/build-diagnostic fresh-global-edge/v122/export
           git commit -m 'Publish v1.2.2 build diagnostic [skip ci]'
           git push
+
+      - name: Upload v1.2.2 build handoff
+        uses: actions/upload-artifact@v4
+        with:
+          name: Global-Edge-v1.2.2-build-handoff
+          retention-days: 30
+          if-no-files-found: error
+          path: |
+            fresh-global-edge/v122/export/Global-Edge-AI-Trader-v1.2.2-UNSIGNED.apk
+            fresh-global-edge/v122/export/apksigner-35.0.0.jar
+            fresh-global-edge/v122/export/APK-BADGING-UNSIGNED.txt
+            fresh-global-edge/v122/export/SHA256-UNSIGNED.txt
