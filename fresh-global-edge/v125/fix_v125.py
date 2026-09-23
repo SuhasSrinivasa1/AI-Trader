@@ -223,3 +223,5 @@ s=rep(s,old,new,"LearningWorker logging")
 write(p,s)
 
 print("Global Edge v1.2.5 EOD diagnostic export applied")
+
+# trigger v1.2.5 diagnostic release build
