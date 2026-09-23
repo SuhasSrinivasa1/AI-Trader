@@ -1,0 +1,9 @@
+patch_exit=1
+15:        versionCode = 122
+16:        versionName = "1.2.2"
+28:    private fun finiteNumber(value:Double,fallback:Double=0.0):Double =
+32:        finiteNumber(obj.optDouble(name,fallback),fallback)
+235:                val open=finiteNumber(row.optDouble(1))
+236:                val high=finiteNumber(row.optDouble(2))
+237:                val low=finiteNumber(row.optDouble(3))
+238:                val close=finiteNumber(row.optDouble(4))
