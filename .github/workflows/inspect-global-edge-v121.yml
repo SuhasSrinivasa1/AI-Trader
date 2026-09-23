@@ -1,0 +1,82 @@
+name: Inspect Global Edge v1.2.1 Runtime Source
+
+on:
+  push:
+    paths:
+      - '.github/workflows/inspect-global-edge-v121.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconstruct v1.2.1 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp fresh-global-edge/v103/reconstruct_v103.sh /tmp/reconstruct_v103.sh
+          sed -i '/^grep -q /d' /tmp/reconstruct_v103.sh
+          bash /tmp/reconstruct_v103.sh
+          SRC=/tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source
+
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v103/upgrade_v103_entry_ui.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v104/upgrade_v104.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v104/fix_v104_notification.py" "$SRC"
+
+          apply_patch_file() {
+            dir="$1"; file="$2"
+            cat "$GITHUB_WORKSPACE/fresh-global-edge/$dir/$file" | tr -d '\r\n ' | base64 -d > /tmp/p.gz
+            gunzip -c /tmp/p.gz > /tmp/p.patch
+            cd "$SRC"
+            patch -p1 --batch < /tmp/p.patch
+          }
+
+          apply_patch_file v110 v104-to-v110.patch.gz.b64
+          apply_patch_file v111 v110-to-v111.patch.gz.b64
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v111/fix_v111_experimental.py" "$SRC"
+          apply_patch_file v112 v111-to-v112.patch.gz.b64
+          apply_patch_file v113 v112-to-v113.patch.gz.b64
+          apply_patch_file v114 v113-to-v114.patch.gz.b64
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v115/upgrade_v115.py" "$SRC"
+          apply_patch_file v116 v115-to-v116.patch.gz.b64
+          apply_patch_file v117 v116-to-v117.patch.gz.b64
+          apply_patch_file v118 v117-to-v118.patch.gz.b64
+          apply_patch_file v119 v118-to-v119.patch.gz.b64
+          apply_patch_file v120 v119-to-v120.patch.gz.b64
+
+          cd "$SRC"
+          cat \
+            "$GITHUB_WORKSPACE/fresh-global-edge/v121/patch.part00" \
+            "$GITHUB_WORKSPACE/fresh-global-edge/v121/patch.part01" \
+            "$GITHUB_WORKSPACE/fresh-global-edge/v121/patch.part02" \
+            "$GITHUB_WORKSPACE/fresh-global-edge/v121/patch.part03" \
+            "$GITHUB_WORKSPACE/fresh-global-edge/v121/patch.part04" \
+            "$GITHUB_WORKSPACE/fresh-global-edge/v121/patch.part05" \
+            | tr -d '\r\n ' | base64 -d > /tmp/v120-to-v121.patch.gz
+          gunzip -c /tmp/v120-to-v121.patch.gz > /tmp/v120-to-v121.patch
+          patch -p1 --batch < /tmp/v120-to-v121.patch
+
+          OUT="$GITHUB_WORKSPACE/fresh-global-edge/v121/inspection"
+          rm -rf "$OUT"
+          mkdir -p "$OUT/source"
+
+          find app/src/main/java -type f | sort > "$OUT/file-list.txt"
+          grep -RniE 'NaN|Infinity|scheduler|WorkManager|PeriodicWork|closed|closeCall|reconcile|DONE|CLOSED|trade ledger|call ledger|strategy' app/src/main/java > "$OUT/matches.txt" || true
+
+          grep -RIlE 'NaN|Infinity|scheduler|WorkManager|PeriodicWork|closed|closeCall|reconcile|DONE|CLOSED|trade ledger|call ledger|strategy' app/src/main/java \
+            | while IFS= read -r f; do
+                mkdir -p "$OUT/source/$(dirname "$f")"
+                cp "$f" "$OUT/source/$f"
+              done
+
+          git -C "$GITHUB_WORKSPACE" config user.name github-actions[bot]
+          git -C "$GITHUB_WORKSPACE" config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git -C "$GITHUB_WORKSPACE" add fresh-global-edge/v121/inspection
+          git -C "$GITHUB_WORKSPACE" commit -m 'Publish v1.2.1 runtime inspection [skip ci]'
+          git -C "$GITHUB_WORKSPACE" push
