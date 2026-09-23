@@ -78,7 +78,14 @@ jobs:
           gunzip -c /tmp/v119-to-v120.patch.gz > /tmp/v119-to-v120.patch
           patch -p1 --batch < /tmp/v119-to-v120.patch
 
-          cat "$GITHUB_WORKSPACE/fresh-global-edge/v121/v120-to-v121.patch.gz.b64" | tr -d '\r\n ' | base64 -d > /tmp/v120-to-v121.patch.gz
+          cat \
+            "$GITHUB_WORKSPACE/fresh-global-edge/v121/patch.part00" \
+            "$GITHUB_WORKSPACE/fresh-global-edge/v121/patch.part01" \
+            "$GITHUB_WORKSPACE/fresh-global-edge/v121/patch.part02" \
+            "$GITHUB_WORKSPACE/fresh-global-edge/v121/patch.part03" \
+            "$GITHUB_WORKSPACE/fresh-global-edge/v121/patch.part04" \
+            "$GITHUB_WORKSPACE/fresh-global-edge/v121/patch.part05" \
+            | tr -d '\r\n ' | base64 -d > /tmp/v120-to-v121.patch.gz
           gunzip -c /tmp/v120-to-v121.patch.gz > /tmp/v120-to-v121.patch
           patch -p1 --batch < /tmp/v120-to-v121.patch
 
