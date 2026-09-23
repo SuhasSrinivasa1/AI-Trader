@@ -222,7 +222,7 @@ p = replace_class_method(
     """    private fun updateShadowLearning(record:TradeAutopsyRecord){
         val root=runCatching{JSONObject(prefs.getString("shadow_strategy_stats_v120","{}")?:"{}")}.getOrElse{JSONObject()}
         for(x in record.shadowResults){
-            val key="\${record.engineLabel}|\${record.regime.name}|\${x.strategyId}"
+            val key="${record.engineLabel}|${record.regime.name}|${x.strategyId}"
             val j=root.optJSONObject(key)?:JSONObject()
             val safeReturn=finite(x.returnPct)
             j.put("strategyName",x.strategyName).put("observations",j.optInt("observations").coerceAtLeast(0)+1)
@@ -273,7 +273,7 @@ u = replace_class_method(
             val opened=Instant.ofEpochMilli(call.openedAt).atZone(ist)
             val startZ=if(call.bucket==TradeCallBucket.LIVE&&opened.toLocalDate()==targetDate)opened else targetDate.atTime(9,15).atZone(ist)
             val endZ=if(today==targetDate&&now.isBefore(sessionEnd))now.plusMinutes(1) else sessionEnd
-            val cacheKey="\${call.symbol}|$targetDate|\${startZ.toLocalTime()}|\${endZ.toLocalTime()}"
+            val cacheKey="${call.symbol}|$targetDate|${startZ.toLocalTime()}|${endZ.toLocalTime()}"
             val candles=if(candleCache.containsKey(cacheKey))candleCache[cacheKey] else runCatching{
                 groww.getHistoricalCandles(token,call.symbol,startZ.format(dateTimeFmt),endZ.format(dateTimeFmt),"5minute")
             }.getOrNull().also{candleCache[cacheKey]=it}
@@ -342,7 +342,7 @@ u = replace_class_method(
 u = replace_class_method(
     u,
     r"suspend fun closeExpiredStrategyCalls\(\):Int\{",
-    r"suspend fun runPostTradeAutopsies\(",
+    r"suspend fun scanTradingStrategies\(",
     """    suspend fun closeExpiredStrategyCalls():Int{
         val now=ZonedDateTime.now(ist)
         if(now.toLocalTime()<LocalTime.of(15,30)&&marketSessionInfo(now).isOpen)return 0
@@ -414,7 +414,7 @@ u = replace_class_method(
         prefs.saveStrategyLedger(surviving,closed)
         learningUpdates.forEach{(setup,ret,win)->
             runCatching{prefs.updateStrategyResult(setup.strategyId,setup.strategyName,ret,win)}
-                .onFailure{DiagnosticLog.log(appContext,"STRATEGY","Learning update failed after durable close for \${setup.symbol}",it)}
+                .onFailure{DiagnosticLog.log(appContext,"STRATEGY","Learning update failed after durable close for ${setup.symbol}",it)}
         }
         if(changed>0)DiagnosticLog.log(appContext,"STRATEGY","closed $changed expired intraday calls with WIN/LOSS")
         return changed
@@ -468,7 +468,7 @@ scan = must_replace(
     """        prefs.saveStrategyLedger(surviving,closed)
         durableLearningUpdates.forEach{(setup,ret,win)->
             runCatching{prefs.updateStrategyResult(setup.strategyId,setup.strategyName,ret,win)}
-                .onFailure{DiagnosticLog.log(appContext,"STRATEGY","Learning update failed after durable close for \${setup.symbol}",it)}
+                .onFailure{DiagnosticLog.log(appContext,"STRATEGY","Learning update failed after durable close for ${setup.symbol}",it)}
         }
         prefs.pruneMemory(settings.memoryRetentionDays.coerceAtLeast(30))""",
     "strategy persist before learning",
