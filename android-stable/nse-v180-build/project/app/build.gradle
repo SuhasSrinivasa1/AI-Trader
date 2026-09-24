@@ -1,0 +1,27 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'com.suhas.nsedeliverymomentum'
+    compileSdk 36
+    defaultConfig {
+        applicationId 'com.suhas.nsedeliverymomentum'
+        minSdk 26
+        targetSdk 36
+        versionCode 180
+        versionName '1.8.0'
+        testInstrumentationRunner 'android.app.InstrumentationTestRunner'
+    }
+    buildTypes {
+        release { minifyEnabled false }
+        debug { minifyEnabled false }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    lint { abortOnError true; warningsAsErrors false }
+}
+
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+}
