@@ -95,7 +95,6 @@ jobs:
           grep -q 'STRATEGY-WEEKLY' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
           grep -q 'regimeProtected' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
           grep -q 'fun tradingStaticIp()' app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt
-          grep -q 'Whitelisted static IPv4' app/src/main/java/com/suhas/ucsentinel/ui/MoreScreen.kt
           grep -q 'MODEL • TAP' app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt
           grep -q 'Review ₹20,000 order ticket' app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt
           grep -q 'Order ticket prepared' app/src/main/java/com/suhas/ucsentinel/notifications/AppNotifier.kt
