@@ -98,7 +98,7 @@ block=r'''    suspend fun placeMarketOrderDetailed(
         )
     }
 
-    suspend fun getTradesForOrder(accessToken:String,growwOrderId:String):List<BrokerFill>=withContext(Dispatchers.IO){
+    suspend fun getTradesForOrder(accessToken:String,growwOrderId:String):List<BrokerFill> = withContext(Dispatchers.IO){
         val url=HttpUrl.Builder().scheme("https").host("api.groww.in")
             .addPathSegments("v1/order/trades/$growwOrderId")
             .addQueryParameter("segment","CASH").addQueryParameter("page","0").addQueryParameter("page_size","50").build()
@@ -116,7 +116,7 @@ block=r'''    suspend fun placeMarketOrderDetailed(
         }
     }
 
-    suspend fun getHoldings(accessToken:String):List<BrokerHolding>=withContext(Dispatchers.IO){
+    suspend fun getHoldings(accessToken:String):List<BrokerHolding> = withContext(Dispatchers.IO){
         val url=HttpUrl.Builder().scheme("https").host("api.groww.in").addPathSegments("v1/holdings/user").build()
         val raw=executeWithRetry(authedGet(url,accessToken),authLimiter,"Holdings",maxAttempts=2)
         val a=JSONObject(raw).optJSONObject("payload")?.optJSONArray("holdings")?:JSONArray()
@@ -129,7 +129,7 @@ block=r'''    suspend fun placeMarketOrderDetailed(
         }
     }
 
-    suspend fun getCashPositions(accessToken:String):List<BrokerPosition>=withContext(Dispatchers.IO){
+    suspend fun getCashPositions(accessToken:String):List<BrokerPosition> = withContext(Dispatchers.IO){
         val url=HttpUrl.Builder().scheme("https").host("api.groww.in").addPathSegments("v1/positions/user").addQueryParameter("segment","CASH").build()
         val raw=executeWithRetry(authedGet(url,accessToken),authLimiter,"Positions",maxAttempts=2)
         val a=JSONObject(raw).optJSONObject("payload")?.optJSONArray("positions")?:JSONArray()
