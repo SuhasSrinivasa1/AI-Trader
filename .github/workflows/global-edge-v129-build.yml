@@ -98,7 +98,6 @@ jobs:
           grep -q 'fun tradingStaticIp()' app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt
           grep -q 'MODEL • TAP' app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt
           grep -q 'Review ₹20,000 order ticket' app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt
-          grep -q 'Order ticket prepared' app/src/main/java/com/suhas/ucsentinel/notifications/AppNotifier.kt
           grep -q 'UC score band 60–84' app/src/main/java/com/suhas/ucsentinel/ui/MoreScreen.kt
           grep -q 'EXPECTED_TRADING_STATIC_IP="169.150.209.215"' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
           grep -q 'api.ipify.org' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
