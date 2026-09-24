@@ -193,7 +193,7 @@ old='''                Text("Global Edge does not transmit the securities order.
 '''
 new='''                Text("Manual order • NSE CASH MARKET. Nothing is sent until you tap PLACE ORDER. The displayed stop and target are strategy references; this version submits the entry order only.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             }},
-            dismissButton={TextButton(onClick={if(!submitting){{showOrder=false}}}){Text("Cancel")}},
+            dismissButton={TextButton(onClick={if(!submitting){showOrder=false}},enabled=!submitting){Text("Cancel")}},
             confirmButton={
                 Button(onClick={
                     if(qty<=0){
