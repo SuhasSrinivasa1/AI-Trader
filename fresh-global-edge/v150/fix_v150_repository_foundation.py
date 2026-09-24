@@ -164,14 +164,18 @@ helper=r'''    private fun governedStrategyPerformances(defs:List<TradingStrateg
             if(r !in due)return@map r
             val h=Instant.ofEpochMilli(r.scheduledHorizonAt).atZone(ist)
             val from=h.minusMinutes(5).format(dateTimeFmt);val to=h.plusMinutes(15).format(dateTimeFmt)
-            val candles=runCatching{groww.getHistoricalCandles(token,r.symbol,from,to,"5minute")}.getOrNull()
-            val bar=candles?.sortedBy{it.epochSeconds}?.firstOrNull{it.epochSeconds*1000L>=r.scheduledHorizonAt}
-            if(bar==null){
+            val candles=runCatching{groww.getHistoricalCandles(token,r.symbol,from,to,"5minute")}.getOrNull()?.sortedBy{it.epochSeconds}
+            // Historical 5-minute bars are used at the scheduled horizon itself, never the price seen on a later restart.
+            // If a bar begins exactly at/after the horizon, its OPEN is the first observable horizon price.
+            // Otherwise the preceding bar CLOSE is the closest completed price at the horizon.
+            val after=candles?.firstOrNull{it.epochSeconds*1000L>=r.scheduledHorizonAt}
+            val before=candles?.lastOrNull{it.epochSeconds*1000L<r.scheduledHorizonAt}
+            val px=after?.open?.takeIf{it.isFinite()&&it>0.0}?:before?.close?.takeIf{it.isFinite()&&it>0.0}
+            if(px==null){
                 val sessionClosed=ZonedDateTime.now(ist).isAfter(NseTradingCalendar.sessionClose(h.toLocalDate()).plusMinutes(20))
                 if(sessionClosed){changed++;r.copy(status=ChallengerShadowStatus.UNRESOLVED_DATA,resolvedAt=System.currentTimeMillis())}else r
             }else{
-                val px=bar.close
-                val ret=if(r.entryPrice<=0.0||px<=0.0)0.0 else if(r.direction==TradeDirection.LONG)(px/r.entryPrice-1.0)*100.0 else (r.entryPrice/px-1.0)*100.0
+                val ret=if(r.entryPrice<=0.0)0.0 else if(r.direction==TradeDirection.LONG)(px/r.entryPrice-1.0)*100.0 else (r.entryPrice/px-1.0)*100.0
                 changed++
                 r.copy(status=if(ret>0.0)ChallengerShadowStatus.WIN else ChallengerShadowStatus.LOSS,resolvedAt=System.currentTimeMillis(),horizonPrice=px,returnPct=ret)
             }
