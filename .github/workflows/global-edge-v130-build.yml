@@ -1,0 +1,202 @@
+name: Global Edge AI Trader v1.3.0 Manual Groww Order Build
+
+on:
+  push:
+    paths:
+      - '.github/workflows/global-edge-v130-build.yml'
+      - 'fresh-global-edge/v129/fix_v129.py'
+      - 'fresh-global-edge/v130/fix_v130.py'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconstruct v1.2.1 and apply through v1.3.0 manual-order update
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp fresh-global-edge/v103/reconstruct_v103.sh /tmp/reconstruct_v103.sh
+          sed -i '/^grep -q /d' /tmp/reconstruct_v103.sh
+          bash /tmp/reconstruct_v103.sh
+          SRC=/tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source
+
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v103/upgrade_v103_entry_ui.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v104/upgrade_v104.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v104/fix_v104_notification.py" "$SRC"
+
+          apply_patch_file() {
+            dir="$1"; file="$2"
+            cat "$GITHUB_WORKSPACE/fresh-global-edge/$dir/$file" | tr -d '\r\n ' | base64 -d > /tmp/p.gz
+            gunzip -c /tmp/p.gz > /tmp/p.patch
+            cd "$SRC"
+            patch -p1 --batch < /tmp/p.patch
+          }
+          apply_patch_file v110 v104-to-v110.patch.gz.b64
+          apply_patch_file v111 v110-to-v111.patch.gz.b64
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v111/fix_v111_experimental.py" "$SRC"
+          apply_patch_file v112 v111-to-v112.patch.gz.b64
+          apply_patch_file v113 v112-to-v113.patch.gz.b64
+          apply_patch_file v114 v113-to-v114.patch.gz.b64
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v115/upgrade_v115.py" "$SRC"
+          apply_patch_file v116 v115-to-v116.patch.gz.b64
+          apply_patch_file v117 v116-to-v117.patch.gz.b64
+          apply_patch_file v118 v117-to-v118.patch.gz.b64
+          apply_patch_file v119 v118-to-v119.patch.gz.b64
+          apply_patch_file v120 v119-to-v120.patch.gz.b64
+
+          cd "$SRC"
+          cat \
+            "$GITHUB_WORKSPACE/fresh-global-edge/v121/patch.part00" \
+            "$GITHUB_WORKSPACE/fresh-global-edge/v121/patch.part01" \
+            "$GITHUB_WORKSPACE/fresh-global-edge/v121/patch.part02" \
+            "$GITHUB_WORKSPACE/fresh-global-edge/v121/patch.part03" \
+            "$GITHUB_WORKSPACE/fresh-global-edge/v121/patch.part04" \
+            "$GITHUB_WORKSPACE/fresh-global-edge/v121/patch.part05" \
+            | tr -d '\r\n ' | base64 -d > /tmp/v121.gz
+          gunzip -c /tmp/v121.gz > /tmp/v121.patch
+          patch -p1 --batch < /tmp/v121.patch
+
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v122/fix_v122.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v123/fix_v123.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v124/fix_v124.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v125/fix_v125.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v126/fix_v126.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v127/fix_v127.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v128/fix_v128.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v129/fix_v129.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v130/fix_v130.py" "$SRC"
+
+          grep -q 'versionCode = 130' app/build.gradle.kts
+          grep -q 'versionName = "1.3.0"' app/build.gradle.kts
+          grep -q 'finiteNumber(value:Double' app/src/main/java/com/suhas/ucsentinel/data/remote/GrowwClient.kt
+          grep -q 'Prediction horizon expired' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'lastForegroundGovernanceAt' app/src/main/java/com/suhas/ucsentinel/ui/MainViewModel.kt
+          grep -q 'PRE_UC_PREDICTOR_V3_2026_09' app/src/main/java/com/suhas/ucsentinel/domain/engine/SignalEngine.kt
+          grep -q 'add("PRE_UC")' app/src/main/java/com/suhas/ucsentinel/domain/engine/ScannerEngine.kt
+          grep -q 'startsWith("NEXT SESSION •")' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'prefs.clearStrategyError();summary' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'No qualified 3 PM list yet' app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt
+          grep -q 'writeEndOfDayBundle' app/src/main/java/com/suhas/ucsentinel/diagnostics/DiagnosticLog.kt
+          grep -q 'endOfDayDiagnosticReport' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'Export full EOD diagnostic ZIP' app/src/main/java/com/suhas/ucsentinel/ui/MoreScreen.kt
+          grep -q 'LEARNING-WORKER' app/src/main/java/com/suhas/ucsentinel/worker/LearningWorker.kt
+          grep -q 'ScanWorker start' app/src/main/java/com/suhas/ucsentinel/worker/ScanWorker.kt
+          grep -q 'floor = 60.0, ceiling = 84.0' app/src/main/java/com/suhas/ucsentinel/domain/engine/AdaptiveRangeEngine.kt
+          grep -q 'weekly slate' app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt
+          ! grep -q 'PRESSURE("Pressure"' app/src/main/java/com/suhas/ucsentinel/ui/AppNavigation.kt
+          grep -q 'STRATEGY-WEEKLY' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'regimeProtected' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'fun tradingStaticIp()' app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt
+          grep -q 'MODEL • TAP' app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt
+          grep -q 'Review ₹20,000 order ticket' app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt
+          grep -q 'UC score band 60–84' app/src/main/java/com/suhas/ucsentinel/ui/MoreScreen.kt
+          grep -q 'EXPECTED_TRADING_STATIC_IP="169.150.209.215"' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'api.ipify.org' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'GREEN • STATIC IP MATCH' app/src/main/java/com/suhas/ucsentinel/ui/MoreScreen.kt
+          grep -q 'RED • STATIC IP MISMATCH' app/src/main/java/com/suhas/ucsentinel/ui/MoreScreen.kt
+          grep -q 'BEST MODEL-SCORE BAND' app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt
+          grep -q 'Dynamic 5-point band from closed strategy calls' app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt
+          grep -q 'com.nextbillion.groww' app/src/main/AndroidManifest.xml
+          grep -q 'Manual order submitted' app/src/main/java/com/suhas/ucsentinel/notifications/AppNotifier.kt
+          grep -q 'PLACE ORDER' app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt
+          grep -q 'placeManualOrder' app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt
+          grep -q 'placeMarketOrder' app/src/main/java/com/suhas/ucsentinel/data/remote/GrowwClient.kt
+          grep -q 'placeManualMarketOrder' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          ! grep -q 'getLaunchIntentForPackage("com.nextbillion.groww")' app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt
+          echo 'v1.3.0 source verification passed'
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Unit tests and release APK
+        working-directory: /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source
+        run: gradle --no-daemon --console=plain clean testDebugUnitTest assembleRelease
+
+      - name: Sign and verify APK
+        working-directory: /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          UNSIGNED=$(find app/build/outputs/apk/release -maxdepth 1 -type f -name '*release*.apk' | head -n 1)
+          test -n "$UNSIGNED" && test -s "$UNSIGNED"
+
+          KEYSTORE=/tmp/global-edge-v130-release.keystore
+          PASS=$(openssl rand -hex 16)
+          keytool -genkeypair -v -keystore "$KEYSTORE" -storepass "$PASS" -keypass "$PASS" -alias globaledge -keyalg RSA -keysize 2048 -validity 10000 -dname 'CN=Global Edge AI Trader, O=Private Research, C=IN'
+
+          OUT=out/Global-Edge-AI-Trader-v1.3.0.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KEYSTORE" --ks-pass pass:"$PASS" --key-pass pass:"$PASS" --ks-key-alias globaledge --out "$OUT" "$UNSIGNED"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$OUT" | tee out/APK-SIGNATURE-VERIFY.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$OUT" | tee out/APK-BADGING.txt
+          grep -q "package: name='com.suhas.globaledgeai'" out/APK-BADGING.txt
+          grep -q "versionCode='130'" out/APK-BADGING.txt
+          grep -q "versionName='1.3.0'" out/APK-BADGING.txt
+          sha256sum "$OUT" | tee out/SHA256.txt
+          {
+            echo "alias=globaledge"
+            echo "store_password=$PASS"
+            echo "key_password=$PASS"
+            echo "certificate_note=Keep this backup for in-place updates to v1.3.0 and later."
+          } > out/SIGNING-INFO.txt
+          cp "$KEYSTORE" out/global-edge-v1.3.0.keystore
+          (cd out && zip -q Global-Edge-AI-Trader-v1.3.0-SIGNING-BACKUP.zip global-edge-v1.3.0.keystore SIGNING-INFO.txt)
+          { echo "run_id=$GITHUB_RUN_ID"; echo "build=SUCCESS"; } > out/BUILD-STATUS.txt
+
+      - name: Upload signed build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Global-Edge-AI-Trader-v1.3.0
+          retention-days: 30
+          if-no-files-found: error
+          path: |
+            /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source/out/Global-Edge-AI-Trader-v1.3.0.apk
+            /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source/out/APK-SIGNATURE-VERIFY.txt
+            /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source/out/APK-BADGING.txt
+            /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source/out/SHA256.txt
+            /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source/out/BUILD-STATUS.txt
+            /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source/out/Global-Edge-AI-Trader-v1.3.0-SIGNING-BACKUP.zip
+
+      - name: Publish signed APK for direct download
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC=/tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source/out
+          DEST=fresh-global-edge/v130/release
+          mkdir -p "$DEST"
+          cp "$SRC/Global-Edge-AI-Trader-v1.3.0.apk" "$DEST/"
+          cp "$SRC/APK-SIGNATURE-VERIFY.txt" "$DEST/"
+          cp "$SRC/APK-BADGING.txt" "$DEST/"
+          cp "$SRC/SHA256.txt" "$DEST/"
+          cp "$SRC/BUILD-STATUS.txt" "$DEST/"
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add "$DEST"
+          git commit -m 'Publish Global Edge AI Trader v1.3.0 APK [skip ci]'
+          git push
