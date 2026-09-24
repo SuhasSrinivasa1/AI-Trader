@@ -1,0 +1,17 @@
+Verifies
+Verified using v1 scheme (JAR signing): false
+Verified using v2 scheme (APK Signature Scheme v2): false
+Verified using v3 scheme (APK Signature Scheme v3): true
+Verified using v3.1 scheme (APK Signature Scheme v3.1): false
+Verified using v4 scheme (APK Signature Scheme v4): false
+Verified for SourceStamp: false
+Number of signers: 1
+Signer #1 certificate DN: CN=Global Edge AI Trader, O=Private Research, C=IN
+Signer #1 certificate SHA-256 digest: 84616d2b8e220c71ebb2c1b7bf9aab3d37b8a8c3af7475e42f96e06c0acea0b7
+Signer #1 certificate SHA-1 digest: 081b5e666ed5553a15c9d1375c21740f69d99981
+Signer #1 certificate MD5 digest: 56c3491d9cca107f678b5b3e4f3ff94c
+Signer #1 key algorithm: RSA
+Signer #1 key size (bits): 2048
+Signer #1 public key SHA-256 digest: 19a18cfb2b4400b953360e4c67162ed0c4660d5705968f97acaa9157e0672a3e
+Signer #1 public key SHA-1 digest: 3d1d6946ba4211b0222b903e3872da846e1b0261
+Signer #1 public key MD5 digest: 579ae0774cca64a50a5281a22603d8de
