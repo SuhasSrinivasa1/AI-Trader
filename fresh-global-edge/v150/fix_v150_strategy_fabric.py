@@ -43,7 +43,7 @@ one(
 ''',"macro risk setup")
 
 start=s.index("        val rejectedBefore=prefs.loadRejectedShadows(2500).size")
-end=s.index("\n        // Same-side rules compete first.",start)
+end=s.index("\n        val combined=rawSetups.groupBy",start)
 new_block=r'''        val rejectedBefore=prefs.loadRejectedShadows(2500).size
         val challengerBefore=fabricStore.challengerShadows(2500).size
         val rawSetups=mutableListOf<Pair<StrategySetup,Quote>>();var enriched=0;var quoteRejected=0;var historyFailed=0;var candleShort=0;var rulesMatched=0
@@ -143,12 +143,10 @@ new_block=r'''        val rejectedBefore=prefs.loadRejectedShadows(2500).size
 s=s[:start]+new_block+s[end:]
 
 # Every new live strategy gets a permanent decision snapshot.
-needle='''                surviving+=StrategyRecommendation(id,setup,System.currentTimeMillis(),System.currentTimeMillis(),q.lastPrice,
-                    tradedValue=q.volume*q.lastPrice,volume=q.volume,spreadPct=sp)
+needle='''                surviving+=StrategyRecommendation(id,setup,System.currentTimeMillis(),System.currentTimeMillis(),q.lastPrice,tradedValue=q.volume*q.lastPrice,volume=q.volume,spreadPct=sp)
                 existingKeys+=key;newlyOpened+=setup
 '''
-replacement='''                surviving+=StrategyRecommendation(id,setup,System.currentTimeMillis(),System.currentTimeMillis(),q.lastPrice,
-                    tradedValue=q.volume*q.lastPrice,volume=q.volume,spreadPct=sp)
+replacement='''                surviving+=StrategyRecommendation(id,setup,System.currentTimeMillis(),System.currentTimeMillis(),q.lastPrice,tradedValue=q.volume*q.lastPrice,volume=q.volume,spreadPct=sp)
                 saveDecision(setup.symbol,"STRATEGY",setup.strategyId,setup.direction.name,setup.score,DecisionAction.LIVE,
                     "ACTIVE/CHAMPION strategy passed Evidence Fabric and hard gates",listOf("EXECUTION_QUALITY_PASS","HANDBOOK_PASS","SECTOR_GATE_PASS"))
                 existingKeys+=key;newlyOpened+=setup
@@ -156,10 +154,9 @@ replacement='''                surviving+=StrategyRecommendation(id,setup,System
 one(needle,replacement,"strategy live decision")
 
 # Governed performances + Challenger counters in summary.
-one("        val perfs=prefs.strategyPerformances(bundle.strategies,settings)\n",
-    "        val perfs=governedStrategyPerformances(bundle.strategies,settings)\n","governed summary perfs")
-old='''        val champions=perfs.count{it.status==StrategyStatus.CHAMPION}
-        val suspended=perfs.count{it.status==StrategyStatus.SUSPENDED}
+one("        val perfs=prefs.strategyPerformances(bundle.strategies,settings);val insights=prefs.championResearchInsights(bundle.strategies,6)\n",
+    "        val perfs=governedStrategyPerformances(bundle.strategies,settings);val insights=prefs.championResearchInsights(bundle.strategies,6)\n","governed summary perfs")
+old='''        val champions=perfs.count{it.status==StrategyStatus.CHAMPION};val suspended=perfs.count{it.status==StrategyStatus.SUSPENDED}
         val summary=StrategyTournamentSummary(System.currentTimeMillis(),cash.size,active.size,enriched,top.map{it.first},active,perfs,bundle.version,
             "${active.size} active • HB 100/50/50 • ${selected.size} symbols • ${enriched} enriched • ${quoteRejected} liquidity rejects • ${historyFailed} history failures • ${candleShort} short histories • ${rulesMatched} rule matches • ${surviving.size} LIVE • ${newlyOpened.size} new • CHAMP ${champions} • SUSP ${suspended} • rejected+journal ${rejectedAdded}",
             insights,rejectedAfter,HandbookSynergyEngine.VERSION)
@@ -174,6 +171,7 @@ new='''        val champions=perfs.count{it.status==StrategyStatus.CHAMPION}
             insights,rejectedAfter,HandbookSynergyEngine.VERSION)
 '''
 one(old,new,"strategy summary challenger counts")
+
 
 p.write_text(s,encoding="utf-8")
 print("Strategy Evidence Fabric, sector intelligence and true Challenger lane applied")
