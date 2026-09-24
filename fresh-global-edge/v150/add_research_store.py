@@ -47,7 +47,7 @@ class ResearchFabricStore(context:Context){
         prefs.edit().putString("point_in_time_evidence_v150",a.toString()).apply()
     }
     fun evidenceAsOf(symbol:String,timestamp:Long):List<PointInTimeEvidence> =
-        evidence(3000).filter{(it.symbol.isBlank()||it.symbol.equals(symbol,true))&&it.observedAt<=timestamp&&it.effectiveAt<=timestamp}
+        evidence(3000).filter{(it.symbol.isBlank()||it.symbol.equals(symbol,true))&&it.observedAt<=timestamp} // availability is observedAt; effectiveAt may be a known future event date
 
     private fun macroToJson(x:MacroRiskEvent)=JSONObject().put("id",x.id).put("title",x.title).put("startDateIso",x.startDateIso).put("endDateIso",x.endDateIso)
         .put("severity",x.severity).put("source",x.source).put("sourceUrl",x.sourceUrl).put("observedAt",x.observedAt)
@@ -99,7 +99,7 @@ class ResearchFabricStore(context:Context){
     }
     fun appendChallengerShadow(x:ChallengerShadowRecord){
         val all=challengerShadows(2500).toMutableList()
-        val duplicate=all.any{it.status==ChallengerShadowStatus.OPEN&&it.strategyId==x.strategyId&&it.symbol==x.symbol&&it.direction==x.direction&&kotlin.math.abs(x.capturedAt-it.capturedAt)<20L*60_000L}
+        val duplicate=all.any{it.status==ChallengerShadowStatus.OPEN&&it.strategyId==x.strategyId&&it.symbol==x.symbol&&it.direction==x.direction&&kotlin.math.abs(x.capturedAt-it.capturedAt)<60L*60_000L}
         if(!duplicate){all+=x;saveChallengerShadows(all)}
     }
 
