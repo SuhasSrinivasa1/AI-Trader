@@ -35,21 +35,14 @@ one(
             runCatching{repo.reconcileBrokerOrders()}
 ''',"foreground reconciliation")
 
-one(
-'''            strategyLive=repo.strategyLiveRecommendations(),strategyClosed=repo.strategyClosedRecommendations(),globalClosed=repo.globalLeadClosedRecommendations(),tradeCalls=repo.tradeCalls(),tradeAutopsies=repo.tradeAutopsies())
-''',
-'''            strategyLive=repo.strategyLiveRecommendations(),strategyClosed=repo.strategyClosedRecommendations(),globalClosed=repo.globalLeadClosedRecommendations(),tradeCalls=repo.tradeCalls(),tradeAutopsies=repo.tradeAutopsies(),
+state_anchor='''            strategyLive=repo.strategyLiveRecommendations(),strategyClosed=repo.strategyClosedRecommendations(),globalClosed=repo.globalLeadClosedRecommendations(),tradeCalls=repo.tradeCalls(),tradeAutopsies=repo.tradeAutopsies())
+'''
+state_replacement='''            strategyLive=repo.strategyLiveRecommendations(),strategyClosed=repo.strategyClosedRecommendations(),globalClosed=repo.globalLeadClosedRecommendations(),tradeCalls=repo.tradeCalls(),tradeAutopsies=repo.tradeAutopsies(),
             evidenceFabric=repo.evidenceFabricSummary(),pointInTimeEvidence=repo.pointInTimeEvidence(),challengerShadows=repo.challengerShadows(),
             brokerOrders=repo.brokerOrders(),brokerPortfolio=repo.brokerPortfolio(),decisionSnapshots=repo.decisionSnapshots())
-''',"initial research state")
-
-one(
-'''            strategyLive=repo.strategyLiveRecommendations(),strategyClosed=repo.strategyClosedRecommendations(),globalClosed=repo.globalLeadClosedRecommendations(),tradeCalls=repo.tradeCalls(),tradeAutopsies=repo.tradeAutopsies())
-''',
-'''            strategyLive=repo.strategyLiveRecommendations(),strategyClosed=repo.strategyClosedRecommendations(),globalClosed=repo.globalLeadClosedRecommendations(),tradeCalls=repo.tradeCalls(),tradeAutopsies=repo.tradeAutopsies(),
-            evidenceFabric=repo.evidenceFabricSummary(),pointInTimeEvidence=repo.pointInTimeEvidence(),challengerShadows=repo.challengerShadows(),
-            brokerOrders=repo.brokerOrders(),brokerPortfolio=repo.brokerPortfolio(),decisionSnapshots=repo.decisionSnapshots())
-''',"reliability research state")
+'''
+if s.count(state_anchor)!=2: raise SystemExit(f"research state anchors: expected 2 found {s.count(state_anchor)}")
+s=s.replace(state_anchor,state_replacement,2)
 
 old='''    fun placeManualOrder(symbol:String,side:String,product:String,quantity:Int,onResult:(Boolean,String)->Unit)=viewModelScope.launch{
         _state.value=_state.value.copy(status="Submitting manual $side $quantity $symbol ($product)…",error=null)
