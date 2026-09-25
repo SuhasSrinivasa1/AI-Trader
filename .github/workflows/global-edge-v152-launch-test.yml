@@ -36,3 +36,5 @@ jobs:
             adb logcat -d -v threadtime | grep -E -A 100 -B 20 'FATAL EXCEPTION|AndroidRuntime|com.suhas.globaledgeai' | tail -n 600 || true
             test -n "$PID"
             adb shell dumpsys activity activities | grep -q 'mResumedActivity.*com.suhas.globaledgeai'
+
+# rerun-after-v152-publish
