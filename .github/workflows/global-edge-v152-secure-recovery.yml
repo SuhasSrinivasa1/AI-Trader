@@ -1,0 +1,136 @@
+name: Global Edge AI Trader v1.5.2 Secure Alias Recovery
+
+on:
+  push:
+    paths:
+      - '.github/workflows/global-edge-v152-secure-recovery.yml'
+      - 'fresh-global-edge/v152/fix_v152_secure_store_rotation.py'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare v1.5.1 source and apply v1.5.2 secure alias rotation
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/v152
+          unzip -q fresh-global-edge/v151/release-fixed/Global-Edge-AI-Trader-v1.5.1-source.zip -d /tmp/v152
+          SRC=/tmp/v152/Global-Edge-AI-Trader-v1.5.0-source
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v152/fix_v152_secure_store_rotation.py" "$SRC"
+          cd "$SRC"
+          grep -q 'versionCode = 152' app/build.gradle.kts
+          grep -q 'versionName = "1.5.2"' app/build.gradle.kts
+          grep -q 'RECOVERY_ALIAS_V2' app/src/main/java/com/suhas/ucsentinel/data/local/SecureCredentialStore.kt
+          grep -q 'RECOVERY_ALIAS_V3' app/src/main/java/com/suhas/ucsentinel/data/local/SecureCredentialStore.kt
+          grep -q 'App will start without credentials instead of crashing' app/src/main/java/com/suhas/ucsentinel/data/local/SecureCredentialStore.kt
+          echo "v1.5.2 secure alias source verification passed"
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Unit tests and release APK
+        working-directory: /tmp/v152/Global-Edge-AI-Trader-v1.5.0-source
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p out
+          gradle --no-daemon --console=plain clean testDebugUnitTest assembleRelease 2>&1 | tee out/GRADLE-BUILD-TEST.log
+
+      - name: Recover preserved signing material
+        uses: actions/download-artifact@v4
+        with:
+          name: Global-Edge-AI-Trader-v1.5.0-FINAL
+          repository: SuhasSrinivasa1/AI-Trader
+          run-id: 36146076154
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: /tmp/v150-artifact
+
+      - name: Sign and verify
+        working-directory: /tmp/v152/Global-Edge-AI-Trader-v1.5.0-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out /tmp/signing
+          BACKUP=$(find /tmp/v150-artifact -type f -name 'Global-Edge-AI-Trader-v1.5.0-SIGNING-BACKUP.zip' | head -n1)
+          unzip -q "$BACKUP" -d /tmp/signing
+          KEYSTORE=/tmp/signing/global-edge-v1.5.0.keystore
+          INFO=/tmp/signing/SIGNING-INFO.txt
+          STORE_PASS=$(grep '^store_password=' "$INFO" | cut -d= -f2-)
+          KEY_PASS=$(grep '^key_password=' "$INFO" | cut -d= -f2-)
+          UNSIGNED=$(find app/build/outputs/apk/release -maxdepth 1 -type f -name '*release*.apk' | head -n1)
+          OUT=out/Global-Edge-AI-Trader-v1.5.2.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KEYSTORE" --ks-pass pass:"$STORE_PASS" --key-pass pass:"$KEY_PASS" --ks-key-alias globaledge --out "$OUT" "$UNSIGNED"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$OUT" | tee out/APK-SIGNATURE-VERIFY.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$OUT" | tee out/APK-BADGING.txt
+          grep -q "package: name='com.suhas.globaledgeai'" out/APK-BADGING.txt
+          grep -q "versionCode='152'" out/APK-BADGING.txt
+          grep -q "versionName='1.5.2'" out/APK-BADGING.txt
+          sha256sum "$OUT" | tee out/SHA256.txt
+          echo "build=SUCCESS" > out/BUILD-STATUS.txt
+          echo "fix=fresh Android Keystore alias rotation with no-crash fallback" >> out/BUILD-STATUS.txt
+
+      - name: Package source and logs
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC=/tmp/v152/Global-Edge-AI-Trader-v1.5.0-source
+          cd /tmp/v152
+          zip -qr "$SRC/out/Global-Edge-AI-Trader-v1.5.2-source.zip" Global-Edge-AI-Trader-v1.5.0-source -x '*/.gradle/*' '*/build/*' '*/out/*'
+          cd "$SRC/out"
+          zip -q Global-Edge-AI-Trader-v1.5.2-build-logs.zip APK-SIGNATURE-VERIFY.txt APK-BADGING.txt SHA256.txt BUILD-STATUS.txt GRADLE-BUILD-TEST.log
+
+      - name: Upload final artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Global-Edge-AI-Trader-v1.5.2-SECURE-FINAL
+          retention-days: 90
+          if-no-files-found: error
+          path: |
+            /tmp/v152/Global-Edge-AI-Trader-v1.5.0-source/out/Global-Edge-AI-Trader-v1.5.2.apk
+            /tmp/v152/Global-Edge-AI-Trader-v1.5.0-source/out/Global-Edge-AI-Trader-v1.5.2-source.zip
+            /tmp/v152/Global-Edge-AI-Trader-v1.5.0-source/out/Global-Edge-AI-Trader-v1.5.2-build-logs.zip
+            /tmp/v152/Global-Edge-AI-Trader-v1.5.0-source/out/BUILD-STATUS.txt
+
+      - name: Publish secure v1.5.2
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC=/tmp/v152/Global-Edge-AI-Trader-v1.5.0-source/out
+          DEST=fresh-global-edge/v152/release-secure
+          mkdir -p "$DEST"
+          cp "$SRC/Global-Edge-AI-Trader-v1.5.2.apk" "$DEST/"
+          cp "$SRC/Global-Edge-AI-Trader-v1.5.2-source.zip" "$DEST/"
+          cp "$SRC/Global-Edge-AI-Trader-v1.5.2-build-logs.zip" "$DEST/"
+          cp "$SRC/BUILD-STATUS.txt" "$DEST/"
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add "$DEST"
+          git commit -m 'Publish Global Edge v1.5.2 secure alias recovery [skip ci]'
+          git push
