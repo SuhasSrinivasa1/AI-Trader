@@ -86,7 +86,7 @@ s=s[:start]+'''    fun placeManualOrder(symbol:String,side:String,product:String
     fun runChallengerShadowNow()=viewModelScope.launch{
         _state.value=_state.value.copy(busy=true,status="Running non-executable Challenger shadow scan…",error=null)
         repo.markStrategyScanAttempt()
-        runCatching{repo.scanTradingStrategies({m->_state.value=_state.value.copy(status=m)},challengerOnly=true)}.onSuccess{summary->
+        runCatching{repo.scanTradingStrategies(progress={m->_state.value=_state.value.copy(status=m)},challengerOnly=true)}.onSuccess{summary->
             _state.value=_state.value.copy(busy=false,strategyTournamentSummary=summary,status=summary.message,error=null,
                 challengerShadows=repo.challengerShadows(),decisionSnapshots=repo.decisionSnapshots(),pointInTimeEvidence=repo.pointInTimeEvidence(),evidenceFabric=repo.evidenceFabricSummary())
         }.onFailure{t->repo.markStrategyScanError(t);_state.value=_state.value.copy(busy=false,status="Shadow Run failed",error=t.message)}
