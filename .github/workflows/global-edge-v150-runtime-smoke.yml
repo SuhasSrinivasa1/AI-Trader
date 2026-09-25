@@ -1,5 +1,7 @@
 name: Global Edge v1.5.0 Runtime Smoke
 
+# Final v1.5.0 signed artifact smoke trigger
+
 on:
   push:
     paths:
