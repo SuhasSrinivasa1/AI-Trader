@@ -6,6 +6,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.security.MessageDigest
 import java.time.LocalDate
+import java.time.Instant
+import java.time.ZoneId
 import java.util.Locale
 
 class EvidenceLedgerStore(context:Context){
@@ -112,12 +114,14 @@ class EvidenceLedgerStore(context:Context){
         }.sortedByDescending{it.openedAt}.take(limit)
     }
 
-    data class ShadowStats(val observations:Int,val wins:Int,val winRatePct:Double,val avgReturnPct:Double)
+    data class ShadowStats(val observations:Int,val wins:Int,val winRatePct:Double,val avgReturnPct:Double,val sessions:Int)
 
     fun challengerStats(strategyId:String):ShadowStats{
         val rows=loadChallengers(3000).filter{it.strategyId==strategyId&&it.status in setOf(ChallengerShadowStatus.WIN,ChallengerShadowStatus.LOSS)}
         val wins=rows.count{it.status==ChallengerShadowStatus.WIN}
-        return ShadowStats(rows.size,wins,if(rows.isEmpty())0.0 else wins*100.0/rows.size,if(rows.isEmpty())0.0 else rows.map{it.returnPct}.average())
+        val zone=ZoneId.of("Asia/Kolkata")
+        val sessions=rows.map{Instant.ofEpochMilli(it.openedAt).atZone(zone).toLocalDate()}.distinct().size
+        return ShadowStats(rows.size,wins,if(rows.isEmpty())0.0 else wins*100.0/rows.size,if(rows.isEmpty())0.0 else rows.map{it.returnPct}.average(),sessions)
     }
 
     fun saveBrokerOrder(record:BrokerOrderRecord){
