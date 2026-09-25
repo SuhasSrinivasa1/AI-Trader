@@ -118,17 +118,17 @@ data class DecisionSnapshot(
 )
 
 data class EvidenceFabricSummary(
-    val generatedAt:Long,
-    val pointInTimeEvidenceCount:Int,
-    val fundamentalCount:Int,
-    val analystCount:Int,
-    val earningsEventCount:Int,
-    val sectorMappedCount:Int,
-    val challengerOpen:Int,
-    val challengerResolved:Int,
-    val brokerOrders:Int,
-    val unreconciledBrokerOrders:Int,
-    val decisionSnapshots:Int,
-    val calendarLabel:String,
-    val nextMacroEvent:String
+    val generatedAt:Long=0L,
+    val pointInTimeEvidenceCount:Int=0,
+    val fundamentalCount:Int=0,
+    val analystCount:Int=0,
+    val earningsEventCount:Int=0,
+    val sectorMappedCount:Int=0,
+    val challengerOpen:Int=0,
+    val challengerResolved:Int=0,
+    val brokerOrders:Int=0,
+    val unreconciledBrokerOrders:Int=0,
+    val decisionSnapshots:Int=0,
+    val calendarLabel:String="",
+    val nextMacroEvent:String=""
 )
