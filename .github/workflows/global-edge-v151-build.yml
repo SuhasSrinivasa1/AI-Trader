@@ -95,6 +95,7 @@ jobs:
           python "$GITHUB_WORKSPACE/fresh-global-edge/v150/fix_v150_navigation.py" "$SRC"
           python "$GITHUB_WORKSPACE/fresh-global-edge/v150/fix_v150_version.py" "$SRC"
           python "$GITHUB_WORKSPACE/fresh-global-edge/v151/fix_v151_runtime_hotfix.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v151/fix_v151_secure_store.py" "$SRC"
 
           cd "$SRC"
           grep -q 'versionCode = 151' app/build.gradle.kts
@@ -111,6 +112,8 @@ jobs:
           grep -q 'Portfolio' app/src/main/java/com/suhas/ucsentinel/ui/ResearchScreens.kt
           grep -q 'Shadow Run' app/src/main/java/com/suhas/ucsentinel/ui/MoreScreen.kt
           grep -q 'PLACE ORDER' app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt
+          grep -q 'recoverEncryptedPrefs' app/src/main/java/com/suhas/ucsentinel/data/local/SecureCredentialStore.kt
+          grep -q 'secure-store recovery' app/src/main/java/com/suhas/ucsentinel/data/local/SecureCredentialStore.kt
           echo 'v1.5.1 source verification passed'
 
       - uses: actions/setup-java@v5
