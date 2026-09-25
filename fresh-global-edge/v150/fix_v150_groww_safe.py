@@ -44,7 +44,7 @@ new=r'''    suspend fun placeMarketOrder(
         BrokerOrderDetail(x.optString("groww_order_id").ifBlank{growwOrderId},x.optString("order_status"),x.optString("remark"),x.optInt("quantity"),x.optInt("filled_quantity"),x.optInt("remaining_quantity"),jsonDouble(x,"average_fill_price"),x.optString("order_reference_id"))
     }
 
-    suspend fun getOrderTrades(accessToken:String,growwOrderId:String):List<BrokerFillRecord>=withContext(Dispatchers.IO){
+    suspend fun getOrderTrades(accessToken:String,growwOrderId:String):List<BrokerFillRecord> = withContext(Dispatchers.IO){
         val url=HttpUrl.Builder().scheme("https").host("api.groww.in").addPathSegments("v1/order/trades").addPathSegment(growwOrderId).addQueryParameter("segment","CASH").addQueryParameter("page","0").addQueryParameter("page_size","50").build()
         val raw=executeWithRetry(authedGet(url,accessToken),liveLimiter,"Order trades",maxAttempts=3);val j=JSONObject(raw)
         require(j.optString("status").equals("SUCCESS",true)){"Groww order trades failed"};val a=j.optJSONObject("payload")?.optJSONArray("trade_list")?:JSONArray()
