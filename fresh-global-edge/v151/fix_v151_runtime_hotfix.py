@@ -1,23 +1,31 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import sys
+
 root=Path(sys.argv[1]).resolve()
 
-def rw(p): return (root/p).read_text(encoding="utf-8")
-def wr(p,s): (root/p).write_text(s,encoding="utf-8")
+def rw(p):
+    return (root/p).read_text(encoding="utf-8")
+
+def wr(p,s):
+    (root/p).write_text(s,encoding="utf-8")
+
 def one(s,old,new,label):
     n=s.count(old)
-    if n!=1: raise SystemExit(f"{label}: expected 1 found {n}")
+    if n!=1:
+        raise SystemExit(f"{label}: expected 1 found {n}")
     return s.replace(old,new,1)
 
 # Version hotfix.
-p="app/build.gradle.kts";s=rw(p)
+p="app/build.gradle.kts"
+s=rw(p)
 s=one(s,"versionCode = 150","versionCode = 151","versionCode")
 s=one(s,'versionName = "1.5.0"','versionName = "1.5.1"',"versionName")
 wr(p,s)
 
-# Research store init must never be able to terminate app startup.
-p="app/src/main/java/com/suhas/ucsentinel/data/local/ResearchFabricStore.kt";s=rw(p)
+# Research store init must never terminate app startup.
+p="app/src/main/java/com/suhas/ucsentinel/data/local/ResearchFabricStore.kt"
+s=rw(p)
 old='''    init{
         if(!prefs.getBoolean("macro_registry_v150_seeded",false)){
             saveMacroEvents(EvidenceFabricEngine.seedMacroEvents())
@@ -37,13 +45,15 @@ new='''    init{
 s=one(s,old,new,"research store safe init")
 wr(p,s)
 
-# Make the entire new research fabric lazy and accessor-safe. Existing v1.4 functionality can boot
-# even if a migrated v1.5 research record is malformed on a particular handset.
-p="app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt";s=rw(p)
-s=one(s,"    private val fabricStore=ResearchFabricStore(context)
-",
-      "    private val fabricStore by lazy(LazyThreadSafetyMode.SYNCHRONIZED){ResearchFabricStore(appContext)}
-","lazy fabric store")
+# Make new research storage lazy and accessor-safe.
+p="app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt"
+s=rw(p)
+old='''    private val fabricStore=ResearchFabricStore(context)
+'''
+new='''    private val fabricStore by lazy(LazyThreadSafetyMode.SYNCHRONIZED){ResearchFabricStore(appContext)}
+'''
+s=one(s,old,new,"lazy fabric store")
+
 old='''    fun evidenceFabricSummary():EvidenceFabricSummary = fabricStore.summary()
     fun pointInTimeEvidence():List<PointInTimeEvidence> = fabricStore.evidence(3000)
     fun challengerShadows():List<ChallengerShadowRecord> = fabricStore.challengerShadows(2500)
@@ -61,9 +71,9 @@ new='''    fun evidenceFabricSummary():EvidenceFabricSummary = runCatching{fabri
 s=one(s,old,new,"safe fabric accessors")
 wr(p,s)
 
-# Do not touch new v1.5 stores while MainViewModel itself is being constructed.
-# They are populated by the normal reliability refresh after the first frame, through the safe accessors above.
-p="app/src/main/java/com/suhas/ucsentinel/ui/MainViewModel.kt";s=rw(p)
+# Keep v1.5 stores out of synchronous MainViewModel construction.
+p="app/src/main/java/com/suhas/ucsentinel/ui/MainViewModel.kt"
+s=rw(p)
 old='''            strategyLive=repo.strategyLiveRecommendations(),strategyClosed=repo.strategyClosedRecommendations(),globalClosed=repo.globalLeadClosedRecommendations(),tradeCalls=repo.tradeCalls(),tradeAutopsies=repo.tradeAutopsies(),
             evidenceFabric=repo.evidenceFabricSummary(),pointInTimeEvidence=repo.pointInTimeEvidence(),challengerShadows=repo.challengerShadows(),
             brokerOrders=repo.brokerOrders(),brokerPortfolio=repo.brokerPortfolio(),decisionSnapshots=repo.decisionSnapshots())
@@ -72,17 +82,17 @@ new='''            strategyLive=repo.strategyLiveRecommendations(),strategyClose
             evidenceFabric=EvidenceFabricSummary(),pointInTimeEvidence=emptyList(),challengerShadows=emptyList(),
             brokerOrders=emptyList(),brokerPortfolio=BrokerPortfolioSnapshot(),decisionSnapshots=emptyList())
 '''
-# Only replace the first occurrence (buildInitialState); reliabilityRefresh must keep safe repo loading.
-if s.count(old)!=2: raise SystemExit(f"MainViewModel state block expected twice found {s.count(old)}")
+if s.count(old)!=2:
+    raise SystemExit(f"MainViewModel state block expected twice found {s.count(old)}")
 s=s.replace(old,new,1)
 
-# Guard the pre-existing synchronous boot audit too; corrupt historical state should never kill process.
-s=one(s,"    init{
+old='''    init{
         repo.ensureTodayFreezeAudit()
-",
-      "    init{
+'''
+new='''    init{
         runCatching{repo.ensureTodayFreezeAudit()}
-","safe boot audit")
+'''
+s=one(s,old,new,"safe boot audit")
 wr(p,s)
 
 print("Global Edge v1.5.1 runtime crash-safety hotfix applied")
