@@ -1,0 +1,38 @@
+name: Global Edge v1.5.0 Runtime Smoke
+
+on:
+  push:
+    paths:
+      - '.github/workflows/global-edge-v150-runtime-smoke.yml'
+  workflow_dispatch:
+
+jobs:
+  runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Boot emulator and launch app
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: |
+            set -euxo pipefail
+            APK=fresh-global-edge/v150/release/Global-Edge-AI-Trader-v1.5.0.apk
+            test -s "$APK"
+            adb install -r "$APK"
+            adb logcat -c
+            adb shell am force-stop com.suhas.globaledgeai || true
+            adb shell am start -W -n com.suhas.globaledgeai/.MainActivity || true
+            sleep 10
+            echo "=== PID ==="
+            adb shell pidof com.suhas.globaledgeai || true
+            echo "=== ACTIVITY ==="
+            adb shell dumpsys activity activities | grep -A 8 -B 3 com.suhas.globaledgeai || true
+            echo "=== CRASH LOG ==="
+            adb logcat -d -v threadtime | grep -E -A 80 -B 20 'FATAL EXCEPTION|AndroidRuntime|com.suhas.globaledgeai' | tail -n 500 || true
+            test -n "$(adb shell pidof com.suhas.globaledgeai | tr -d '\r')" || exit 42
