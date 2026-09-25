@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - '.github/workflows/global-edge-v150-runtime-smoke.yml'
+      - 'fresh-global-edge/v150/release/Global-Edge-AI-Trader-v1.5.0.apk'
   workflow_dispatch:
 
 jobs:
@@ -21,18 +22,33 @@ jobs:
           profile: pixel_6
           disable-animations: true
           script: |
-            set -euxo pipefail
+            set -eu
             APK=fresh-global-edge/v150/release/Global-Edge-AI-Trader-v1.5.0.apk
+            LOG="$GITHUB_WORKSPACE/runtime-v150-log.txt"
             test -s "$APK"
-            adb install -r "$APK"
+            : > "$LOG"
+            echo "=== INSTALL ===" | tee -a "$LOG"
+            adb install -r "$APK" 2>&1 | tee -a "$LOG"
+            echo "=== PACKAGE VERSION ===" | tee -a "$LOG"
+            adb shell dumpsys package com.suhas.globaledgeai | grep -E 'versionName|versionCode' | tee -a "$LOG" || true
             adb logcat -c
             adb shell am force-stop com.suhas.globaledgeai || true
-            adb shell am start -W -n com.suhas.globaledgeai/.MainActivity || true
+            echo "=== LAUNCH ===" | tee -a "$LOG"
+            adb shell am start -W -n com.suhas.globaledgeai/.MainActivity 2>&1 | tee -a "$LOG" || true
             sleep 10
-            echo "=== PID ==="
-            adb shell pidof com.suhas.globaledgeai || true
-            echo "=== ACTIVITY ==="
-            adb shell dumpsys activity activities | grep -A 8 -B 3 com.suhas.globaledgeai || true
-            echo "=== CRASH LOG ==="
-            adb logcat -d -v threadtime | grep -E -A 80 -B 20 'FATAL EXCEPTION|AndroidRuntime|com.suhas.globaledgeai' | tail -n 500 || true
-            test -n "$(adb shell pidof com.suhas.globaledgeai | tr -d '\r')" || exit 42
+            echo "=== PID ===" | tee -a "$LOG"
+            adb shell pidof com.suhas.globaledgeai | tee -a "$LOG" || true
+            echo "=== ACTIVITY ===" | tee -a "$LOG"
+            adb shell dumpsys activity activities | grep -A 8 -B 3 com.suhas.globaledgeai | tee -a "$LOG" || true
+            echo "=== APP / CRASH LOG ===" | tee -a "$LOG"
+            adb logcat -d -v threadtime | grep -E -A 80 -B 20 'FATAL EXCEPTION|AndroidRuntime|com.suhas.globaledgeai' | tail -n 800 | tee -a "$LOG" || true
+            PID="$(adb shell pidof com.suhas.globaledgeai | tr -d '\r')"
+            test -n "$PID"
+      - name: Upload runtime smoke log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Global-Edge-AI-Trader-v1.5.0-runtime-smoke
+          retention-days: 30
+          if-no-files-found: warn
+          path: runtime-v150-log.txt
