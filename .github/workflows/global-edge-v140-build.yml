@@ -115,22 +115,22 @@ jobs:
           grep -q 'Shadow Run' app/src/main/java/com/suhas/ucsentinel/ui/MoreScreen.kt
           grep -q 'PLACE ORDER' app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt
           mkdir -p out
-          cat > out/FEATURE-VERIFICATION.txt <<'EOF'
-Global Edge AI Trader v1.5.0 final feature verification
-- Exact current 2026 NSE cash calendar, including 15-Jan election holiday and 01-Feb Budget Sunday full session
-- Point-in-time prospective fundamental / analyst / earnings evidence
-- RBI MPC macro-event registry with decision-day hard WAIT gate
-- NIFTY 500 industry / peer breadth / relative-strength intelligence
-- True non-executable Challenger shadow lane
-- Scheduled-horizon historical-bar Challenger resolution
-- Groww order detail / individual fill reconciliation
-- Groww holdings / positions reconciliation
-- Evidence Fabric and permanent Decision Snapshots
-- Strategy Lab Shadow Run / Resolve controls
-- Portfolio broker reconciliation UI
-- Handbook roles retained: 100 strategies / 50 candle patterns / 50 intelligence filters
-- Manual PLACE ORDER retained with static-IP, session, duplicate-order and explicit-confirmation gates
-EOF
+          printf '%s\n' \
+            'Global Edge AI Trader v1.5.0 final feature verification' \
+            '- Exact current 2026 NSE cash calendar, including 15-Jan election holiday and 01-Feb Budget Sunday full session' \
+            '- Point-in-time prospective fundamental / analyst / earnings evidence' \
+            '- RBI MPC macro-event registry with decision-day hard WAIT gate' \
+            '- NIFTY 500 industry / peer breadth / relative-strength intelligence' \
+            '- True non-executable Challenger shadow lane' \
+            '- Scheduled-horizon historical-bar Challenger resolution' \
+            '- Groww order detail / individual fill reconciliation' \
+            '- Groww holdings / positions reconciliation' \
+            '- Evidence Fabric and permanent Decision Snapshots' \
+            '- Strategy Lab Shadow Run / Resolve controls' \
+            '- Portfolio broker reconciliation UI' \
+            '- Handbook roles retained: 100 strategies / 50 candle patterns / 50 intelligence filters' \
+            '- Manual PLACE ORDER retained with static-IP, session, duplicate-order and explicit-confirmation gates' \
+            > out/FEATURE-VERIFICATION.txt
           echo 'v1.5.0 source verification passed'
 
       - uses: actions/setup-java@v5
