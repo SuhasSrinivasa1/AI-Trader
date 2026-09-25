@@ -1,0 +1,2 @@
+build=SUCCESS
+fix=EncryptedSharedPreferences AEADBadTag startup self-recovery
