@@ -119,9 +119,14 @@ p.write_text(s,encoding="utf-8")
 # Version bump.
 p=root/"app/build.gradle.kts"
 s=p.read_text(encoding="utf-8")
-if 'versionCode = 150' not in s or 'versionName = "1.5.0"' not in s:
-    raise SystemExit("Expected v1.5.0 version anchors not found")
-s=s.replace('versionCode = 150','versionCode = 151',1).replace('versionName = "1.5.0"','versionName = "1.5.1"',1)
+if 'versionCode = 150' in s:
+    s=s.replace('versionCode = 150','versionCode = 151',1)
+elif 'versionCode = 151' not in s:
+    raise SystemExit("Expected v1.5.0/v1.5.1 versionCode anchor not found")
+if 'versionName = "1.5.0"' in s:
+    s=s.replace('versionName = "1.5.0"','versionName = "1.5.1"',1)
+elif 'versionName = "1.5.1"' not in s:
+    raise SystemExit("Expected v1.5.0/v1.5.1 versionName anchor not found")
 p.write_text(s,encoding="utf-8")
 
 print("v1.5.1 secure credential self-recovery patch applied")
