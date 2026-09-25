@@ -1,0 +1,68 @@
+name: Export Global Edge v1.4.0 Finalization Sources
+on:
+  push:
+    paths:
+      - '.github/workflows/export-global-edge-v140-finalization.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconstruct exact v1.4.0 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp fresh-global-edge/v103/reconstruct_v103.sh /tmp/reconstruct_v103.sh
+          sed -i '/^grep -q /d' /tmp/reconstruct_v103.sh
+          bash /tmp/reconstruct_v103.sh
+          SRC=/tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v103/upgrade_v103_entry_ui.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v104/upgrade_v104.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v104/fix_v104_notification.py" "$SRC"
+          apply_patch_file(){ dir="$1"; file="$2"; cat "$GITHUB_WORKSPACE/fresh-global-edge/$dir/$file"|tr -d '\r\n '|base64 -d >/tmp/p.gz; gunzip -c /tmp/p.gz >/tmp/p.patch; cd "$SRC"; patch -p1 --batch </tmp/p.patch; }
+          apply_patch_file v110 v104-to-v110.patch.gz.b64
+          apply_patch_file v111 v110-to-v111.patch.gz.b64
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v111/fix_v111_experimental.py" "$SRC"
+          apply_patch_file v112 v111-to-v112.patch.gz.b64
+          apply_patch_file v113 v112-to-v113.patch.gz.b64
+          apply_patch_file v114 v113-to-v114.patch.gz.b64
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v115/upgrade_v115.py" "$SRC"
+          apply_patch_file v116 v115-to-v116.patch.gz.b64
+          apply_patch_file v117 v116-to-v117.patch.gz.b64
+          apply_patch_file v118 v117-to-v118.patch.gz.b64
+          apply_patch_file v119 v118-to-v119.patch.gz.b64
+          apply_patch_file v120 v119-to-v120.patch.gz.b64
+          cd "$SRC"
+          cat "$GITHUB_WORKSPACE/fresh-global-edge/v121/patch.part00" "$GITHUB_WORKSPACE/fresh-global-edge/v121/patch.part01" "$GITHUB_WORKSPACE/fresh-global-edge/v121/patch.part02" "$GITHUB_WORKSPACE/fresh-global-edge/v121/patch.part03" "$GITHUB_WORKSPACE/fresh-global-edge/v121/patch.part04" "$GITHUB_WORKSPACE/fresh-global-edge/v121/patch.part05"|tr -d '\r\n '|base64 -d >/tmp/v121.gz
+          gunzip -c /tmp/v121.gz >/tmp/v121.patch
+          patch -p1 --batch </tmp/v121.patch
+          for v in 122 123 124 125 126 127 128 129 130; do python "$GITHUB_WORKSPACE/fresh-global-edge/v$v/fix_v$v.py" "$SRC"; done
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v140/add_handbook_synergy.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v140/fix_v140_models.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v140/fix_v140_preferences.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v140/fix_v140_repository.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v140/fix_v140_ui.py" "$SRC"
+          cp "$GITHUB_WORKSPACE/fresh-global-edge/v140/handbook_master_library.json" "$SRC/app/src/main/assets/handbook_master_library.json"
+
+          DEST="$GITHUB_WORKSPACE/fresh-global-edge/v150/inspection"
+          rm -rf "$DEST"; mkdir -p "$DEST"
+          for f in             app/src/main/java/com/suhas/ucsentinel/data/remote/GrowwClient.kt             app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt             app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt             app/src/main/java/com/suhas/ucsentinel/domain/model/Models.kt             app/src/main/java/com/suhas/ucsentinel/domain/model/AccuracyLearningModels.kt             app/src/main/java/com/suhas/ucsentinel/domain/engine/HandbookSynergyEngine.kt             app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt             app/src/main/java/com/suhas/ucsentinel/ui/MainViewModel.kt             app/src/main/java/com/suhas/ucsentinel/diagnostics/DiagnosticLog.kt             app/src/main/java/com/suhas/ucsentinel/worker/LearningWorker.kt             app/src/main/AndroidManifest.xml             app/build.gradle.kts; do
+              if [ -f "$SRC/$f" ]; then
+                rel="${f#$SRC/}"
+                mkdir -p "$DEST/$(dirname "$rel")"
+                cp "$SRC/$f" "$DEST/$rel"
+              fi
+          done
+      - name: Publish inspection snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add fresh-global-edge/v150/inspection
+          git commit -m 'Export Global Edge v1.4.0 finalization sources [skip ci]' || true
+          git push
