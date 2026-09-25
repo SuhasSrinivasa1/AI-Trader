@@ -1,0 +1,38 @@
+name: Global Edge v1.5.2 Android 16 Launch Test
+
+on:
+  push:
+    paths:
+      - '.github/workflows/global-edge-v152-launch-test.yml'
+  workflow_dispatch:
+
+jobs:
+  launch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Android 16 signed-APK launch smoke
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: |
+            set -eu
+            APK=fresh-global-edge/v152/release/Global-Edge-AI-Trader-v1.5.2.apk
+            test -s "$APK"
+            adb install "$APK"
+            adb logcat -c
+            adb shell am force-stop com.suhas.globaledgeai || true
+            adb shell am start -W -n com.suhas.globaledgeai/.MainActivity
+            sleep 12
+            PID=$(adb shell pidof com.suhas.globaledgeai | tr -d '\r')
+            echo "PID=$PID"
+            adb shell dumpsys activity activities | grep -A 8 -B 3 com.suhas.globaledgeai || true
+            echo "=== FATAL LOGS ==="
+            adb logcat -d -v threadtime | grep -E -A 100 -B 20 'FATAL EXCEPTION|AndroidRuntime|com.suhas.globaledgeai' | tail -n 600 || true
+            test -n "$PID"
+            adb shell dumpsys activity activities | grep -q 'mResumedActivity.*com.suhas.globaledgeai'
