@@ -1,4 +1,4 @@
-name: Export Global Edge v1.4.0 Source
+name: Export Global Edge v1.5.0 Runtime Source
 
 on:
   push:
@@ -50,7 +50,23 @@ jobs:
           python "$GITHUB_WORKSPACE/fresh-global-edge/v140/fix_v140_ui.py" "$SRC"
           cp "$GITHUB_WORKSPACE/fresh-global-edge/v140/handbook_master_library.json" "$SRC/app/src/main/assets/handbook_master_library.json"
 
-          DEST="$GITHUB_WORKSPACE/fresh-global-edge/v150/inspection"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v150/add_research_models.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v150/add_nse_calendar.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v150/add_evidence_engines.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v150/fix_v150_evidence_dates.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v150/add_research_store.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v150/fix_v150_groww.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v150/fix_v150_repository_foundation.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v150/fix_v150_calendar_consistency.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v150/fix_v150_strategy_fabric.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v150/fix_v150_viewmodel.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v150/fix_v150_order_ui.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v150/fix_v150_strategy_lab_ui.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v150/add_research_screens.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v150/fix_v150_navigation.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v150/fix_v150_version.py" "$SRC"
+
+          DEST="$GITHUB_WORKSPACE/fresh-global-edge/v151/inspection"
           rm -rf "$DEST"; mkdir -p "$DEST"
           for f in             app/src/main/java/com/suhas/ucsentinel/domain/model/Models.kt             app/src/main/java/com/suhas/ucsentinel/domain/model/AccuracyLearningModels.kt             app/src/main/java/com/suhas/ucsentinel/domain/model/AutopsyModels.kt             app/src/main/java/com/suhas/ucsentinel/domain/engine/HandbookSynergyEngine.kt             app/src/main/java/com/suhas/ucsentinel/domain/engine/AccuracyLearningEngine.kt             app/src/main/java/com/suhas/ucsentinel/data/remote/GrowwClient.kt             app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt             app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt             app/src/main/java/com/suhas/ucsentinel/ui/MainViewModel.kt             app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt             app/src/main/java/com/suhas/ucsentinel/ui/MoreScreen.kt             app/src/main/java/com/suhas/ucsentinel/ui/AppNavigation.kt             app/src/main/AndroidManifest.xml             app/build.gradle.kts; do
               if [ -f "$SRC/$f" ]; then
@@ -65,6 +81,6 @@ jobs:
           set -euo pipefail
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add fresh-global-edge/v150/inspection
+          git add fresh-global-edge/v151/inspection
           git commit -m 'Export Global Edge v1.4.0 source [skip ci]' || true
           git push
