@@ -87,6 +87,7 @@ jobs:
           python "$GITHUB_WORKSPACE/fresh-global-edge/v150/fix_v150_repository_foundation.py" "$SRC"
           python "$GITHUB_WORKSPACE/fresh-global-edge/v150/fix_v150_calendar_consistency.py" "$SRC"
           python "$GITHUB_WORKSPACE/fresh-global-edge/v150/fix_v150_strategy_fabric.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v150/fix_v150_final_hardening.py" "$SRC"
           python "$GITHUB_WORKSPACE/fresh-global-edge/v150/fix_v150_viewmodel.py" "$SRC"
           python "$GITHUB_WORKSPACE/fresh-global-edge/v150/fix_v150_order_ui.py" "$SRC"
           python "$GITHUB_WORKSPACE/fresh-global-edge/v150/fix_v150_strategy_lab_ui.py" "$SRC"
@@ -101,6 +102,10 @@ jobs:
           grep -q 'point_in_time_evidence_v150' app/src/main/java/com/suhas/ucsentinel/data/local/ResearchFabricStore.kt
           grep -q 'NON_EXECUTABLE_CHALLENGER' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
           grep -q 'SCHEDULED_HORIZON_30M' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'specialFullSessions2026' app/src/main/java/com/suhas/ucsentinel/domain/engine/NseTradingCalendar.kt
+          grep -q 'LocalDate.of(2026,2,1)' app/src/main/java/com/suhas/ucsentinel/domain/engine/NseTradingCalendar.kt
+          grep -q 'MACRO_DECISION_HARD_GATE' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'currentEarnings' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
           grep -q 'getOrderDetail' app/src/main/java/com/suhas/ucsentinel/data/remote/GrowwClient.kt
           grep -q 'getTradesForOrder' app/src/main/java/com/suhas/ucsentinel/data/remote/GrowwClient.kt
           grep -q 'getHoldings' app/src/main/java/com/suhas/ucsentinel/data/remote/GrowwClient.kt
@@ -109,6 +114,23 @@ jobs:
           grep -q 'Portfolio' app/src/main/java/com/suhas/ucsentinel/ui/ResearchScreens.kt
           grep -q 'Shadow Run' app/src/main/java/com/suhas/ucsentinel/ui/MoreScreen.kt
           grep -q 'PLACE ORDER' app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt
+          mkdir -p out
+          cat > out/FEATURE-VERIFICATION.txt <<'EOF'
+Global Edge AI Trader v1.5.0 final feature verification
+- Exact current 2026 NSE cash calendar, including 15-Jan election holiday and 01-Feb Budget Sunday full session
+- Point-in-time prospective fundamental / analyst / earnings evidence
+- RBI MPC macro-event registry with decision-day hard WAIT gate
+- NIFTY 500 industry / peer breadth / relative-strength intelligence
+- True non-executable Challenger shadow lane
+- Scheduled-horizon historical-bar Challenger resolution
+- Groww order detail / individual fill reconciliation
+- Groww holdings / positions reconciliation
+- Evidence Fabric and permanent Decision Snapshots
+- Strategy Lab Shadow Run / Resolve controls
+- Portfolio broker reconciliation UI
+- Handbook roles retained: 100 strategies / 50 candle patterns / 50 intelligence filters
+- Manual PLACE ORDER retained with static-IP, session, duplicate-order and explicit-confirmation gates
+EOF
           echo 'v1.5.0 source verification passed'
 
       - uses: actions/setup-java@v5
@@ -131,7 +153,11 @@ jobs:
 
       - name: Unit tests and release APK
         working-directory: /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source
-        run: gradle --no-daemon --console=plain clean testDebugUnitTest assembleRelease
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p out
+          gradle --no-daemon --console=plain clean testDebugUnitTest assembleRelease 2>&1 | tee out/BUILD-COMPILE.log
 
       - name: Recover v1.3.0 signing key
         uses: actions/download-artifact@v4
@@ -178,6 +204,17 @@ jobs:
           (cd out && zip -q Global-Edge-AI-Trader-v1.5.0-SIGNING-BACKUP.zip global-edge-v1.5.0.keystore SIGNING-INFO.txt)
           { echo "run_id=$GITHUB_RUN_ID"; echo "build=SUCCESS"; echo "signing=V1.3.0_CERTIFICATE_REUSED"; } > out/BUILD-STATUS.txt
 
+      - name: Package full source and build logs
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC=/tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source
+          rm -rf /tmp/global-edge-v150-source
+          mkdir -p /tmp/global-edge-v150-source/Global-Edge-AI-Trader-v1.5.0-source
+          rsync -a             --exclude '.gradle/'             --exclude 'app/build/'             --exclude 'build/'             --exclude 'out/'             "$SRC/" /tmp/global-edge-v150-source/Global-Edge-AI-Trader-v1.5.0-source/
+          (cd /tmp/global-edge-v150-source && zip -qr "$SRC/out/Global-Edge-AI-Trader-v1.5.0-SOURCE.zip" Global-Edge-AI-Trader-v1.5.0-source)
+          (cd "$SRC/out" && zip -q Global-Edge-AI-Trader-v1.5.0-BUILD-LOGS.zip             BUILD-COMPILE.log APK-SIGNATURE-VERIFY.txt APK-BADGING.txt SHA256.txt BUILD-STATUS.txt FEATURE-VERIFICATION.txt)
+
       - name: Upload signed build artifact
         uses: actions/upload-artifact@v4
         with:
@@ -191,6 +228,10 @@ jobs:
             /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source/out/SHA256.txt
             /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source/out/BUILD-STATUS.txt
             /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source/out/Global-Edge-AI-Trader-v1.5.0-SIGNING-BACKUP.zip
+            /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source/out/Global-Edge-AI-Trader-v1.5.0-SOURCE.zip
+            /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source/out/Global-Edge-AI-Trader-v1.5.0-BUILD-LOGS.zip
+            /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source/out/BUILD-COMPILE.log
+            /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source/out/FEATURE-VERIFICATION.txt
 
       - name: Publish signed APK for direct download
         shell: bash
