@@ -20,5 +20,6 @@ s=s.replace('''val summary=StrategyTournamentSummary(System.currentTimeMillis(),
             "${active.size} active • HB 100/50/50''',
 '''val summary=StrategyTournamentSummary(System.currentTimeMillis(),cash.size,active.size,enriched,top.map{it.first},active,perfs,bundle.version,
             (if(challengerOnly)"SHADOW RUN • " else "")+"${active.size} active • HB 100/50/50''',1)
-s=s.replace("scanTradingStrategies(progress)","scanTradingStrategies(progress=progress)")\np.write_text(s,encoding="utf-8")
+s=s.replace("scanTradingStrategies(progress)","scanTradingStrategies(progress=progress)")
+p.write_text(s,encoding="utf-8")
 print("v1.5 challenger-only scan mode applied")
