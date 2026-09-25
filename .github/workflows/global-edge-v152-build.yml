@@ -1,0 +1,215 @@
+name: Global Edge AI Trader v1.5.2 Staged Boot Hotfix Build
+
+on:
+  push:
+    paths:
+      - '.github/workflows/global-edge-v152-build.yml'
+      - 'fresh-global-edge/v140/**'
+      - 'fresh-global-edge/v150/**'
+      - 'fresh-global-edge/v151/**'
+      - 'fresh-global-edge/v152/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconstruct v1.4.0 and apply final v1.5.2 research fabric
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp fresh-global-edge/v103/reconstruct_v103.sh /tmp/reconstruct_v103.sh
+          sed -i '/^grep -q /d' /tmp/reconstruct_v103.sh
+          bash /tmp/reconstruct_v103.sh
+          SRC=/tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source
+
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v103/upgrade_v103_entry_ui.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v104/upgrade_v104.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v104/fix_v104_notification.py" "$SRC"
+
+          apply_patch_file() {
+            dir="$1"; file="$2"
+            cat "$GITHUB_WORKSPACE/fresh-global-edge/$dir/$file" | tr -d '\r\n ' | base64 -d > /tmp/p.gz
+            gunzip -c /tmp/p.gz > /tmp/p.patch
+            cd "$SRC"
+            patch -p1 --batch < /tmp/p.patch
+          }
+          apply_patch_file v110 v104-to-v110.patch.gz.b64
+          apply_patch_file v111 v110-to-v111.patch.gz.b64
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v111/fix_v111_experimental.py" "$SRC"
+          apply_patch_file v112 v111-to-v112.patch.gz.b64
+          apply_patch_file v113 v112-to-v113.patch.gz.b64
+          apply_patch_file v114 v113-to-v114.patch.gz.b64
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v115/upgrade_v115.py" "$SRC"
+          apply_patch_file v116 v115-to-v116.patch.gz.b64
+          apply_patch_file v117 v116-to-v117.patch.gz.b64
+          apply_patch_file v118 v117-to-v118.patch.gz.b64
+          apply_patch_file v119 v118-to-v119.patch.gz.b64
+          apply_patch_file v120 v119-to-v120.patch.gz.b64
+
+          cd "$SRC"
+          cat             "$GITHUB_WORKSPACE/fresh-global-edge/v121/patch.part00"             "$GITHUB_WORKSPACE/fresh-global-edge/v121/patch.part01"             "$GITHUB_WORKSPACE/fresh-global-edge/v121/patch.part02"             "$GITHUB_WORKSPACE/fresh-global-edge/v121/patch.part03"             "$GITHUB_WORKSPACE/fresh-global-edge/v121/patch.part04"             "$GITHUB_WORKSPACE/fresh-global-edge/v121/patch.part05"             | tr -d '\r\n ' | base64 -d > /tmp/v121.gz
+          gunzip -c /tmp/v121.gz > /tmp/v121.patch
+          patch -p1 --batch < /tmp/v121.patch
+
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v122/fix_v122.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v123/fix_v123.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v124/fix_v124.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v125/fix_v125.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v126/fix_v126.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v127/fix_v127.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v128/fix_v128.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v129/fix_v129.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v130/fix_v130.py" "$SRC"
+
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v140/add_handbook_synergy.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v140/fix_v140_models.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v140/fix_v140_preferences.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v140/fix_v140_repository.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v140/fix_v140_ui.py" "$SRC"
+          cp "$GITHUB_WORKSPACE/fresh-global-edge/v140/handbook_master_library.json" "$SRC/app/src/main/assets/handbook_master_library.json"
+
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v150/add_research_models.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v150/add_nse_calendar.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v150/add_evidence_engines.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v150/fix_v150_evidence_dates.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v150/add_research_store.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v150/fix_v150_groww.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v150/fix_v150_repository_foundation.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v150/fix_v150_calendar_consistency.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v150/fix_v150_strategy_fabric.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v150/fix_v150_viewmodel.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v150/fix_v150_order_ui.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v150/fix_v150_strategy_lab_ui.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v150/add_research_screens.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v150/fix_v150_navigation.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v150/fix_v150_version.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v151/fix_v151_runtime_hotfix.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v152/fix_v152_staged_boot.py" "$SRC"
+
+          cd "$SRC"
+          grep -q 'versionCode = 152' app/build.gradle.kts
+          grep -q 'versionName = "1.5.2"' app/build.gradle.kts
+          grep -q 'NSE-EQUITY-2026-OFFICIAL-2026-09-24' app/src/main/java/com/suhas/ucsentinel/domain/engine/NseTradingCalendar.kt
+          grep -q 'point_in_time_evidence_v150' app/src/main/java/com/suhas/ucsentinel/data/local/ResearchFabricStore.kt
+          grep -q 'NON_EXECUTABLE_CHALLENGER' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'SCHEDULED_HORIZON_30M' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'getOrderDetail' app/src/main/java/com/suhas/ucsentinel/data/remote/GrowwClient.kt
+          grep -q 'getTradesForOrder' app/src/main/java/com/suhas/ucsentinel/data/remote/GrowwClient.kt
+          grep -q 'getHoldings' app/src/main/java/com/suhas/ucsentinel/data/remote/GrowwClient.kt
+          grep -q 'getCashPositions' app/src/main/java/com/suhas/ucsentinel/data/remote/GrowwClient.kt
+          grep -q 'Trade Intelligence' app/src/main/java/com/suhas/ucsentinel/ui/ResearchScreens.kt
+          grep -q 'Portfolio' app/src/main/java/com/suhas/ucsentinel/ui/ResearchScreens.kt
+          grep -q 'Shadow Run' app/src/main/java/com/suhas/ucsentinel/ui/MoreScreen.kt
+          grep -q 'PLACE ORDER' app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt
+          echo 'v1.5.2 source verification passed'
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Unit tests and release APK
+        working-directory: /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source
+        run: gradle --no-daemon --console=plain clean testDebugUnitTest assembleRelease
+
+      - name: Recover v1.3.0 signing key
+        uses: actions/download-artifact@v4
+        with:
+          name: Global-Edge-AI-Trader-v1.3.0
+          repository: SuhasSrinivasa1/AI-Trader
+          run-id: 35983063373
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: /tmp/v130-artifact
+
+      - name: Sign with preserved v1.3.0 certificate and verify
+        working-directory: /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out /tmp/v130-key
+          BACKUP=$(find /tmp/v130-artifact -type f -name 'Global-Edge-AI-Trader-v1.3.0-SIGNING-BACKUP.zip' | head -n1)
+          test -n "$BACKUP" && test -s "$BACKUP"
+          unzip -q "$BACKUP" -d /tmp/v130-key
+          KEYSTORE=/tmp/v130-key/global-edge-v1.3.0.keystore
+          INFO=/tmp/v130-key/SIGNING-INFO.txt
+          test -s "$KEYSTORE" && test -s "$INFO"
+          PASS=$(grep '^store_password=' "$INFO" | cut -d= -f2-)
+          KEYPASS=$(grep '^key_password=' "$INFO" | cut -d= -f2-)
+          UNSIGNED=$(find app/build/outputs/apk/release -maxdepth 1 -type f -name '*release*.apk' | head -n 1)
+          test -n "$UNSIGNED" && test -s "$UNSIGNED"
+
+          OUT=out/Global-Edge-AI-Trader-v1.5.2.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KEYSTORE" --ks-pass pass:"$PASS" --key-pass pass:"$KEYPASS" --ks-key-alias globaledge --out "$OUT" "$UNSIGNED"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$OUT" | tee out/APK-SIGNATURE-VERIFY.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$OUT" | tee out/APK-BADGING.txt
+          grep -q "package: name='com.suhas.globaledgeai'" out/APK-BADGING.txt
+          grep -q "versionCode='152'" out/APK-BADGING.txt
+          grep -q "versionName='1.5.2'" out/APK-BADGING.txt
+          sha256sum "$OUT" | tee out/SHA256.txt
+
+          cp "$KEYSTORE" out/global-edge-v1.5.2.keystore
+          {
+            echo "alias=globaledge"
+            echo "store_password=$PASS"
+            echo "key_password=$KEYPASS"
+            echo "certificate_note=Same certificate as Global Edge v1.3.0/v1.4.0; preserve for in-place updates."
+          } > out/SIGNING-INFO.txt
+          (cd out && zip -q Global-Edge-AI-Trader-v1.5.2-SIGNING-BACKUP.zip global-edge-v1.5.2.keystore SIGNING-INFO.txt)
+          { echo "run_id=$GITHUB_RUN_ID"; echo "build=SUCCESS"; echo "signing=V1.3.0_CERTIFICATE_REUSED"; } > out/BUILD-STATUS.txt
+
+      - name: Upload signed build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Global-Edge-AI-Trader-v1.5.2
+          retention-days: 30
+          if-no-files-found: error
+          path: |
+            /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source/out/Global-Edge-AI-Trader-v1.5.2.apk
+            /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source/out/APK-SIGNATURE-VERIFY.txt
+            /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source/out/APK-BADGING.txt
+            /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source/out/SHA256.txt
+            /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source/out/BUILD-STATUS.txt
+            /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source/out/Global-Edge-AI-Trader-v1.5.2-SIGNING-BACKUP.zip
+
+      - name: Publish signed APK for direct download
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC=/tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source/out
+          DEST=fresh-global-edge/v152/release
+          mkdir -p "$DEST"
+          cp "$SRC/Global-Edge-AI-Trader-v1.5.2.apk" "$DEST/"
+          cp "$SRC/APK-SIGNATURE-VERIFY.txt" "$DEST/"
+          cp "$SRC/APK-BADGING.txt" "$DEST/"
+          cp "$SRC/SHA256.txt" "$DEST/"
+          cp "$SRC/BUILD-STATUS.txt" "$DEST/"
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add "$DEST"
+          git commit -m 'Publish Global Edge AI Trader v1.5.2 APK [skip ci]'
+          git push
