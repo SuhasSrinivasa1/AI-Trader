@@ -1,0 +1,49 @@
+name: Export Global Edge v1.4.0 Navigation
+on:
+  push:
+    paths:
+      - '.github/workflows/export-global-edge-v140-navigation.yml'
+permissions:
+  contents: write
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconstruct and export
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp fresh-global-edge/v103/reconstruct_v103.sh /tmp/r.sh
+          sed -i '/^grep -q /d' /tmp/r.sh
+          bash /tmp/r.sh
+          SRC=/tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v103/upgrade_v103_entry_ui.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v104/upgrade_v104.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v104/fix_v104_notification.py" "$SRC"
+          ap(){ d="$1"; f="$2"; cat "$GITHUB_WORKSPACE/fresh-global-edge/$d/$f"|tr -d '\r\n '|base64 -d >/tmp/p.gz; gunzip -c /tmp/p.gz >/tmp/p.patch; cd "$SRC"; patch -p1 --batch </tmp/p.patch; }
+          ap v110 v104-to-v110.patch.gz.b64; ap v111 v110-to-v111.patch.gz.b64
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v111/fix_v111_experimental.py" "$SRC"
+          ap v112 v111-to-v112.patch.gz.b64; ap v113 v112-to-v113.patch.gz.b64; ap v114 v113-to-v114.patch.gz.b64
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v115/upgrade_v115.py" "$SRC"
+          ap v116 v115-to-v116.patch.gz.b64; ap v117 v116-to-v117.patch.gz.b64; ap v118 v117-to-v118.patch.gz.b64; ap v119 v118-to-v119.patch.gz.b64; ap v120 v119-to-v120.patch.gz.b64
+          cd "$SRC"; cat "$GITHUB_WORKSPACE"/fresh-global-edge/v121/patch.part*|tr -d '\r\n '|base64 -d >/tmp/v121.gz; gunzip -c /tmp/v121.gz >/tmp/v121.patch; patch -p1 --batch </tmp/v121.patch
+          for v in 122 123 124 125 126 127 128 129 130; do python "$GITHUB_WORKSPACE/fresh-global-edge/v$v/fix_v$v.py" "$SRC"; done
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v140/add_handbook_synergy.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v140/fix_v140_models.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v140/fix_v140_preferences.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v140/fix_v140_repository.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v140/fix_v140_ui.py" "$SRC"
+          DEST="$GITHUB_WORKSPACE/fresh-global-edge/v150/navigation-inspection"
+          rm -rf "$DEST"; mkdir -p "$DEST"
+          cp "$SRC/app/src/main/java/com/suhas/ucsentinel/ui/AppNavigation.kt" "$DEST/"
+          cp "$SRC/app/src/main/java/com/suhas/ucsentinel/ui/MoreScreen.kt" "$DEST/"
+      - name: Publish
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add fresh-global-edge/v150/navigation-inspection
+          git commit -m 'Export v1.4 navigation for v1.5 [skip ci]' || true
+          git push
