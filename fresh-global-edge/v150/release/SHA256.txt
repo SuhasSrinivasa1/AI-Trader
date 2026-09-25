@@ -1,1 +1,1 @@
-6723a78e3cd0ef1f94a6a9c5583f3c03784b1acc37ceb316c815084e93597290  out/Global-Edge-AI-Trader-v1.5.0.apk
+8dc5ae11784c9f4287b3582e6eac3f7f1995f1f7b5e8757bfe230578cc39fc1e  out/Global-Edge-AI-Trader-v1.5.0.apk
