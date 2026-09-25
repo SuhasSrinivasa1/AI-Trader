@@ -1,3 +1,8 @@
-run_id=36140759507
 build=SUCCESS
-signing=V1.3.0_CERTIFICATE_REUSED
+run_id=36146076154
+package=com.suhas.globaledgeai
+versionCode=150
+versionName=1.5.0
+signing_certificate_reused_from=v1.4.0
+signer_sha256=31ffa51c23b76f450cf099d00b254870bf8eacc5ce79aee4458070a0fab783d7
+features=NSE2026-calendar,PIT-evidence,macro-risk,sector-intelligence,challenger-shadow,scheduled-horizon,broker-reconciliation,evidence-fabric,decision-hash
