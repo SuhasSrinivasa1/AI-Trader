@@ -1,0 +1,300 @@
+name: Global Edge AI Trader v1.5.0 Final Evidence Build
+
+on:
+  push:
+    paths:
+      - '.github/workflows/global-edge-v150-build.yml'
+      - 'fresh-global-edge/v150/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconstruct exact v1.4.0 baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp fresh-global-edge/v103/reconstruct_v103.sh /tmp/reconstruct_v103.sh
+          sed -i '/^grep -q /d' /tmp/reconstruct_v103.sh
+          bash /tmp/reconstruct_v103.sh
+          SRC=/tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source
+
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v103/upgrade_v103_entry_ui.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v104/upgrade_v104.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v104/fix_v104_notification.py" "$SRC"
+
+          apply_patch_file() {
+            dir="$1"; file="$2"
+            cat "$GITHUB_WORKSPACE/fresh-global-edge/$dir/$file" | tr -d '\r\n ' | base64 -d > /tmp/p.gz
+            gunzip -c /tmp/p.gz > /tmp/p.patch
+            cd "$SRC"
+            patch -p1 --batch < /tmp/p.patch
+          }
+          apply_patch_file v110 v104-to-v110.patch.gz.b64
+          apply_patch_file v111 v110-to-v111.patch.gz.b64
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v111/fix_v111_experimental.py" "$SRC"
+          apply_patch_file v112 v111-to-v112.patch.gz.b64
+          apply_patch_file v113 v112-to-v113.patch.gz.b64
+          apply_patch_file v114 v113-to-v114.patch.gz.b64
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v115/upgrade_v115.py" "$SRC"
+          apply_patch_file v116 v115-to-v116.patch.gz.b64
+          apply_patch_file v117 v116-to-v117.patch.gz.b64
+          apply_patch_file v118 v117-to-v118.patch.gz.b64
+          apply_patch_file v119 v118-to-v119.patch.gz.b64
+          apply_patch_file v120 v119-to-v120.patch.gz.b64
+
+          cd "$SRC"
+          cat             "$GITHUB_WORKSPACE/fresh-global-edge/v121/patch.part00"             "$GITHUB_WORKSPACE/fresh-global-edge/v121/patch.part01"             "$GITHUB_WORKSPACE/fresh-global-edge/v121/patch.part02"             "$GITHUB_WORKSPACE/fresh-global-edge/v121/patch.part03"             "$GITHUB_WORKSPACE/fresh-global-edge/v121/patch.part04"             "$GITHUB_WORKSPACE/fresh-global-edge/v121/patch.part05"             | tr -d '\r\n ' | base64 -d > /tmp/v121.gz
+          gunzip -c /tmp/v121.gz > /tmp/v121.patch
+          patch -p1 --batch < /tmp/v121.patch
+
+          for v in 122 123 124 125 126 127 128 129 130; do
+            python "$GITHUB_WORKSPACE/fresh-global-edge/v$v/fix_v$v.py" "$SRC"
+          done
+
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v140/add_handbook_synergy.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v140/fix_v140_models.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v140/fix_v140_preferences.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v140/fix_v140_repository.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v140/fix_v140_ui.py" "$SRC"
+          cp "$GITHUB_WORKSPACE/fresh-global-edge/v140/handbook_master_library.json" "$SRC/app/src/main/assets/handbook_master_library.json"
+
+      - name: Apply final v1.5.0 evidence / Challenger / broker architecture
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC=/tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source
+          cp "$GITHUB_WORKSPACE/fresh-global-edge/v150/src/TradingCalendar2026.kt" "$SRC/app/src/main/java/com/suhas/ucsentinel/domain/engine/NseTradingCalendar2026.kt"
+          cp "$GITHUB_WORKSPACE/fresh-global-edge/v150/src/EvidenceFabricEngine.kt" "$SRC/app/src/main/java/com/suhas/ucsentinel/domain/engine/EvidenceFabricEngine.kt"
+          cp "$GITHUB_WORKSPACE/fresh-global-edge/v150/src/FinalizationModels.kt" "$SRC/app/src/main/java/com/suhas/ucsentinel/domain/model/FinalizationModels.kt"
+          cp "$GITHUB_WORKSPACE/fresh-global-edge/v150/src/NiftyIndustryClient.kt" "$SRC/app/src/main/java/com/suhas/ucsentinel/data/remote/NiftyIndustryClient.kt"
+
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v150/fix_v150_preferences.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v150/fix_v150_groww_safe.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v150/fix_v150_repository.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v150/fix_v150_shadowmode.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v150/fix_v150_calendar_edges.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v150/fix_v150_vm.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v150/fix_v150_ui.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v150/fix_v150_navigation.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v150/fix_v150_more.py" "$SRC"
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v150/fix_v150_version.py" "$SRC"
+
+          cd "$SRC"
+          grep -q 'versionCode = 150' app/build.gradle.kts
+          grep -q 'versionName = "1.5.0"' app/build.gradle.kts
+          grep -q 'NSE-CMTR-71775-2026' app/src/main/java/com/suhas/ucsentinel/domain/engine/NseTradingCalendar2026.kt
+          grep -q 'PIT evidence' app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt
+          grep -q 'CHALLENGER_SHADOW' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'UNRESOLVED_DATA' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'getOrderStatusByReference' app/src/main/java/com/suhas/ucsentinel/data/remote/GrowwClient.kt
+          grep -q 'getOrderDetail' app/src/main/java/com/suhas/ucsentinel/data/remote/GrowwClient.kt
+          grep -q 'getOrderTrades' app/src/main/java/com/suhas/ucsentinel/data/remote/GrowwClient.kt
+          grep -q 'SUBMIT_UNCERTAIN' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'SAME_SIDE_RULE_DEDUP' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'MACRO_HARD_WAIT' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'PortfolioCompactScreen' app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt
+          grep -q 'Shadow Run' app/src/main/java/com/suhas/ucsentinel/ui/MoreScreen.kt
+          grep -q 'DecisionSnapshot' app/src/main/java/com/suhas/ucsentinel/domain/model/FinalizationModels.kt
+          grep -q 'multipleTestingPenaltyPct' app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt
+          grep -q 'placeManualOrder(symbol,side,product,qty,plan.entry)' app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt
+          echo "v1.5.0 source feature verification passed"
+
+      - name: Add source documentation
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC=/tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source
+          cat > "$SRC/README-LADB.txt" <<'EOF'
+          GLOBAL EDGE AI TRADER v1.5.0 — LADB INSTALL
+
+          APK filename:
+            Global-Edge-AI-Trader-v1.5.0.apk
+
+          Put the APK in the phone's Download folder, then in LADB run:
+            ls -lh /sdcard/Download/Global-Edge-AI-Trader-v1.5.0.apk
+            pm install -r -g "/sdcard/Download/Global-Edge-AI-Trader-v1.5.0.apk"
+
+          Verify:
+            dumpsys package com.suhas.globaledgeai | grep -E "versionCode|versionName"
+
+          Launch:
+            monkey -p com.suhas.globaledgeai -c android.intent.category.LAUNCHER 1
+
+          If and ONLY if Android reports INSTALL_FAILED_UPDATE_INCOMPATIBLE / signature mismatch:
+            pm uninstall com.suhas.globaledgeai
+            pm install -g "/sdcard/Download/Global-Edge-AI-Trader-v1.5.0.apk"
+
+          WARNING: uninstalling deletes the app's local credentials, settings and learning ledger.
+          v1.5.0 uses the same signing certificate as v1.4.0, so a normal v1.4.0 -> v1.5.0 update should use -r and must not require uninstall.
+
+          Runtime diagnostics:
+          Settings -> Export full EOD diagnostic ZIP.
+          The exported bundle intentionally omits Groww credentials, TOTP secret and access token.
+          EOF
+
+          cat > "$SRC/CHANGELOG-v1.5.0.txt" <<'EOF'
+          Global Edge AI Trader v1.5.0
+          - Exact NSE Capital Market 2026 regular-session calendar (NSE/CMTR/71775)
+          - Prospective point-in-time evidence ledger; no historical back-fill
+          - RBI / company event risk registry and hard WAIT gates
+          - NIFTY 500 industry, peer breadth and relative-strength Evidence Fabric
+          - Strict non-executable Challenger shadow lane
+          - Scheduled-horizon historical shadow resolution
+          - Challenger promotion from prospective shadow evidence only
+          - Groww order/detail/trade-fill reconciliation
+          - Deterministic pre-submit reference IDs and no automatic POST retry
+          - Ambiguous order recovery by order reference ID
+          - Permanent broker execution ledger / Portfolio screen
+          - Decision Snapshot SHA-256 audit trail
+          - Strategy Lab Shadow Run / Resolve controls
+          - Existing handbook roles preserved: 100 strategies + 50 candles + 50 filters
+          - Existing manual PLACE ORDER flow retained; hard risk/liquidity gates override score
+          EOF
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Unit tests and release APK
+        working-directory: /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p out
+          gradle --no-daemon --console=plain clean testDebugUnitTest assembleRelease 2>&1 | tee out/GRADLE-BUILD-TEST.log
+          echo "Unit tests + assembleRelease: PASS" > out/TEST-RESULT-SUMMARY.txt
+
+      - name: Recover preserved v1.4.0 signing certificate
+        uses: actions/download-artifact@v4
+        with:
+          name: Global-Edge-AI-Trader-v1.4.0
+          repository: SuhasSrinivasa1/AI-Trader
+          run-id: 36045750408
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: /tmp/v140-artifact
+
+      - name: Sign and verify with v1.4 certificate
+        working-directory: /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out /tmp/v140-key
+          BACKUP=$(find /tmp/v140-artifact -type f -name 'Global-Edge-AI-Trader-v1.4.0-SIGNING-BACKUP.zip' | head -n1)
+          test -n "$BACKUP" && test -s "$BACKUP"
+          unzip -q "$BACKUP" -d /tmp/v140-key
+          KEYSTORE=/tmp/v140-key/global-edge-v1.4.0.keystore
+          INFO=/tmp/v140-key/SIGNING-INFO.txt
+          test -s "$KEYSTORE" && test -s "$INFO"
+          PASS=$(grep '^store_password=' "$INFO" | cut -d= -f2-)
+          KEYPASS=$(grep '^key_password=' "$INFO" | cut -d= -f2-)
+          UNSIGNED=$(find app/build/outputs/apk/release -maxdepth 1 -type f -name '*release*.apk' | head -n 1)
+          test -n "$UNSIGNED" && test -s "$UNSIGNED"
+
+          OUT=out/Global-Edge-AI-Trader-v1.5.0.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KEYSTORE" --ks-pass pass:"$PASS" --key-pass pass:"$KEYPASS" --ks-key-alias globaledge --out "$OUT" "$UNSIGNED"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$OUT" | tee out/APK-SIGNATURE-VERIFY.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$OUT" | tee out/APK-BADGING.txt
+          grep -q "package: name='com.suhas.globaledgeai'" out/APK-BADGING.txt
+          grep -q "versionCode='150'" out/APK-BADGING.txt
+          grep -q "versionName='1.5.0'" out/APK-BADGING.txt
+          sha256sum "$OUT" | tee out/SHA256.txt
+
+          CERT_SHA=$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$OUT" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n1)
+          {
+            echo "build=SUCCESS"
+            echo "run_id=$GITHUB_RUN_ID"
+            echo "package=com.suhas.globaledgeai"
+            echo "versionCode=150"
+            echo "versionName=1.5.0"
+            echo "signing_certificate_reused_from=v1.4.0"
+            echo "signer_sha256=$CERT_SHA"
+            echo "features=NSE2026-calendar,PIT-evidence,macro-risk,sector-intelligence,challenger-shadow,scheduled-horizon,broker-reconciliation,evidence-fabric,decision-hash"
+          } > out/BUILD-STATUS.txt
+
+          # Preserve the certificate for future in-place updates, but never include it in source ZIP.
+          cp "$KEYSTORE" out/global-edge-v1.5.0.keystore
+          {
+            echo "alias=globaledge"
+            echo "store_password=$PASS"
+            echo "key_password=$KEYPASS"
+            echo "certificate_note=Same certificate lineage as v1.4.0. Keep private."
+          } > out/SIGNING-INFO.txt
+          (cd out && zip -q Global-Edge-AI-Trader-v1.5.0-SIGNING-BACKUP.zip global-edge-v1.5.0.keystore SIGNING-INFO.txt)
+
+      - name: Package source and build logs
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC=/tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source
+          cd "$SRC"
+          rm -rf source-export logs-export
+          mkdir -p source-export logs-export
+          rsync -a             --exclude='.gradle/'             --exclude='**/build/'             --exclude='out/'             --exclude='source-export/'             --exclude='logs-export/'             --exclude='local.properties'             --exclude='*.jks'             --exclude='*.keystore'             ./ source-export/Global-Edge-AI-Trader-v1.5.0-source/
+          (cd source-export && zip -qr ../out/Global-Edge-AI-Trader-v1.5.0-source.zip Global-Edge-AI-Trader-v1.5.0-source)
+
+          cp out/APK-SIGNATURE-VERIFY.txt logs-export/
+          cp out/APK-BADGING.txt logs-export/
+          cp out/SHA256.txt logs-export/
+          cp out/BUILD-STATUS.txt logs-export/
+          cp out/TEST-RESULT-SUMMARY.txt logs-export/
+          cp out/GRADLE-BUILD-TEST.log logs-export/
+          cp README-LADB.txt logs-export/
+          cp CHANGELOG-v1.5.0.txt logs-export/
+          (cd logs-export && zip -qr ../out/Global-Edge-AI-Trader-v1.5.0-build-logs.zip .)
+
+      - name: Upload final artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Global-Edge-AI-Trader-v1.5.0-FINAL
+          retention-days: 90
+          if-no-files-found: error
+          path: |
+            /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source/out/Global-Edge-AI-Trader-v1.5.0.apk
+            /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source/out/Global-Edge-AI-Trader-v1.5.0-source.zip
+            /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source/out/Global-Edge-AI-Trader-v1.5.0-build-logs.zip
+            /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source/out/Global-Edge-AI-Trader-v1.5.0-SIGNING-BACKUP.zip
+            /tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source/out/BUILD-STATUS.txt
+
+      - name: Publish final public artifacts in repo release folder
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC=/tmp/global-edge-v103/Global-Edge-AI-Trader-v1.0.3-source/out
+          DEST=fresh-global-edge/v150/release
+          mkdir -p "$DEST"
+          cp "$SRC/Global-Edge-AI-Trader-v1.5.0.apk" "$DEST/"
+          cp "$SRC/Global-Edge-AI-Trader-v1.5.0-source.zip" "$DEST/"
+          cp "$SRC/Global-Edge-AI-Trader-v1.5.0-build-logs.zip" "$DEST/"
+          cp "$SRC/BUILD-STATUS.txt" "$DEST/"
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add "$DEST"
+          git commit -m 'Publish Global Edge AI Trader v1.5.0 final APK, source and logs [skip ci]'
+          git push
