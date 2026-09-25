@@ -184,13 +184,15 @@ class EvidenceLedgerStore(context:Context){
     private fun sha256(raw:String)=MessageDigest.getInstance("SHA-256").digest(raw.toByteArray()).joinToString(""){"%02x".format(it)}
 
     private fun discoverDate(text:String):String?{
-        Regex("""\\b(20\\d{2})[-/](\\d{1,2})[-/](\\d{1,2})\\b""").find(text)?.let{m->
-            return runCatching{LocalDate.of(m.groupValues[1].toInt(),m.groupValues[2].toInt(),m.groupValues[3].toInt()).toString()}.getOrNull()
+        val numeric=Regex("""\b(20\d{2})[-/](\d{1,2})[-/](\d{1,2})\b""").find(text)
+        if(numeric!=null){
+            return runCatching{LocalDate.of(numeric.groupValues[1].toInt(),numeric.groupValues[2].toInt(),numeric.groupValues[3].toInt()).toString()}.getOrNull()
         }
         val months=mapOf("jan" to 1,"feb" to 2,"mar" to 3,"apr" to 4,"may" to 5,"jun" to 6,"jul" to 7,"aug" to 8,"sep" to 9,"oct" to 10,"nov" to 11,"dec" to 12)
-        Regex("""\\b(\\d{1,2})\\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\\s+(20\\d{2})\\b""",RegexOption.IGNORE_CASE).find(text)?.let{m->
-            val mon=months[m.groupValues[2].take(3).lowercase()]?:return@let
-            return runCatching{LocalDate.of(m.groupValues[3].toInt(),mon,m.groupValues[1].toInt()).toString()}.getOrNull()
+        val named=Regex("""\b(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(20\d{2})\b""",RegexOption.IGNORE_CASE).find(text)
+        if(named!=null){
+            val mon=months[named.groupValues[2].take(3).lowercase()]
+            if(mon!=null)return runCatching{LocalDate.of(named.groupValues[3].toInt(),mon,named.groupValues[1].toInt()).toString()}.getOrNull()
         }
         return null
     }
