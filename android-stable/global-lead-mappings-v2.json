@@ -1,6 +1,6 @@
 {
-  "version": "GLM-2026.09.19-WEEKLY",
-  "generatedAt": "2026-09-19T09:39:16.134344+00:00",
+  "version": "GLM-2026.09.26-WEEKLY",
+  "generatedAt": "2026-09-26T10:02:21.773600+00:00",
   "coverage": {
     "indianStocks": 508,
     "mappingLinks": 1535,
@@ -8330,8 +8330,8 @@
       "notes": "Weekly global proxy; not the same company. Indian confirmation required."
     },
     {
-      "indianSymbol": "HEG",
-      "indianCompany": "HEG Ltd.",
+      "indianSymbol": "HEGAM",
+      "indianCompany": "HEG Advanced Materials Ltd.",
       "foreignTicker": "XLI",
       "foreignCompany": "US Industrial Sector",
       "exchange": "NYSEARCA",
@@ -8343,8 +8343,8 @@
       "notes": "Weekly global proxy; not the same company. Indian confirmation required."
     },
     {
-      "indianSymbol": "HEG",
-      "indianCompany": "HEG Ltd.",
+      "indianSymbol": "HEGAM",
+      "indianCompany": "HEG Advanced Materials Ltd.",
       "foreignTicker": "CAT",
       "foreignCompany": "Caterpillar",
       "exchange": "NYSE",
@@ -8356,8 +8356,8 @@
       "notes": "Weekly global proxy; not the same company. Indian confirmation required."
     },
     {
-      "indianSymbol": "HEG",
-      "indianCompany": "HEG Ltd.",
+      "indianSymbol": "HEGAM",
+      "indianCompany": "HEG Advanced Materials Ltd.",
       "foreignTicker": "SIE.DE",
       "foreignCompany": "Siemens AG",
       "exchange": "XETRA",
