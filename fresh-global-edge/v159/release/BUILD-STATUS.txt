@@ -1,0 +1,12 @@
+build=SUCCESS
+package=com.suhas.globaledgeai
+versionCode=159
+versionName=1.5.9
+signer_sha256=31ffa51c23b76f450cf099d00b254870bf8eacc5ce79aee4458070a0fab783d7
+update_certificate_preserved=true
+manual_order_only=true
+uc_pressure_live_session_guard=09:15-15:30_IST
+invalid_outcome_excluded_from_learning=true
+global_same_session_symbol_direction_dedupe=true
+legacy_ledger_integrity_migration=true
+v158_strategy_and_full_nse_logic_preserved=true
