@@ -37,7 +37,7 @@ jobs:
           grep -q 'instrumentType=="EQ"' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
           grep -q 'deepBudget=450' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
           grep -q 'queued, not sampled' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
-          grep -q 'Per-symbol quote/depth is fetched only after at least one rule fires' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'Live Data quota is spent only when at least one strategy rule actually fires' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
           grep -q 'maxNewLivePerPass=5' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
           grep -q 'StrategyStatus.CHALLENGER->challengerPublished' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
           grep -q 'strategyDeepScanCursor' app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt
