@@ -1,0 +1,182 @@
+name: Global Edge AI Trader v1.5.7 Full NSE Build
+
+on:
+  push:
+    paths:
+      - '.github/workflows/global-edge-v157-build.yml'
+      - 'fresh-global-edge/v157/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download exact signed-lineage v1.5.5 source artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Global-Edge-AI-Trader-v1.5.5-FINAL
+          repository: SuhasSrinivasa1/AI-Trader
+          run-id: 36387213252
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: /tmp/v155-artifact
+
+      - name: Apply v1.5.7 full NSE scanner patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/v157
+          SRCZIP=$(find /tmp/v155-artifact -type f -name 'Global-Edge-AI-Trader-v1.5.5-source.zip' | head -n1)
+          test -n "$SRCZIP" && test -s "$SRCZIP"
+          unzip -q "$SRCZIP" -d /tmp/v157
+          SRC=/tmp/v157/Global-Edge-AI-Trader-v1.5.0-source
+          cat fresh-global-edge/v157/v155-to-v157.patch.gz.b64 | tr -d '\r\n ' | base64 -d > /tmp/v157.patch.gz
+          gunzip -c /tmp/v157.patch.gz > /tmp/v157.patch
+          cd "$SRC"
+          patch -p1 --batch < /tmp/v157.patch
+
+          grep -q 'versionCode = 157' app/build.gradle.kts
+          grep -q 'versionName = "1.5.7"' app/build.gradle.kts
+          grep -q 'instrumentType=="EQ"' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'FULL NSE equity scan' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'deepBudget=450' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'queued, not sampled' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'strategyDeepScanCursor' app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt
+          grep -q 'researchTop=directionalWinners.filter' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'ApiRateLimiter(260L)' app/src/main/java/com/suhas/ucsentinel/data/remote/GrowwClient.kt
+          grep -q 'UC: confirming ALL' app/src/main/java/com/suhas/ucsentinel/domain/engine/ScannerEngine.kt
+          grep -q 'Pressure: confirming ALL' app/src/main/java/com/suhas/ucsentinel/domain/engine/DemandScannerEngine.kt
+          if grep -q 'take(settings.maxQuotesPerScan)' app/src/main/java/com/suhas/ucsentinel/domain/engine/ScannerEngine.kt; then exit 1; fi
+          if grep -q 'take(settings.maxQuotesPerScan)' app/src/main/java/com/suhas/ucsentinel/domain/engine/DemandScannerEngine.kt; then exit 1; fi
+          grep -q 'maxNewLivePerPass=5' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'StrategyStatus.CHALLENGER->challengerPublished' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'global_live_only_flow_v154' app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt
+          echo 'v1.5.7 full NSE source verification passed'
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Unit tests and release APK
+        working-directory: /tmp/v157/Global-Edge-AI-Trader-v1.5.0-source
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p out
+          gradle --no-daemon --console=plain clean testDebugUnitTest assembleRelease 2>&1 | tee out/GRADLE-BUILD-TEST.log
+          echo 'Unit tests + assembleRelease: PASS' > out/TEST-RESULT-SUMMARY.txt
+
+      - name: Recover preserved signing material
+        uses: actions/download-artifact@v4
+        with:
+          name: Global-Edge-AI-Trader-v1.5.0-FINAL
+          repository: SuhasSrinivasa1/AI-Trader
+          run-id: 36146076154
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: /tmp/v150-artifact
+
+      - name: Sign and verify preserved update certificate
+        working-directory: /tmp/v157/Global-Edge-AI-Trader-v1.5.0-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out /tmp/signing
+          BACKUP=$(find /tmp/v150-artifact -type f -name 'Global-Edge-AI-Trader-v1.5.0-SIGNING-BACKUP.zip' | head -n1)
+          unzip -q "$BACKUP" -d /tmp/signing
+          KEYSTORE=/tmp/signing/global-edge-v1.5.0.keystore
+          INFO=/tmp/signing/SIGNING-INFO.txt
+          STORE_PASS=$(grep '^store_password=' "$INFO" | cut -d= -f2-)
+          KEY_PASS=$(grep '^key_password=' "$INFO" | cut -d= -f2-)
+          UNSIGNED=$(find app/build/outputs/apk/release -maxdepth 1 -type f -name '*release*.apk' | head -n1)
+          OUT=out/Global-Edge-AI-Trader-v1.5.7.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KEYSTORE" --ks-pass pass:"$STORE_PASS" --key-pass pass:"$KEY_PASS" --ks-key-alias globaledge --out "$OUT" "$UNSIGNED"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$OUT" | tee out/APK-SIGNATURE-VERIFY.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$OUT" | tee out/APK-BADGING.txt
+          grep -q "package: name='com.suhas.globaledgeai'" out/APK-BADGING.txt
+          grep -q "versionCode='157'" out/APK-BADGING.txt
+          grep -q "versionName='1.5.7'" out/APK-BADGING.txt
+          CERT_SHA=$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$OUT" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n1)
+          test "$CERT_SHA" = '31ffa51c23b76f450cf099d00b254870bf8eacc5ce79aee4458070a0fab783d7'
+          sha256sum "$OUT" | tee out/SHA256.txt
+          {
+            echo 'build=SUCCESS'
+            echo 'package=com.suhas.globaledgeai'
+            echo 'versionCode=157'
+            echo 'versionName=1.5.7'
+            echo "signer_sha256=$CERT_SHA"
+            echo 'manual_order_only=true'
+            echo 'strategy_scan_target_cadence=5m'
+            echo 'strategy_universe=FULL_NSE_CASH_EQ_FROM_CURRENT_GROWW_MASTER'
+            echo 'stage1=ALL_UNIVERSE_OHLC_BATCHED_50'
+            echo 'deep_stage=450_PER_PASS_PERSISTENT_CONTINUATION_QUEUE'
+            echo 'fixed_symbol_sample_removed=true'
+            echo 'strategy_rank_cutoff_removed=true'
+            echo 'quote_only_after_strategy_rule_match=true'
+            echo 'live_data_pacer=260ms_approx_230_per_min'
+            echo 'uc_topN_quote_sample_removed=true'
+            echo 'demand_topN_quote_sample_removed=true'
+            echo 'max_new_live_per_strategy_pass=5'
+            echo 'global_flow_preserved=NEXT_TO_LIVE_TO_DONE_ONLY'
+          } > out/BUILD-STATUS.txt
+
+      - name: Package source and logs
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC=/tmp/v157/Global-Edge-AI-Trader-v1.5.0-source
+          cd /tmp/v157
+          zip -qr "$SRC/out/Global-Edge-AI-Trader-v1.5.7-source.zip" Global-Edge-AI-Trader-v1.5.0-source -x '*/.gradle/*' '*/build/*' '*/out/*' '*.keystore' '*.jks'
+          cd "$SRC/out"
+          zip -q Global-Edge-AI-Trader-v1.5.7-build-logs.zip APK-SIGNATURE-VERIFY.txt APK-BADGING.txt SHA256.txt BUILD-STATUS.txt TEST-RESULT-SUMMARY.txt GRADLE-BUILD-TEST.log
+
+      - name: Upload final v1.5.7 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Global-Edge-AI-Trader-v1.5.7-FINAL
+          retention-days: 90
+          if-no-files-found: error
+          path: |
+            /tmp/v157/Global-Edge-AI-Trader-v1.5.0-source/out/Global-Edge-AI-Trader-v1.5.7.apk
+            /tmp/v157/Global-Edge-AI-Trader-v1.5.0-source/out/Global-Edge-AI-Trader-v1.5.7-source.zip
+            /tmp/v157/Global-Edge-AI-Trader-v1.5.0-source/out/Global-Edge-AI-Trader-v1.5.7-build-logs.zip
+            /tmp/v157/Global-Edge-AI-Trader-v1.5.0-source/out/BUILD-STATUS.txt
+
+      - name: Publish v1.5.7 release files
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC=/tmp/v157/Global-Edge-AI-Trader-v1.5.0-source/out
+          DEST=fresh-global-edge/v157/release
+          mkdir -p "$DEST"
+          cp "$SRC/Global-Edge-AI-Trader-v1.5.7.apk" "$DEST/"
+          cp "$SRC/Global-Edge-AI-Trader-v1.5.7-source.zip" "$DEST/"
+          cp "$SRC/Global-Edge-AI-Trader-v1.5.7-build-logs.zip" "$DEST/"
+          cp "$SRC/BUILD-STATUS.txt" "$DEST/"
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add "$DEST"
+          git commit -m 'Publish Global Edge AI Trader v1.5.7 full NSE release [skip ci]'
+          git push
