@@ -1,0 +1,10 @@
+build=SUCCESS
+package=com.suhas.globaledgeai
+versionCode=154
+versionName=1.5.4
+signer_sha256=31ffa51c23b76f450cf099d00b254870bf8eacc5ce79aee4458070a0fab783d7
+manual_order_only=true
+global_flow=NEXT_RESEARCH_ONLY_TO_LIVE_TO_DONE
+research_watch=BACKEND_ONLY
+done_filter=GLOBAL_LIVE_ORIGIN_ONLY
+migration=archive legacy GLOBAL non-LIVE calls and rebuild Global learning from LIVE-only outcomes
