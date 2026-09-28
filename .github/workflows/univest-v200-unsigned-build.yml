@@ -1,9 +1,9 @@
-name: Univest v2.0.0 Unsigned Builder
+name: Univest v2.0.1 Auth Fix Builder
 on:
   push:
     paths:
       - '.github/workflows/univest-v200-unsigned-build.yml'
-      - '.build-temp/univest-v200-final/**'
+      - '.build-temp/univest-v201-final/**'
   workflow_dispatch:
 
 jobs:
@@ -37,7 +37,7 @@ jobs:
         run: |
           rm -rf UnivestAutoTrade
           mkdir UnivestAutoTrade
-          tar -xzf .build-temp/univest-v200-final/source.tar.gz -C UnivestAutoTrade
+          tar -xzf .build-temp/univest-v201-final/source.tar.gz -C UnivestAutoTrade
 
       - name: Validate locked rules
         run: |
@@ -45,7 +45,7 @@ jobs:
           grep -R -q 'ENTRY_BUDGET = 20000' UnivestAutoTrade/app/src/main/java
           grep -R -q 'REENTRY_BUDGET = 5000' UnivestAutoTrade/app/src/main/java
           grep -R -q 'EXPORT COMPLETE DEBUG ZIP' UnivestAutoTrade/app/src/main/java
-          grep -R -q 'SYMBOL_MAPPING_FAILED' UnivestAutoTrade/app/src/main/java
+          grep -R -q 'SYMBOL_MAPPING_FAILED' UnivestAutoTrade/app/src/main/java\n          grep -R -q 'post(TOKEN_URL, totpToken, body.toString(), true)' UnivestAutoTrade/app/src/main/java\n          grep -R -q 'GROWW_TOTP_REQUEST' UnivestAutoTrade/app/src/main/java
 
       - name: Test and build unsigned release
         working-directory: UnivestAutoTrade
@@ -61,16 +61,16 @@ jobs:
           mkdir -p release
           APK="$(find UnivestAutoTrade/app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' | head -1)"
           test -n "$APK" && test -s "$APK"
-          cp "$APK" release/Univest-AutoTrade-v2.0.0-UNSIGNED.apk
+          cp "$APK" release/Univest-AutoTrade-v2.0.1-UNSIGNED.apk
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | tee release/APK-BADGING.txt
           grep -q "package: name='com.suhas.multyfideliverybuy'" release/APK-BADGING.txt
-          grep -q "versionCode='200'" release/APK-BADGING.txt
+          grep -q "versionCode='201'" release/APK-BADGING.txt
           grep -q "versionName='2.0.0'" release/APK-BADGING.txt
-          sha256sum release/Univest-AutoTrade-v2.0.0-UNSIGNED.apk > release/APK-SHA256.txt
+          sha256sum release/Univest-AutoTrade-v2.0.1-UNSIGNED.apk > release/APK-SHA256.txt
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Univest-AutoTrade-v2.0.0-UNSIGNED
+          name: Univest-AutoTrade-v2.0.1-UNSIGNED
           retention-days: 7
           path: release/*
           if-no-files-found: error
