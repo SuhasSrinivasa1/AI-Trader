@@ -1,0 +1,201 @@
+name: Global Edge AI Trader v1.5.3 Scanner Recall Build
+
+on:
+  push:
+    paths:
+      - '.github/workflows/global-edge-v153-build.yml'
+      - 'fresh-global-edge/v153/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare exact v1.5.2 baseline and apply scanner recall fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/v153
+          unzip -q fresh-global-edge/v151/release-fixed/Global-Edge-AI-Trader-v1.5.1-source.zip -d /tmp/v153
+          SRC=/tmp/v153/Global-Edge-AI-Trader-v1.5.0-source
+
+          python "$GITHUB_WORKSPACE/fresh-global-edge/v152/fix_v152_secure_slot.py" "$SRC"
+
+          cat "$GITHUB_WORKSPACE/fresh-global-edge/v153/v152-to-v153.patch.gz.b64" | tr -d '\r\n ' | base64 -d > /tmp/v153-base.patch.gz
+          gunzip -c /tmp/v153-base.patch.gz > /tmp/v153-base.patch
+          cd "$SRC"
+          patch -p0 --batch < /tmp/v153-base.patch
+
+          cat "$GITHUB_WORKSPACE/fresh-global-edge/v153/v153-early-session-liquidity.patch.gz.b64" | tr -d '\r\n ' | base64 -d > /tmp/v153-early.patch.gz
+          gunzip -c /tmp/v153-early.patch.gz > /tmp/v153-early.patch
+          patch -p4 --batch < /tmp/v153-early.patch
+
+          grep -q 'versionCode = 153' app/build.gradle.kts
+          grep -q 'versionName = "1.5.3"' app/build.gradle.kts
+          grep -q 'EARLY-OPEN' app/src/main/java/com/suhas/ucsentinel/domain/engine/TradingStrategyEngine.kt
+          grep -q 'candles.size<2' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'researchTop=top.filter{it.first.score>=68.0}' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'LIVE_EXECUTION_GATE' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'earlyResearch=now.toLocalTime()<LocalTime.of(9,45)' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'UC_LIVE_READY' app/src/main/java/com/suhas/ucsentinel/domain/engine/ScannerEngine.kt
+          grep -q 'publicationLiquidity=if(earlySession) ExecutionQuality.discoveryQuote(quote)' app/src/main/java/com/suhas/ucsentinel/domain/engine/ScannerEngine.kt
+          grep -q 'UcCompactView.WATCH' app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt
+          grep -q 'lastEvidencePass' app/src/main/java/com/suhas/ucsentinel/worker/MarketScanService.kt
+          grep -q 'EXECUTION_READY' app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt
+          grep -q 'placeManualMarketOrder' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          echo "v1.5.3 scanner recall source verification passed"
+
+      - name: Add focused early-open unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC=/tmp/v153/Global-Edge-AI-Trader-v1.5.0-source
+          cat > "$SRC/app/src/test/java/com/suhas/ucsentinel/TradingStrategyEarlyOpenTest.kt" <<'EOF'
+          package com.suhas.globaledgeai
+
+          import com.suhas.globaledgeai.domain.engine.TradingStrategyEngine
+          import com.suhas.globaledgeai.domain.model.Candle
+          import com.suhas.globaledgeai.domain.model.TradingStrategyDefinition
+          import org.junit.Assert.assertNotNull
+          import org.junit.Assert.assertNull
+          import org.junit.Test
+
+          class TradingStrategyEarlyOpenTest {
+              private val engine=TradingStrategyEngine()
+              private fun def(kind:String)=TradingStrategyDefinition("T-$kind",kind,kind,"Early","test",1)
+
+              @Test fun oneBarStillWaits(){
+                  val bars=listOf(Candle(1,100.0,101.0,99.5,100.8,1000))
+                  assertNull(engine.evaluate(def("ORB_RVOL"),bars))
+              }
+
+              @Test fun twoBarOpeningBreakoutCanBeResearched(){
+                  val bars=listOf(
+                      Candle(1,100.0,101.0,99.0,100.0,1000),
+                      Candle(2,100.1,102.5,100.0,102.0,2000)
+                  )
+                  assertNotNull(engine.evaluate(def("ORB_RVOL"),bars))
+              }
+          }
+          EOF
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Unit tests and release APK
+        working-directory: /tmp/v153/Global-Edge-AI-Trader-v1.5.0-source
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p out
+          gradle --no-daemon --console=plain clean testDebugUnitTest assembleRelease 2>&1 | tee out/GRADLE-BUILD-TEST.log
+          echo "Unit tests + assembleRelease: PASS" > out/TEST-RESULT-SUMMARY.txt
+
+      - name: Recover preserved signing material
+        uses: actions/download-artifact@v4
+        with:
+          name: Global-Edge-AI-Trader-v1.5.0-FINAL
+          repository: SuhasSrinivasa1/AI-Trader
+          run-id: 36146076154
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: /tmp/v150-artifact
+
+      - name: Sign and verify preserved update certificate
+        working-directory: /tmp/v153/Global-Edge-AI-Trader-v1.5.0-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out /tmp/signing
+          BACKUP=$(find /tmp/v150-artifact -type f -name 'Global-Edge-AI-Trader-v1.5.0-SIGNING-BACKUP.zip' | head -n1)
+          unzip -q "$BACKUP" -d /tmp/signing
+          KEYSTORE=/tmp/signing/global-edge-v1.5.0.keystore
+          INFO=/tmp/signing/SIGNING-INFO.txt
+          STORE_PASS=$(grep '^store_password=' "$INFO" | cut -d= -f2-)
+          KEY_PASS=$(grep '^key_password=' "$INFO" | cut -d= -f2-)
+          UNSIGNED=$(find app/build/outputs/apk/release -maxdepth 1 -type f -name '*release*.apk' | head -n1)
+          OUT=out/Global-Edge-AI-Trader-v1.5.3.apk
+
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KEYSTORE" --ks-pass pass:"$STORE_PASS" --key-pass pass:"$KEY_PASS" --ks-key-alias globaledge --out "$OUT" "$UNSIGNED"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$OUT" | tee out/APK-SIGNATURE-VERIFY.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$OUT" | tee out/APK-BADGING.txt
+          grep -q "package: name='com.suhas.globaledgeai'" out/APK-BADGING.txt
+          grep -q "versionCode='153'" out/APK-BADGING.txt
+          grep -q "versionName='1.5.3'" out/APK-BADGING.txt
+          CERT_SHA=$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$OUT" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n1)
+          test "$CERT_SHA" = "31ffa51c23b76f450cf099d00b254870bf8eacc5ce79aee4458070a0fab783d7"
+          sha256sum "$OUT" | tee out/SHA256.txt
+          {
+            echo "build=SUCCESS"
+            echo "package=com.suhas.globaledgeai"
+            echo "versionCode=153"
+            echo "versionName=1.5.3"
+            echo "signing_certificate_reused=true"
+            echo "signer_sha256=$CERT_SHA"
+            echo "manual_order_only=true"
+            echo "scanner_cadence=5m"
+            echo "fixes=early-open-strategy,challenger-shadow-sampling,uc-recall,uc-watch,independent-foreground-jobs,evidence-refresh"
+          } > out/BUILD-STATUS.txt
+
+      - name: Package source and logs
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC=/tmp/v153/Global-Edge-AI-Trader-v1.5.0-source
+          cd /tmp/v153
+          zip -qr "$SRC/out/Global-Edge-AI-Trader-v1.5.3-source.zip" Global-Edge-AI-Trader-v1.5.0-source -x '*/.gradle/*' '*/build/*' '*/out/*' '*.keystore' '*.jks'
+          cd "$SRC/out"
+          zip -q Global-Edge-AI-Trader-v1.5.3-build-logs.zip APK-SIGNATURE-VERIFY.txt APK-BADGING.txt SHA256.txt BUILD-STATUS.txt TEST-RESULT-SUMMARY.txt GRADLE-BUILD-TEST.log
+
+      - name: Upload final v1.5.3 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Global-Edge-AI-Trader-v1.5.3-FINAL
+          retention-days: 90
+          if-no-files-found: error
+          path: |
+            /tmp/v153/Global-Edge-AI-Trader-v1.5.0-source/out/Global-Edge-AI-Trader-v1.5.3.apk
+            /tmp/v153/Global-Edge-AI-Trader-v1.5.0-source/out/Global-Edge-AI-Trader-v1.5.3-source.zip
+            /tmp/v153/Global-Edge-AI-Trader-v1.5.0-source/out/Global-Edge-AI-Trader-v1.5.3-build-logs.zip
+            /tmp/v153/Global-Edge-AI-Trader-v1.5.0-source/out/BUILD-STATUS.txt
+
+      - name: Publish v1.5.3 release files
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC=/tmp/v153/Global-Edge-AI-Trader-v1.5.0-source/out
+          DEST=fresh-global-edge/v153/release
+          mkdir -p "$DEST"
+          cp "$SRC/Global-Edge-AI-Trader-v1.5.3.apk" "$DEST/"
+          cp "$SRC/Global-Edge-AI-Trader-v1.5.3-source.zip" "$DEST/"
+          cp "$SRC/Global-Edge-AI-Trader-v1.5.3-build-logs.zip" "$DEST/"
+          cp "$SRC/BUILD-STATUS.txt" "$DEST/"
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add "$DEST"
+          git commit -m 'Publish Global Edge AI Trader v1.5.3 scanner recall release [skip ci]'
+          git push
