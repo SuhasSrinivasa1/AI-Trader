@@ -73,7 +73,7 @@ jobs:
 
           class TradingStrategyEarlyOpenTest {
               private val engine=TradingStrategyEngine()
-              private fun def(kind:String)=TradingStrategyDefinition("T-$kind",kind,kind,"Early","test",1)
+              private fun def(kind:String)=TradingStrategyDefinition("T-$kind",kind,kind,"Early","Early-open test","test",1)
 
               @Test fun oneBarStillWaits(){
                   val bars=listOf(Candle(1,100.0,101.0,99.5,100.8,1000))
