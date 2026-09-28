@@ -1,0 +1,52 @@
+name: Univest v2.0.0 Unsigned Builder
+on:
+  push:
+    paths:
+      - '.github/workflows/univest-v200-unsigned-build.yml'
+      - '.build-temp/univest-v200-final/**'
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install SDK
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Reconstruct source
+        run: |
+          rm -rf UnivestAutoTrade
+          mkdir UnivestAutoTrade
+          tar -xzf .build-temp/univest-v200-final/source.tar.gz -C UnivestAutoTrade
+      - name: Validate locked rules
+        run: |
+          grep -R -q 'com.univest.capp' UnivestAutoTrade/app/src/main/java
+          grep -R -q 'ENTRY_BUDGET = 20000' UnivestAutoTrade/app/src/main/java
+          grep -R -q 'REENTRY_BUDGET = 5000' UnivestAutoTrade/app/src/main/java
+          grep -R -q 'EXPORT COMPLETE DEBUG ZIP' UnivestAutoTrade/app/src/main/java
+          grep -R -q 'SYMBOL_MAPPING_FAILED' UnivestAutoTrade/app/src/main/java
+      - name: Test and build unsigned release
+        working-directory: UnivestAutoTrade
+        run: gradle --no-daemon clean testReleaseUnitTest assembleRelease
+      - name: Collect unsigned APK
+        run: |
+          mkdir -p release
+          APK="$(find UnivestAutoTrade/app/build/outputs/apk/release -name '*.apk' | head -1)"
+          test -n "$APK"
+          cp "$APK" release/Univest-AutoTrade-v2.0.0-UNSIGNED.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | head -20 > release/APK-BADGING.txt
+          sha256sum release/Univest-AutoTrade-v2.0.0-UNSIGNED.apk > release/APK-SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Univest-AutoTrade-v2.0.0-UNSIGNED
+          path: release/*
+          if-no-files-found: error
