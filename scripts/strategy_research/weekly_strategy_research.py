@@ -1,0 +1,178 @@
+#!/usr/bin/env python3
+import datetime as dt, json, os, re, urllib.parse, urllib.request, xml.etree.ElementTree as ET
+
+ROOT=os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+CAT=os.path.join(ROOT,"android-stable","strategy-catalog-v2.json")
+REPORT=os.path.join(ROOT,"android-stable","strategy-research-latest.json")
+TOKEN=os.environ.get("GITHUB_TOKEN","")
+UA={"User-Agent":"Global-Quant-Trader-Weekly-Research/2.2"}
+
+QUERIES={
+ "ARBITRAGE":[
+  "cash futures arbitrage trading strategy fair value basis",
+  "put call parity conversion reversal arbitrage strategy",
+  "futures calendar spread statistical arbitrage strategy",
+  "options relative value box spread arbitrage research"
+ ],
+ "HEDGING":[
+  "dynamic hedging strategy delta hedge portfolio drawdown",
+  "protective put collar hedge optimization strategy",
+  "index futures hedge ratio portfolio beta optimization",
+  "options tail risk hedging strategy research"
+ ],
+ "DIRECTIONAL_FNO":[
+  "futures open interest price momentum trading strategy",
+  "options implied volatility skew directional trading strategy",
+  "VWAP relative volume futures breakout trading strategy",
+  "order flow market depth futures trading strategy",
+  "news sentiment event driven options trading strategy",
+  "global markets overnight lead Indian market trading strategy"
+ ]
+}
+
+KIND_RULES=[
+ (r"opening range|orb","ORB_RVOL"),
+ (r"vwap.*reclaim|reclaim.*vwap","VWAP_RECLAIM"),
+ (r"vwap.*pullback|pullback.*vwap","VWAP_PULLBACK"),
+ (r"bollinger|squeeze","BOLL_SQUEEZE"),
+ (r"donchian","DONCHIAN"),
+ (r"ema.*cross|moving average.*cross","EMA_CROSS"),
+ (r"trend.*pullback|pullback.*trend","TREND_PULLBACK"),
+ (r"macd","MACD"),
+ (r"rsi.?2","RSI2_TREND"),
+ (r"rsi|relative strength index","RSI14_REVERSAL"),
+ (r"stochastic","STOCH_REVERSAL"),
+ (r"inside bar","INSIDE_BAR"),
+ (r"engulf","ENGULFING"),
+ (r"hammer|shooting star","HAMMER"),
+ (r"morning star|evening star","MORNING_STAR"),
+ (r"three white soldiers|black crows","THREE_SOLDIERS"),
+ (r"gap.?and.?go|gap continuation","GAP_GO"),
+ (r"nr7|narrow range","NR7_EXPANSION"),
+ (r"volume.*breakout|breakout.*volume|relative volume","VOLUME_BREAKOUT"),
+ (r"atr.*breakout|average true range.*breakout","ATR_BREAKOUT"),
+ (r"support|resistance","SUPPORT_RESISTANCE"),
+ (r"adx|trend strength","ADX_TREND"),
+]
+
+def get(url,headers=None,timeout=20):
+    h=dict(UA); h.update(headers or {})
+    req=urllib.request.Request(url,headers=h)
+    with urllib.request.urlopen(req,timeout=timeout) as r:
+        return r.read().decode("utf-8","replace")
+
+def clean(s):
+    return re.sub(r"\s+"," ",re.sub(r"<[^>]+>"," ",s or "")).strip()
+
+def bing(engine,q):
+    url="https://www.bing.com/search?format=rss&q="+urllib.parse.quote(q)
+    out=[]
+    try:
+        root=ET.fromstring(get(url))
+        for item in root.findall(".//item")[:8]:
+            out.append({"engine":engine,"source":"web_search","query":q,
+                        "title":clean(item.findtext("title")),"url":clean(item.findtext("link")),
+                        "summary":clean(item.findtext("description"))})
+    except Exception as e:
+        out.append({"engine":engine,"source":"web_search_error","query":q,"title":str(e),"url":"","summary":""})
+    return out
+
+def arxiv():
+    q='all:"algorithmic trading" OR all:"statistical arbitrage" OR all:"options hedging" OR all:"market microstructure"'
+    url="https://export.arxiv.org/api/query?search_query="+urllib.parse.quote(q)+"&start=0&max_results=20&sortBy=submittedDate&sortOrder=descending"
+    out=[]
+    try:
+        root=ET.fromstring(get(url))
+        ns={"a":"http://www.w3.org/2005/Atom"}
+        for e in root.findall("a:entry",ns):
+            t=clean(e.findtext("a:title",default="",namespaces=ns))
+            summ=clean(e.findtext("a:summary",default="",namespaces=ns))
+            link=clean(e.findtext("a:id",default="",namespaces=ns))
+            low=(t+" "+summ).lower()
+            engine="HEDGING" if "hedg" in low else ("ARBITRAGE" if "arbitrage" in low or "relative value" in low else "DIRECTIONAL_FNO")
+            out.append({"engine":engine,"source":"arxiv","query":"quant research","title":t,"url":link,"summary":summ})
+    except Exception as e:
+        out.append({"engine":"RESEARCH","source":"arxiv_error","query":"quant research","title":str(e),"url":"","summary":""})
+    return out
+
+def github_search():
+    queries=["quant trading strategy futures options","statistical arbitrage options","dynamic hedging options","order flow trading strategy"]
+    out=[]
+    for q in queries:
+        try:
+            headers={"Accept":"application/vnd.github+json"}
+            if TOKEN: headers["Authorization"]="Bearer "+TOKEN
+            url="https://api.github.com/search/repositories?q="+urllib.parse.quote(q)+"&sort=updated&order=desc&per_page=8"
+            data=json.loads(get(url,headers))
+            for x in data.get("items",[]):
+                text=(x.get("name","")+" "+(x.get("description") or "")).lower()
+                engine="HEDGING" if "hedg" in text else ("ARBITRAGE" if "arbitrage" in text else "DIRECTIONAL_FNO")
+                out.append({"engine":engine,"source":"github","query":q,"title":x.get("full_name",""),
+                            "url":x.get("html_url",""),"summary":clean(x.get("description") or "")})
+        except Exception as e:
+            out.append({"engine":"RESEARCH","source":"github_error","query":q,"title":str(e),"url":"","summary":""})
+    return out
+
+def dedupe(items):
+    seen=set(); out=[]
+    for x in items:
+        key=(x.get("url") or x.get("title","")).lower().strip()
+        if not key or key in seen: continue
+        seen.add(key); out.append(x)
+    return out
+
+def supported_kind(item):
+    text=(item.get("title","")+" "+item.get("summary","")).lower()
+    for pat,kind in KIND_RULES:
+        if re.search(pat,text): return kind
+    return None
+
+def slug(s):
+    s=re.sub(r"[^a-z0-9]+","_",s.lower()).strip("_")
+    return s[:36] or "candidate"
+
+def main():
+    with open(CAT,encoding="utf-8") as f: cat=json.load(f)
+    findings=[]
+    for engine,qs in QUERIES.items():
+        for q in qs: findings.extend(bing(engine,q))
+    findings.extend(arxiv())
+    findings.extend(github_search())
+    findings=dedupe(findings)
+
+    today=dt.datetime.now(dt.timezone.utc).date().isoformat()
+    candidates=[]
+    for x in findings:
+        k=supported_kind(x)
+        x["supported_kind"]=k
+        x["disposition"]="challenger_shadow" if (x["engine"]=="DIRECTIONAL_FNO" and k) else "research_only"
+        if x["disposition"]=="challenger_shadow" and len(candidates)<16:
+            candidates.append({
+                "id":"web_"+slug(x["title"])+"_"+str(len(candidates)+1),
+                "name":"Web Challenger: "+x["title"][:90],
+                "kind":k,
+                "family":"Weekly Web Research",
+                "description":("Discovered via weekly broad-web research; encoded using supported "+k+
+                               ". Must earn promotion through shadow evidence; source: "+x["url"])[:600],
+                "source":x["url"] or x["source"],
+                "priority":60
+            })
+
+    base=[x for x in cat.get("strategies",[]) if not str(x.get("id","")).startswith("web_")]
+    cat["strategies"]=base+candidates
+    cat["version"]="STRAT-WEB-"+today
+    cat["research"]={
+        "mode":"broad_web_weekly",
+        "last_research_at":dt.datetime.now(dt.timezone.utc).isoformat(),
+        "finding_count":len(findings),
+        "challenger_count":len(candidates),
+        "engine_counts":{e:sum(1 for x in findings if x.get("engine")==e) for e in ["ARBITRAGE","HEDGING","DIRECTIONAL_FNO"]},
+        "policy":"Discovery never promotes directly. Supported encodings enter Challenger shadow tests; unsupported or vague ideas remain research-only. Existing Champions remain until evidence-based demotion."
+    }
+    with open(CAT,"w",encoding="utf-8") as f: json.dump(cat,f,indent=2,ensure_ascii=False); f.write("\n")
+    with open(REPORT,"w",encoding="utf-8") as f:
+        json.dump({"generated_at":dt.datetime.now(dt.timezone.utc).isoformat(),"findings":findings},f,indent=2,ensure_ascii=False); f.write("\n")
+    print(json.dumps(cat["research"],indent=2))
+
+if __name__=="__main__":
+    main()
