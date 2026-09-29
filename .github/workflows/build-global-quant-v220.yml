@@ -1,0 +1,103 @@
+name: Build Global Quant Trader v2.2.0
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'builds/global-arbitrage-v220/**'
+      - '.github/workflows/build-global-quant-v220.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Bootstrap Android SDK 36
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ANDROID_HOME="$HOME/android-sdk"
+          mkdir -p "$ANDROID_HOME/cmdline-tools"
+          curl -fsSL https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o /tmp/android-cmdline.zip
+          unzip -q /tmp/android-cmdline.zip -d /tmp/android-cmdline
+          mv /tmp/android-cmdline/cmdline-tools "$ANDROID_HOME/cmdline-tools/latest"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          printf "y\\n%.0s" {1..50} | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Prepare v2.2 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/quantv22
+          mkdir -p /tmp/quantv22
+          unzip -q fresh-global-edge/v160/release/Global-Edge-AI-Trader-v1.6.0-source.zip -d /tmp/quantv22
+          ROOT=$(find /tmp/quantv22 -name settings.gradle.kts -printf '%h\n' | head -1)
+          test -n "$ROOT"
+          echo "ROOT=$ROOT" >> "$GITHUB_ENV"
+
+          sed -i 's/versionCode = [0-9][0-9]*/versionCode = 220/' "$ROOT/app/build.gradle.kts"
+          sed -i 's/versionName = "[^"]*"/versionName = "2.2.0"/' "$ROOT/app/build.gradle.kts"
+
+          cp builds/global-arbitrage-v220/AppNavigation.kt "$ROOT/app/src/main/java/com/suhas/ucsentinel/ui/AppNavigation.kt"
+          cp builds/global-arbitrage-v220/QuantGovernance.kt "$ROOT/app/src/main/java/com/suhas/ucsentinel/ui/QuantGovernance.kt"
+          cp builds/global-arbitrage-v220/QuantV22Screen.kt "$ROOT/app/src/main/java/com/suhas/ucsentinel/ui/QuantV22Screen.kt"
+          cp builds/global-arbitrage-v220/QuantGovernanceTest.kt "$ROOT/app/src/test/java/com/suhas/ucsentinel/QuantGovernanceTest.kt"
+
+          sed -i 's/Global Edge AI Trader/Global Quant Trader/g' "$ROOT/app/src/main/res/values/strings.xml"
+
+          python3 -c 'import pathlib,sys; p=pathlib.Path(sys.argv[1])/"app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt"; s=p.read_text(); old="floor>=50.0&&"; new="floor>=50.0&&maxDd<=12.0&&"; assert old in s, "Champion governance patch target not found"; p.write_text(s.replace(old,new,1))' "$ROOT"
+
+          python3 -c 'import pathlib,sys; p=pathlib.Path(sys.argv[1])/"app/src/main/java/com/suhas/ucsentinel/data/remote/StrategyCatalogClient.kt"; s=p.read_text(); old="strategy-catalog-v1.json"; new="strategy-catalog-v2.json"; assert old in s, "Strategy catalogue URL target not found"; p.write_text(s.replace(old,new))' "$ROOT"
+
+          grep -n 'versionCode\|versionName' "$ROOT/app/build.gradle.kts"
+          grep -n 'strategy-catalog-v2.json' "$ROOT/app/src/main/java/com/suhas/ucsentinel/data/remote/StrategyCatalogClient.kt"
+
+      - name: Unit tests
+        run: gradle --no-daemon --console=plain -p "$ROOT" :app:testDebugUnitTest
+
+      - name: Lint diagnostics
+        continue-on-error: true
+        run: gradle --no-daemon --console=plain -p "$ROOT" :app:lintDebug
+
+      - name: Build installable APK
+        run: |
+          gradle --no-daemon --console=plain -p "$ROOT" :app:assembleDebug
+          OUT="$ROOT/app/build/outputs/apk/debug"
+          cp "$OUT/app-debug.apk" "$OUT/Global-Quant-Trader-v2.2.0-S24-Android16.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$OUT/Global-Quant-Trader-v2.2.0-S24-Android16.apk" > "$OUT/signature.txt"
+          sha256sum "$OUT/Global-Quant-Trader-v2.2.0-S24-Android16.apk" > "$OUT/SHA256.txt"
+
+      - name: Package source snapshot
+        run: |
+          cd "$ROOT/.."
+          zip -qr Global-Quant-Trader-v2.2.0-source.zip "$(basename "$ROOT")"
+          cp Global-Quant-Trader-v2.2.0-source.zip "$ROOT/app/build/outputs/apk/debug/"
+
+      - name: Upload v2.2 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Global-Quant-Trader-v2.2.0-S24
+          path: |
+            ${{ env.ROOT }}/app/build/outputs/apk/debug/Global-Quant-Trader-v2.2.0-S24-Android16.apk
+            ${{ env.ROOT }}/app/build/outputs/apk/debug/SHA256.txt
+            ${{ env.ROOT }}/app/build/outputs/apk/debug/signature.txt
+            ${{ env.ROOT }}/app/build/outputs/apk/debug/Global-Quant-Trader-v2.2.0-source.zip
+            ${{ env.ROOT }}/app/build/reports/tests/testDebugUnitTest/
+            ${{ env.ROOT }}/app/build/reports/lint-results-debug.html
+          if-no-files-found: error
