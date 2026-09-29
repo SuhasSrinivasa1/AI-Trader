@@ -54,6 +54,54 @@ jobs:
           echo "ROOT=/tmp/gqt230" >> "$GITHUB_ENV"
           grep -n 'versionCode\|versionName\|applicationId' /tmp/gqt230/app/build.gradle.kts
 
+      - name: Apply compile fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - "$ROOT" <<'PY'
+          from pathlib import Path
+          import sys
+
+          root=Path(sys.argv[1])
+
+          # Kotlin parser fixes in Groww API.
+          p=root/"app/src/main/java/com/suhas/arbitrageedge/GrowwApi.kt"
+          x=p.read_text()
+          x=x.replace("suspend fun instrumentMaster():List<Instrument>=withContext", "suspend fun instrumentMaster():List<Instrument> = withContext")
+          x=x.replace("suspend fun orderStatus(token:String,id:String):Pair<String,Int>=withContext", "suspend fun orderStatus(token:String,id:String):Pair<String,Int> = withContext")
+          x=x.replace(
+              'fun f(r:List<String>,n:String)=ix[n]?.let{r.getOrNull(it)}.orEmpty().trim();fun yes(s:String)=s=="1"||s.equals("true",true)',
+              'fun f(r:List<String>,n:String)=ix[n]?.let{r.getOrNull(it)}.orEmpty().trim()\n        fun yes(s:String)=s=="1"||s.equals("true",true)'
+          )
+          p.write_text(x)
+
+          # Numeric-expression grouping fixes.
+          p=root/"app/src/main/java/com/suhas/arbitrageedge/StrategyEngine.kt"
+          x=p.read_text()
+          x=x.replace(
+              'feat.slopePct*18+if(feat.aboveVwap)12.0 else -12.0+feat.rvol.coerceAtMost(5.0)*5',
+              'feat.slopePct*18+(if(feat.aboveVwap)12.0 else -12.0)+feat.rvol.coerceAtMost(5.0)*5'
+          )
+          x=x.replace(
+              'settings.slippageBps/10000.0*notional + if(useOption)legs.first().expectedPrice*lot*.06 else 0.0',
+              'settings.slippageBps/10000.0*notional + (if(useOption)legs.first().expectedPrice*lot*.06 else 0.0)'
+          )
+          p.write_text(x)
+
+          # Compose opt-in plus missing function-closing braces in compact helper cards.
+          p=root/"app/src/main/java/com/suhas/arbitrageedge/UI.kt"
+          x=p.read_text()
+          if not x.startswith("@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)"):
+              x='@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)\n'+x
+          x=x.replace('\n}}\n\n@Composable private fun ResearchCard', '\n}}}\n\n@Composable private fun ResearchCard', 1)
+          x=x.replace('\n}}\n\n@Composable private fun NewsCard', '\n}}}\n\n@Composable private fun NewsCard', 1)
+          x=x.replace('\n}\n\n@Composable private fun Section', '\n}}\n\n@Composable private fun Section', 1)
+          p.write_text(x)
+          PY
+
+          grep -n 'instrumentMaster\|orderStatus' "$ROOT/app/src/main/java/com/suhas/arbitrageedge/GrowwApi.kt" | head
+          head -1 "$ROOT/app/src/main/java/com/suhas/arbitrageedge/UI.kt"
+
       - name: Unit tests
         run: gradle --no-daemon --console=plain -p "$ROOT" :app:testDebugUnitTest
 
