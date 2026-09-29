@@ -1,0 +1,89 @@
+name: Build Global Quant Trader v2.3.0
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'global-quant-v230/**'
+      - '.github/workflows/build-global-quant-v230.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Bootstrap Android SDK 36
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ANDROID_HOME="$HOME/android-sdk"
+          mkdir -p "$ANDROID_HOME/cmdline-tools"
+          curl -fsSL https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o /tmp/android-cmdline.zip
+          unzip -q /tmp/android-cmdline.zip -d /tmp/android-cmdline
+          mv /tmp/android-cmdline/cmdline-tools "$ANDROID_HOME/cmdline-tools/latest"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          printf "y\\n%.0s" {1..50} | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Reconstruct exact v2.3 project
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat global-quant-v230/part*.b64 > /tmp/gqt230.b64
+          echo "6c2f0a72a99cf72fac9d114279fc627cf39625bdbff8f97e12a1520e72364cb7  /tmp/gqt230.b64" | sha256sum -c -
+          base64 -d /tmp/gqt230.b64 > /tmp/gqt230.tar.gz
+          echo "60bb612f73e78494b6e5660fd0ebfe00ab574dcb366a201596df5bfb3ff1dbbe  /tmp/gqt230.tar.gz" | sha256sum -c -
+          rm -rf /tmp/gqt230
+          mkdir -p /tmp/gqt230
+          tar -xzf /tmp/gqt230.tar.gz -C /tmp/gqt230
+          echo "ROOT=/tmp/gqt230" >> "$GITHUB_ENV"
+          grep -n 'versionCode\|versionName\|applicationId' /tmp/gqt230/app/build.gradle.kts
+
+      - name: Unit tests
+        run: gradle --no-daemon --console=plain -p "$ROOT" :app:testDebugUnitTest
+
+      - name: Lint diagnostics
+        continue-on-error: true
+        run: gradle --no-daemon --console=plain -p "$ROOT" :app:lintDebug
+
+      - name: Build installable APK
+        run: |
+          gradle --no-daemon --console=plain -p "$ROOT" :app:assembleRelease
+          OUT="$ROOT/app/build/outputs/apk/release"
+          cp "$OUT/app-release.apk" "$OUT/Global-Quant-Trader-v2.3.0-S24-Android16.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$OUT/Global-Quant-Trader-v2.3.0-S24-Android16.apk" > "$OUT/signature.txt"
+          sha256sum "$OUT/Global-Quant-Trader-v2.3.0-S24-Android16.apk" > "$OUT/SHA256.txt"
+
+      - name: Package exact source
+        run: |
+          cd "$ROOT"
+          zip -qr /tmp/Global-Quant-Trader-v2.3.0-source.zip . -x '.gradle/*' 'app/build/*' 'build/*'
+          cp /tmp/Global-Quant-Trader-v2.3.0-source.zip "$ROOT/app/build/outputs/apk/release/"
+
+      - name: Upload v2.3 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Global-Quant-Trader-v2.3.0-S24
+          path: |
+            ${{ env.ROOT }}/app/build/outputs/apk/release/Global-Quant-Trader-v2.3.0-S24-Android16.apk
+            ${{ env.ROOT }}/app/build/outputs/apk/release/SHA256.txt
+            ${{ env.ROOT }}/app/build/outputs/apk/release/signature.txt
+            ${{ env.ROOT }}/app/build/outputs/apk/release/Global-Quant-Trader-v2.3.0-source.zip
+            ${{ env.ROOT }}/app/build/reports/tests/testDebugUnitTest/
+            ${{ env.ROOT }}/app/build/reports/lint-results-debug.html
+          if-no-files-found: error
