@@ -20,10 +20,10 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - uses: android-actions/setup-android@v3
-
       - name: Install Android SDK 36
-        run: yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools"
 
       - uses: gradle/actions/setup-gradle@v4
         with:
@@ -47,8 +47,7 @@ jobs:
           grep -n 'versionCode\|versionName' "$ROOT/app/build.gradle.kts"
 
       - name: Unit tests and lint
-        run: |
-          gradle --no-daemon --console=plain -p "$ROOT" :app:testDebugUnitTest :app:lintDebug
+        run: gradle --no-daemon --console=plain -p "$ROOT" :app:testDebugUnitTest :app:lintDebug
 
       - name: Build installable APK
         run: |
