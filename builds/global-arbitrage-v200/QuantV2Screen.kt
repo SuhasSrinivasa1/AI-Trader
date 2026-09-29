@@ -27,9 +27,9 @@ import kotlin.math.min
 
 private data class V2Strategy(val name:String,val purpose:String,val state:String)
 private val strategies=listOf(
-    V2Strategy("FUT ↔ SYNTHETIC","Put-call parity / futures mispricing","READY"),
-    V2Strategy("FUTURES CALENDAR","Near-vs-next expiry convergence","READY"),
-    V2Strategy("CROSS-MARKET","Equivalent contract spread checks","READY"),
+    V2Strategy("FUT ↔ SYNTHETIC","Put-call parity / futures mispricing","SHADOW"),
+    V2Strategy("FUTURES CALENDAR","Near-vs-next expiry convergence","SHADOW"),
+    V2Strategy("CROSS-MARKET","Equivalent contract spread checks","SHADOW"),
     V2Strategy("MOMENTUM + RVOL + OI","Directional confirmation layer","ACTIVE"),
     V2Strategy("NEWS EVENT","NSE/BSE announcements + reaction confirmation","ACTIVE"),
     V2Strategy("ORDER FLOW","Bid/ask depth and imbalance","ACTIVE"),
