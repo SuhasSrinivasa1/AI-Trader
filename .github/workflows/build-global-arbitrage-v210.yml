@@ -61,17 +61,7 @@ jobs:
 
           sed -i 's/Global Edge AI Trader/Global Arbitrage + Hedging AI Trader/g' "$ROOT/app/src/main/res/values/strings.xml"
 
-          python3 - "$ROOT" <<'PY'
-import pathlib,sys
-root=pathlib.Path(sys.argv[1])
-p=root/"app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt"
-s=p.read_text()
-old='liveN>=settings.strategyMinChampionSamples.coerceAtLeast(30)&&liveAcc>=settings.strategyMinChampionAccuracy&&liveAvg>0.0&&floor>=50.0&&\n                    holdout.size>=6&&holdoutAcc>=50.0&&holdoutAvg>0.0&&wfStable&&adjustedAcc>=55.0->StrategyStatus.CHAMPION'
-new='liveN>=settings.strategyMinChampionSamples.coerceAtLeast(30)&&liveAcc>=settings.strategyMinChampionAccuracy&&liveAvg>0.0&&floor>=50.0&&maxDd<=12.0&&\n                    holdout.size>=6&&holdoutAcc>=50.0&&holdoutAvg>0.0&&wfStable&&adjustedAcc>=55.0->StrategyStatus.CHAMPION'
-if old not in s:
-    raise SystemExit("Champion governance patch target not found")
-p.write_text(s.replace(old,new))
-PY
+          python3 -c 'import pathlib,sys; p=pathlib.Path(sys.argv[1])/"app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt"; s=p.read_text(); old="floor>=50.0&&\\n                    holdout.size>=6"; new="floor>=50.0&&maxDd<=12.0&&\\n                    holdout.size>=6"; assert old in s, "Champion governance patch target not found"; p.write_text(s.replace(old,new,1))' "$ROOT"
 
           grep -n 'versionCode\|versionName' "$ROOT/app/build.gradle.kts"
           grep -n 'maxDd<=12.0' "$ROOT/app/src/main/java/com/suhas/ucsentinel/data/local/AppPreferences.kt"
