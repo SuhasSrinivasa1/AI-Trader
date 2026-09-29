@@ -1,16 +1,6 @@
 {
-  "generated_at": "2026-09-29T17:33:04.061252+00:00",
+  "generated_at": "2026-09-29T17:34:39.140174+00:00",
   "findings": [
-    {
-      "engine": "ARBITRAGE",
-      "source": "web_search",
-      "query": "cash futures arbitrage trading strategy fair value basis",
-      "title": "Send, Receive, Invest, & Manage Your Money with Cash App",
-      "url": "https://cash.app/",
-      "summary": "Download Cash App to send & receive money instantly, spend with the Cash App Card, buy bitcoin, invest in stocks, & manage your finances.",
-      "supported_kind": null,
-      "disposition": "research_only"
-    },
     {
       "engine": "ARBITRAGE",
       "source": "web_search",
@@ -25,29 +15,19 @@
       "engine": "ARBITRAGE",
       "source": "web_search",
       "query": "cash futures arbitrage trading strategy fair value basis",
+      "title": "Send, Receive, Invest, & Manage Your Money with Cash App",
+      "url": "https://cash.app/",
+      "summary": "Download Cash App to send & receive money instantly, spend with the Cash App Card, buy bitcoin, invest in stocks, & manage your finances.",
+      "supported_kind": null,
+      "disposition": "research_only"
+    },
+    {
+      "engine": "ARBITRAGE",
+      "source": "web_search",
+      "query": "cash futures arbitrage trading strategy fair value basis",
       "title": "Cash App - Apps on Google Play",
       "url": "https://play.google.com/store/apps/details?id=com.squareup.cash&hl=en-US",
-      "summary": "Send money and bitcoin easily. Invest, bank and do more with your money.",
-      "supported_kind": null,
-      "disposition": "research_only"
-    },
-    {
-      "engine": "ARBITRAGE",
-      "source": "web_search",
-      "query": "cash futures arbitrage trading strategy fair value basis",
-      "title": "I Pretended to be BABY SONIC on One Chunk! (Minecraft)",
-      "url": "https://www.youtube.com/watch?v=mECHGuyOBws",
-      "summary": "I Pretended to be BABY SONIC on One Chunk! (Minecraft)",
-      "supported_kind": null,
-      "disposition": "research_only"
-    },
-    {
-      "engine": "ARBITRAGE",
-      "source": "web_search",
-      "query": "cash futures arbitrage trading strategy fair value basis",
-      "title": "Cash - Wikipedia",
-      "url": "https://en.wikipedia.org/wiki/Cash",
-      "summary": "Cash is money in the tangible form of currency, such as banknotes and coins. In book-keeping and financial accounting, cash is current assets comprising currency or currency equivalents that can be accessed immediately or near-immediately (as in the case of money market accounts).",
+      "summary": "Cash App Visa® Debit Flex Cards issued by Sutton Bank, Member FDIC, and The Bancorp Bank, N.A., pursuant to a license from Visa U.S.A. Inc. See terms and conditions at cash.app/legal. Discounts, Round Ups, Direct Deposit, Offers, Savings, P2P and Cash App Green features provided by Cash App, a Block, Inc brand.",
       "supported_kind": null,
       "disposition": "research_only"
     },
@@ -56,7 +36,7 @@
       "source": "web_search",
       "query": "cash futures arbitrage trading strategy fair value basis",
       "title": "Cash App - Wikipedia",
-      "url": "https://en.wikipedia.org/wiki/Cash_App",
+      "url": "https://en.m.wikipedia.org/wiki/Cash_App",
       "summary": "Cash App (formerly Square Cash) is a digital wallet for American consumers. [2] Launched by Block, Inc., in 2013, it allows users to send, receive, and save money; access debit cards; invest in stocks and bitcoin; [3] apply for personal loans; [4] and file taxes. [5]",
       "supported_kind": null,
       "disposition": "research_only"
@@ -67,7 +47,7 @@
       "query": "cash futures arbitrage trading strategy fair value basis",
       "title": "What Is Cash App and How Does It Work? - NerdWallet",
       "url": "https://www.nerdwallet.com/banking/learn/what-is-cash-app",
-      "summary": "Cash App is a peer-to-peer money transfer service and nonbank financial platform that allows users to send and receive money, use an optional debit card, invest in stocks and Bitcoin, and file...",
+      "summary": "Cash App: What It Is and How It Works Learning how to use Cash App is straightforward, and using it can make sending payments quick and convenient.",
       "supported_kind": null,
       "disposition": "research_only"
     },
@@ -75,9 +55,29 @@
       "engine": "ARBITRAGE",
       "source": "web_search",
       "query": "cash futures arbitrage trading strategy fair value basis",
-      "title": "Alles über Finanzen: News, Banking & Trading | cash",
-      "url": "https://www.cash.ch/",
-      "summary": "Wann ist der Preis zu hoch? Wie viel darf das Eigenheim kosten? Wie hoch sind die Wohnkosten bei welcher Hypothek? Mit den cash-Rechnern finden Sie die Antwort.",
+      "title": "Home - Cash Express, LLC.",
+      "url": "https://cashexpressllc.com/",
+      "summary": "Cash Express LLC offers a wide variety of financial services - Flex Loans, Payday Loans, Installment Loans, Title Loans, Check Cashing, Pawn Loans, and Cash for Gold. Come and see us for all of your financial needs.",
+      "supported_kind": null,
+      "disposition": "research_only"
+    },
+    {
+      "engine": "ARBITRAGE",
+      "source": "web_search",
+      "query": "cash futures arbitrage trading strategy fair value basis",
+      "title": "Cash - Wikipedia",
+      "url": "https://en.m.wikipedia.org/wiki/Cash",
+      "summary": "Cash Banknotes and coins of various currencies Cash is money in the tangible form of currency, such as banknotes and coins. In book-keeping and financial accounting, cash is current assets comprising currency or currency equivalents that can be accessed immediately or near-immediately (as in the case of money market accounts).",
+      "supported_kind": null,
+      "disposition": "research_only"
+    },
+    {
+      "engine": "ARBITRAGE",
+      "source": "web_search",
+      "query": "cash futures arbitrage trading strategy fair value basis",
+      "title": "How to Use Cash App: Full Beginner's Guide (2026 Update)",
+      "url": "https://m.youtube.com/watch?v=auFTrrmJ0Qg",
+      "summary": "I'll walk you through setting up a Cash App account and using all the features that a beginner might want to try. I'll also answer the frequently asked quest...",
       "supported_kind": null,
       "disposition": "research_only"
     },
@@ -135,6 +135,16 @@
       "engine": "ARBITRAGE",
       "source": "web_search",
       "query": "put call parity conversion reversal arbitrage strategy",
+      "title": "Put Option: What It Is, How It Works, and How to Trade",
+      "url": "https://www.investopedia.com/terms/p/putoption.asp",
+      "summary": "Learn what a put option is, how it works, and how traders use it to profit from falling prices or hedge risk. Explore key strategies, examples, and trading basics.",
+      "supported_kind": null,
+      "disposition": "research_only"
+    },
+    {
+      "engine": "ARBITRAGE",
+      "source": "web_search",
+      "query": "put call parity conversion reversal arbitrage strategy",
       "title": "The Essentials of Put Options: A Guide with Examples",
       "url": "https://www.investopedia.com/terms/p/put.asp",
       "summary": "What Is a Put? A put option gives the holder the right, but not the obligation, to sell an asset at an agreed-upon price before or at a set expiration date.",
@@ -145,9 +155,9 @@
       "engine": "ARBITRAGE",
       "source": "web_search",
       "query": "put call parity conversion reversal arbitrage strategy",
-      "title": "Put Option: What It Is, How It Works, and How to Trade",
-      "url": "https://www.investopedia.com/terms/p/putoption.asp",
-      "summary": "Learn what a put option is, how it works, and how traders use it to profit from falling prices or hedge risk. Explore key strategies, examples, and trading basics.",
+      "title": "PUT | definition in the Cambridge English Dictionary",
+      "url": "https://dictionary.cambridge.org/us/dictionary/english/put",
+      "summary": "PUT meaning: 1. to move something or someone into the stated place, position, or direction: 2. to write…. Learn more.",
       "supported_kind": null,
       "disposition": "research_only"
     },
@@ -185,6 +195,16 @@
       "engine": "ARBITRAGE",
       "source": "web_search",
       "query": "futures calendar spread statistical arbitrage strategy",
+      "title": "Markets: World Indexes, Futures, Bonds, Currencies, Stocks ...",
+      "url": "https://finance.yahoo.com/markets/",
+      "summary": "Yahoo Finance's market overview provides up to the minute charts, data, analysis and news about US and world markets, futures, bonds, options, currencies and more.",
+      "supported_kind": null,
+      "disposition": "research_only"
+    },
+    {
+      "engine": "ARBITRAGE",
+      "source": "web_search",
+      "query": "futures calendar spread statistical arbitrage strategy",
       "title": "Stock Market Futures - Investing.com",
       "url": "https://www.investing.com/indices/indices-futures",
       "summary": "Discover real-time streaming rates in our comprehensive stock futures table, covering global futures markets, including US stock futures.",
@@ -195,19 +215,9 @@
       "engine": "ARBITRAGE",
       "source": "web_search",
       "query": "futures calendar spread statistical arbitrage strategy",
-      "title": "Markets: World Indexes, Futures, Bonds, Currencies, Stocks & ETFs ...",
-      "url": "https://finance.yahoo.com/markets/",
-      "summary": "Yahoo Finance's market overview provides up to the minute charts, data, analysis and news about US and world markets, futures, bonds, options, currencies and more.",
-      "supported_kind": null,
-      "disposition": "research_only"
-    },
-    {
-      "engine": "ARBITRAGE",
-      "source": "web_search",
-      "query": "futures calendar spread statistical arbitrage strategy",
-      "title": "Futures Trading: What It Is, How It Works, Factors, and Pros & Cons",
-      "url": "https://www.investopedia.com/terms/f/futures.asp",
-      "summary": "Learn about futures trading, along with how contracts work, key market factors, risks, and potential benefits, and how investors use futures to hedge or speculate.",
+      "title": "Futures Prices - FINVIZ.com",
+      "url": "https://finviz.com/futures",
+      "summary": "Stock screener for investors and traders, financial visualizations.",
       "supported_kind": null,
       "disposition": "research_only"
     },
@@ -224,10 +234,10 @@
     {
       "engine": "ARBITRAGE",
       "source": "web_search",
-      "query": "futures calendar spread statistical arbitrage strategy",
-      "title": "Live Futures Chart - Investing.com",
-      "url": "https://www.investing.com/charts/futures-charts",
-      "summary": "Comprehensive and easy-to-use live futures chart that track the real time movements for indices, commodities and financial futures.",
+      "query": "options relative value box spread arbitrage research",
+      "title": "Options Explained: Key Types and Risk Management Strategies",
+      "url": "https://www.investopedia.com/terms/o/option.asp",
+      "summary": "Explore the fundamentals of options, including types, spreads, and risk mitigation strategies. Learn the essentials of using options to leverage trades and hedge risks.",
       "supported_kind": null,
       "disposition": "research_only"
     },
@@ -235,9 +245,9 @@
       "engine": "ARBITRAGE",
       "source": "web_search",
       "query": "options relative value box spread arbitrage research",
-      "title": "Marine Online",
-      "url": "https://www.mol.usmc.mil/mol",
-      "summary": "We would like to show you a description here but the site won’t allow us.",
+      "title": "Option (finance) - Wikipedia",
+      "url": "https://en.m.wikipedia.org/wiki/Option_(finance)",
+      "summary": "In finance, an option is a contract which conveys to its owner, the holder, the right, but not the obligation, to buy or sell a specific quantity of an underlying asset or instrument at a specified strike price on or before a specified date, depending on the style of the option.",
       "supported_kind": null,
       "disposition": "research_only"
     },
@@ -245,9 +255,9 @@
       "engine": "ARBITRAGE",
       "source": "web_search",
       "query": "options relative value box spread arbitrage research",
-      "title": "mol - Wiktionary, the free dictionary",
-      "url": "https://en.wiktionary.org/wiki/mol",
-      "summary": "Noun edit mol (plural mols) (chemistry, physics, dated) Alternative spelling of mole.",
+      "title": "What Is Options Trading? A Beginner's Overview - Investopedia",
+      "url": "https://www.investopedia.com/options-basics-tutorial-4583012",
+      "summary": "Learn the basics of options trading, what calls and puts are, how options work, and strategies to hedge or speculate with practical examples for beginners.",
       "supported_kind": null,
       "disposition": "research_only"
     },
@@ -255,9 +265,9 @@
       "engine": "ARBITRAGE",
       "source": "web_search",
       "query": "options relative value box spread arbitrage research",
-      "title": "Mole (unit) - Wikipedia",
-      "url": "https://en.wikipedia.org/wiki/Mole_(unit)",
-      "summary": "The mole (symbol mol) is a unit of measurement, the base unit in the International System of Units (SI) for amount of substance. One mole is an aggregate of exactly 6.022 140 76 × 1023 elementary entities [1] which can be atoms, molecules, ions, ion pairs, or other particles.",
+      "title": "What are options, and how do they work? | Fidelity",
+      "url": "https://www.fidelity.com/learning-center/smart-money/what-are-options",
+      "summary": "Options are contracts that give you the right to buy or sell an asset at a specific price by a specific time. Here’s what you need to know to get started with options trading.",
       "supported_kind": null,
       "disposition": "research_only"
     },
@@ -265,9 +275,9 @@
       "engine": "ARBITRAGE",
       "source": "web_search",
       "query": "options relative value box spread arbitrage research",
-      "title": "Mols - an overview | ScienceDirect Topics",
-      "url": "https://www.sciencedirect.com/topics/engineering/mols",
-      "summary": "The mole (mol) is defined as a unit of measurement for the amount of substance, representing a specific quantity of particles, typically atoms or molecules, equivalent to Avogadro's number (approximately 6.022 × 10²³).",
+      "title": "What are options? The complete guide to options trading",
+      "url": "https://www.etoro.com/options/what-are-options/",
+      "summary": "Ready to learn about options? In this article, we’ll walk you through some of the basic terminology and strategies surrounding options.",
       "supported_kind": null,
       "disposition": "research_only"
     },
@@ -275,9 +285,9 @@
       "engine": "ARBITRAGE",
       "source": "web_search",
       "query": "options relative value box spread arbitrage research",
-      "title": "How to Gain Access to MOL - United States Marine Corps",
-      "url": "https://www.mcbbutler.marines.mil/Portals/189/JRC%20Join%20Documents%20Required.pdf",
-      "summary": "Self-Certify Via MOL OM, self-certify via MOL. Self-certification will allow us to reduce the time spent on your audit. You will also be able to guarantee the accuracy of the i The following is...",
+      "title": "What is Options Trading? How to Trade Options - Investing.com",
+      "url": "https://www.investing.com/academy/trading/what-is-options-trading/",
+      "summary": "Discover what options trading is, how to trade options and review four core strategies available to individual investors.",
       "supported_kind": null,
       "disposition": "research_only"
     },
@@ -285,9 +295,9 @@
       "engine": "ARBITRAGE",
       "source": "web_search",
       "query": "options relative value box spread arbitrage research",
-      "title": "What Is a Mol Really - YouTube",
-      "url": "https://www.youtube.com/shorts/a2x5qHAcoe0",
-      "summary": "This video explores the mol as a concept that brings atoms, molecules, and reactions into a scale humans can actually use. Why does this number matter so much?",
+      "title": "Options Trading Explained: Calls, Puts & Key Strategies for 2025",
+      "url": "https://blog.iqoption.com/en/options-trading-guide/",
+      "summary": "Options are financial contracts that give traders flexibility and leverage. Unlike stocks, they provide the right but not the obligation to buy or sell an asset at a fixed price within a set time. This feature makes them useful both for speculation and for managing risk.",
       "supported_kind": null,
       "disposition": "research_only"
     },
@@ -295,19 +305,9 @@
       "engine": "ARBITRAGE",
       "source": "web_search",
       "query": "options relative value box spread arbitrage research",
-      "title": "Mole (unit) - Simple English Wikipedia, the free encyclopedia",
-      "url": "https://simple.wikipedia.org/wiki/Mole_(unit)",
-      "summary": "Mole (unit) ... The mole (symbol: mol) is the SI unit used to measure how many molecules or atoms there are. One mole is around 600 sextillion molecules. Scientists use this number because 1 gram of hydrogen is around 1 mole of atoms. The exact value of one mole is 6.022 140 78 × 1023.",
-      "supported_kind": null,
-      "disposition": "research_only"
-    },
-    {
-      "engine": "ARBITRAGE",
-      "source": "web_search",
-      "query": "options relative value box spread arbitrage research",
-      "title": "NEED TO ACCESS MOL : r/USMC - Reddit",
-      "url": "https://www.reddit.com/r/USMC/comments/9z4cg8/need_to_access_mol/",
-      "summary": "Can anybody help me access MOL or Marine On-Line? I keep getting this message below and cannot access MOL. sso.tfs.usmc.mil normally uses encryption to protect your information. When Google Chrome tried to connect to sso.tfs.usmc.mil this time, the website sent back unusual and incorrect credentials.",
+      "title": "Today's Stock Option Quotes and Volatility - Barchart.com",
+      "url": "https://www.barchart.com/options",
+      "summary": "Get commentary on the Options market from industry experts. Shows symbols with the most option activity on the day, with IV Rank and Put/Call ratio. A Covered Call or buy-write strategy is used to increase returns on long positions, by selling call options in an underlying security you own.",
       "supported_kind": null,
       "disposition": "research_only"
     },
@@ -318,16 +318,6 @@
       "title": "DYNAMIC Definition & Meaning - Merriam-Webster",
       "url": "https://www.merriam-webster.com/dictionary/dynamic",
       "summary": "The meaning of DYNAMIC is marked by usually continuous and productive activity or change. How to use dynamic in a sentence.",
-      "supported_kind": null,
-      "disposition": "research_only"
-    },
-    {
-      "engine": "HEDGING",
-      "source": "web_search",
-      "query": "dynamic hedging strategy delta hedge portfolio drawdown",
-      "title": "Optometrist in Las Vegas, NV | Dynamic Eye Care",
-      "url": "https://dynamiceyecare.com/",
-      "summary": "At Dynamic Eye Care, our optometry staff works together to ensure your visit is comfortable and completed in a timely manner. We have a qualified team of professionals that will work around your busy schedule and address any questions or concerns prior to the appointment.",
       "supported_kind": null,
       "disposition": "research_only"
     },
@@ -355,9 +345,9 @@
       "engine": "HEDGING",
       "source": "web_search",
       "query": "dynamic hedging strategy delta hedge portfolio drawdown",
-      "title": "DYNAMIC Synonyms: 133 Similar and Opposite Words | Merriam ...",
-      "url": "https://www.merriam-webster.com/thesaurus/dynamic",
-      "summary": "Synonyms for DYNAMIC: energetic, robust, powerful, lively, vigorous, strong, vital, healthy; Antonyms of DYNAMIC: weak, sluggish, dull, delicate, feeble, lethargic, listless, faint",
+      "title": "Dynamic - definition of dynamic by The Free Dictionary",
+      "url": "https://www.thefreedictionary.com/dynamic",
+      "summary": "Define dynamic. dynamic synonyms, dynamic pronunciation, dynamic translation, English dictionary definition of dynamic. adj. also dy·nam·i·cal 1. a. Of or relating to energy or to objects in motion. b. Of or relating to the study of dynamics. 2. Characterized by continuous...",
       "supported_kind": null,
       "disposition": "research_only"
     },
@@ -365,9 +355,19 @@
       "engine": "HEDGING",
       "source": "web_search",
       "query": "dynamic hedging strategy delta hedge portfolio drawdown",
-      "title": "dynamic - Wiktionary, the free dictionary",
-      "url": "https://en.wiktionary.org/wiki/dynamic",
-      "summary": "Adjective dynamic (comparative more dynamic, superlative most dynamic) Changing; active; in motion.",
+      "title": "DYNAMIC Synonyms: 133 Similar and Opposite Words - Merriam-Webster",
+      "url": "https://www.merriam-webster.com/thesaurus/dynamic",
+      "summary": "Synonyms for DYNAMIC: energetic, robust, powerful, lively, vigorous, strong, vital, healthy; Antonyms of DYNAMIC: weak, sluggish, dull, delicate, feeble, lethargic ...",
+      "supported_kind": null,
+      "disposition": "research_only"
+    },
+    {
+      "engine": "HEDGING",
+      "source": "web_search",
+      "query": "dynamic hedging strategy delta hedge portfolio drawdown",
+      "title": "Dynamic Manufacturing Inc",
+      "url": "https://www.dynamicsmanufacturinginc.com/",
+      "summary": "Dynamic has built a pedigree in engineering custom torque converters for your specific application. Consistency - Our hand-built units ensure repeatable results in both the lab and your vehicle. Tune ability - We set up the converter, helping to dial in your vehicle's performance for specific environmental conditions.",
       "supported_kind": null,
       "disposition": "research_only"
     },
@@ -378,6 +378,16 @@
       "title": "DYNAMIC | definition in the Cambridge English Dictionary",
       "url": "https://dictionary.cambridge.org/us/dictionary/english/dynamic",
       "summary": "DYNAMIC meaning: 1. having a lot of ideas and enthusiasm: 2. continuously changing or developing: 3. A dynamic…. Learn more.",
+      "supported_kind": null,
+      "disposition": "research_only"
+    },
+    {
+      "engine": "HEDGING",
+      "source": "web_search",
+      "query": "dynamic hedging strategy delta hedge portfolio drawdown",
+      "title": "Dynamic - Definition, Meaning & Synonyms | Vocabulary.com",
+      "url": "https://www.vocabulary.com/dictionary/dynamic",
+      "summary": "If a person, place, or thing is energetic and active, then it's dynamic. When things are dynamic, there's a lot going on.",
       "supported_kind": null,
       "disposition": "research_only"
     },
@@ -395,16 +405,6 @@
       "engine": "HEDGING",
       "source": "web_search",
       "query": "protective put collar hedge optimization strategy",
-      "title": "Protective Life | Online Self Service",
-      "url": "https://myaccount.protective.com/login",
-      "summary": "Sign in to manage your Protective Life account, view policy details, make payments, and access important documents securely online.",
-      "supported_kind": null,
-      "disposition": "research_only"
-    },
-    {
-      "engine": "HEDGING",
-      "source": "web_search",
-      "query": "protective put collar hedge optimization strategy",
       "title": "Login Page - Protective",
       "url": "https://www.connect.protective.com/main/home",
       "summary": "The Protective logo and tradmarks are owned by Protective Life Insurance Company. When you visit Protective's websites, we may collect personal information from you via your browser or device, or through the use of cookies, analytics tools, and other technologies.",
@@ -415,10 +415,20 @@
       "engine": "HEDGING",
       "source": "web_search",
       "query": "protective put collar hedge optimization strategy",
+      "title": "Protective Life | Online Self Service",
+      "url": "https://myaccount.protective.com/login",
+      "summary": "Sign in to manage your Protective Life account, view policy details, make payments, and access important documents securely online.",
+      "supported_kind": null,
+      "disposition": "research_only"
+    },
+    {
+      "engine": "HEDGING",
+      "source": "web_search",
+      "query": "protective put collar hedge optimization strategy",
       "title": "Protective | Life Insurance and Annuity Solutions",
       "url": "https://finpro.protective.com/",
       "summary": "Protective’s suite of life insurance and annuity products is designed to support your clients’ needs, both today and as life evolves. Watch our video to see how your clients can protect what matters — now and for years to come.",
-      "supported_kind": "SUPPORT_RESISTANCE",
+      "supported_kind": null,
       "disposition": "research_only"
     },
     {
@@ -455,9 +465,9 @@
       "engine": "HEDGING",
       "source": "web_search",
       "query": "protective put collar hedge optimization strategy",
-      "title": "Protective - AulCorp",
-      "url": "https://adl.aulcorp.com/login",
-      "summary": "AUL is a part of Protective Asset Protection Email Remember my email By clicking \"Login\", you agree to Protective's Privacy Policy Login",
+      "title": "PROTECTIVE Synonyms: 19 Similar and Opposite Words - Merriam-Webster",
+      "url": "https://www.merriam-webster.com/thesaurus/protective",
+      "summary": "Synonyms for PROTECTIVE: defensive, self-protective, preventive, secure, safe, deterrent; Antonyms of PROTECTIVE: offensive, aggressive, belligerent, warlike, militant, combative, pugnacious, contentious",
       "supported_kind": null,
       "disposition": "research_only"
     },
@@ -485,9 +495,9 @@
       "engine": "HEDGING",
       "source": "web_search",
       "query": "index futures hedge ratio portfolio beta optimization",
-      "title": "Markets: Indexes, Bonds, Forex, Key Commodities, ETFs - CNBC",
-      "url": "https://www.cnbc.com/markets/",
-      "summary": "View up-to-date U.S. market and world market charts. Get the latest on world economy news and global markets in our Market Overview.",
+      "title": "SPX | S&P 500 Index Overview | MarketWatch",
+      "url": "https://www.marketwatch.com/investing/index/spx",
+      "summary": "SPX | A complete S&P 500 Index index overview by MarketWatch. View stock market news, stock market data and trading information.",
       "supported_kind": null,
       "disposition": "research_only"
     },
@@ -497,7 +507,7 @@
       "query": "index futures hedge ratio portfolio beta optimization",
       "title": "Stock Market Data – US Markets, World Markets, and Stock Quotes - CNN",
       "url": "https://www.cnn.com/markets",
-      "summary": "fear is driving the US market Pre-market Market open After-hours Price Change Dow Index 51,481.51 - 347.11 0.67%",
+      "summary": "fear is driving the US market Pre-market Market open After-hours Price Change Dow Index 51,228.53 - 252.98 0.49%",
       "supported_kind": null,
       "disposition": "research_only"
     },
@@ -505,9 +515,9 @@
       "engine": "HEDGING",
       "source": "web_search",
       "query": "index futures hedge ratio portfolio beta optimization",
-      "title": "Index - friss hírek, események, tények",
-      "url": "https://index.hu/",
-      "summary": "Folytatódik az Onkológiai Intézet körüli vita: Polgár Csaba tisztázta a 32 milliós ajánlatot Szerinte Révész János félreértette az Index cikkét.",
+      "title": "Markets: Indexes, Bonds, Forex, Key Commodities, ETFs - CNBC",
+      "url": "https://www.cnbc.com/markets/",
+      "summary": "View up-to-date U.S. market and world market charts. Get the latest on world economy news and global markets in our Market Overview.",
       "supported_kind": null,
       "disposition": "research_only"
     },
@@ -525,9 +535,9 @@
       "engine": "HEDGING",
       "source": "web_search",
       "query": "index futures hedge ratio portfolio beta optimization",
-      "title": "SPX | S&P 500 Index Overview | MarketWatch",
-      "url": "https://www.marketwatch.com/investing/index/spx",
-      "summary": "SPX | A complete S&P 500 Index index overview by MarketWatch. View stock market news, stock market data and trading information.",
+      "title": "What Is an Index? Examples, Uses, and Investment Strategies",
+      "url": "https://www.investopedia.com/terms/i/index.asp",
+      "summary": "An index is a collection of a group of assets such as stocks and bonds that's used to track the performance of a specific sector or the broader market.",
       "supported_kind": null,
       "disposition": "research_only"
     },
@@ -535,89 +545,9 @@
       "engine": "HEDGING",
       "source": "web_search",
       "query": "index futures hedge ratio portfolio beta optimization",
-      "title": "Index - Wikipedia",
-      "url": "https://en.wikipedia.org/wiki/Index",
-      "summary": "This disambiguation page lists articles associated with the title Index. If an internal link incorrectly led you here, you may wish to change the link to point directly to the intended article.",
-      "supported_kind": null,
-      "disposition": "research_only"
-    },
-    {
-      "engine": "HEDGING",
-      "source": "web_search",
-      "query": "options tail risk hedging strategy research",
-      "title": "Options Explained: Key Types and Risk Management Strategies",
-      "url": "https://www.investopedia.com/terms/o/option.asp",
-      "summary": "Explore the fundamentals of options, including types, spreads, and risk mitigation strategies. Learn the essentials of using options to leverage trades and hedge risks.",
-      "supported_kind": null,
-      "disposition": "research_only"
-    },
-    {
-      "engine": "HEDGING",
-      "source": "web_search",
-      "query": "options tail risk hedging strategy research",
-      "title": "Option (finance) - Wikipedia",
-      "url": "https://en.m.wikipedia.org/wiki/Option_(finance)",
-      "summary": "In finance, an option is a contract which conveys to its owner, the holder, the right, but not the obligation, to buy or sell a specific quantity of an underlying asset or instrument at a specified strike price on or before a specified date, depending on the style of the option.",
-      "supported_kind": null,
-      "disposition": "research_only"
-    },
-    {
-      "engine": "HEDGING",
-      "source": "web_search",
-      "query": "options tail risk hedging strategy research",
-      "title": "What Is Options Trading? A Beginner's Overview - Investopedia",
-      "url": "https://www.investopedia.com/options-basics-tutorial-4583012",
-      "summary": "Learn the basics of options trading, what calls and puts are, how options work, and strategies to hedge or speculate with practical examples for beginners.",
-      "supported_kind": null,
-      "disposition": "research_only"
-    },
-    {
-      "engine": "HEDGING",
-      "source": "web_search",
-      "query": "options tail risk hedging strategy research",
-      "title": "Install Logi Options+ Software | Logitech",
-      "url": "https://www.logitech.com/en-us/setup/ergosetup/logi-options.html",
-      "summary": "Logi Options+ is a powerful and easy-to-use application that enhances your experience using Logitech mice and keyboards by enabling you to customize them to work how you want.",
-      "supported_kind": null,
-      "disposition": "research_only"
-    },
-    {
-      "engine": "HEDGING",
-      "source": "web_search",
-      "query": "options tail risk hedging strategy research",
-      "title": "In‑Home Senior Care | Options Home Care",
-      "url": "https://optionscorp.com/",
-      "summary": "Live-in care with Options Home Care means having a dedicated caregiver present in the home all day and night. Rather than rotating staff or facility-based care, your loved one has consistent, familiar support from someone who knows their routine, preferences, and needs.",
-      "supported_kind": "SUPPORT_RESISTANCE",
-      "disposition": "research_only"
-    },
-    {
-      "engine": "HEDGING",
-      "source": "web_search",
-      "query": "options tail risk hedging strategy research",
-      "title": "What are options, and how do they work? | Fidelity",
-      "url": "https://www.fidelity.com/learning-center/smart-money/what-are-options",
-      "summary": "Options are contracts that give you the right to buy or sell an asset at a specific price by a specific time. Here’s what you need to know to get started with options trading.",
-      "supported_kind": null,
-      "disposition": "research_only"
-    },
-    {
-      "engine": "HEDGING",
-      "source": "web_search",
-      "query": "options tail risk hedging strategy research",
-      "title": "What are options? The complete guide to options trading",
-      "url": "https://www.etoro.com/options/what-are-options/",
-      "summary": "Ready to learn about options? In this article, we’ll walk you through some of the basic terminology and strategies surrounding options.",
-      "supported_kind": null,
-      "disposition": "research_only"
-    },
-    {
-      "engine": "HEDGING",
-      "source": "web_search",
-      "query": "options tail risk hedging strategy research",
-      "title": "What is Options Trading? How to Trade Options - Investing.com",
-      "url": "https://www.investing.com/academy/trading/what-is-options-trading/",
-      "summary": "Discover what options trading is, how to trade options and review four core strategies available to individual investors.",
+      "title": "Index - friss hírek, események, tények",
+      "url": "https://index.hu/",
+      "summary": "Folytatódik az Onkológiai Intézet körüli vita: Polgár Csaba tisztázta a 32 milliós ajánlatot Szerinte Révész János félreértette az Index cikkét.",
       "supported_kind": null,
       "disposition": "research_only"
     },
@@ -635,6 +565,16 @@
       "engine": "DIRECTIONAL_FNO",
       "source": "web_search",
       "query": "VWAP relative volume futures breakout trading strategy",
+      "title": "Volume Weighted Average Price (VWAP) - TradingView",
+      "url": "https://www.tradingview.com/support/solutions/43000502018-volume-weighted-average-price-vwap/",
+      "summary": "Volume Weighted Average Price (VWAP) is a technical analysis tool used to measure the average price weighted by volume. VWAP is typically used with intraday charts as a way to determine the general direction of intraday prices.",
+      "supported_kind": null,
+      "disposition": "research_only"
+    },
+    {
+      "engine": "DIRECTIONAL_FNO",
+      "source": "web_search",
+      "query": "VWAP relative volume futures breakout trading strategy",
       "title": "The Detailed Guide to VWAP – TheVWAP",
       "url": "https://thevwap.com/vwap/",
       "summary": "Volume-weighted average price [VWAP] is a technical indicator that calculates and displays a market's average transaction price for however long it's plotted. Put simpler, VWAP represents the market's true average price for a certain period of time — most commonly from the start of a trading session until the end.",
@@ -645,29 +585,9 @@
       "engine": "DIRECTIONAL_FNO",
       "source": "web_search",
       "query": "VWAP relative volume futures breakout trading strategy",
-      "title": "Volume Weighted Average Price (VWAP) Definition",
-      "url": "https://www.investing.com/academy/analysis/vwap-formula/",
-      "summary": "VWAP stands for Volume-Weighted Average Price, which is an average price of a stock during a trading day, weighted by the volume of shares traded at each price.",
-      "supported_kind": null,
-      "disposition": "research_only"
-    },
-    {
-      "engine": "DIRECTIONAL_FNO",
-      "source": "web_search",
-      "query": "VWAP relative volume futures breakout trading strategy",
       "title": "How to Use Volume-Weighted Indicators in Trading - Charles Schwab",
       "url": "https://www.schwab.com/learn/story/how-to-use-volume-weighted-indicators-trading",
       "summary": "What is volume-weighted average price (VWAP)? VWAP is the average price a security traded at throughout the day, adjusted for volume. In other words, price changes accompanied by higher volume carry more weight than price changes that occur amid low volume.",
-      "supported_kind": null,
-      "disposition": "research_only"
-    },
-    {
-      "engine": "DIRECTIONAL_FNO",
-      "source": "web_search",
-      "query": "VWAP relative volume futures breakout trading strategy",
-      "title": "VWAP Indicator Trading Strategies",
-      "url": "https://www.warriortrading.com/vwap/",
-      "summary": "What is the Volume Weighted Average Price (VWAP) Indicator? The volume-weighted average price (VWAP) is a popular technical indicator that measures the average price of a stock.",
       "supported_kind": null,
       "disposition": "research_only"
     },
@@ -695,9 +615,19 @@
       "engine": "DIRECTIONAL_FNO",
       "source": "web_search",
       "query": "VWAP relative volume futures breakout trading strategy",
-      "title": "Home – TheVWAP",
-      "url": "https://thevwap.com/",
-      "summary": "In-depth education and custom tools for the market's most overlooked technical indicator — volume-weighted average price [VWAP].",
+      "title": "Volume Weighted Average Price (VWAP) Definition",
+      "url": "https://www.investing.com/academy/analysis/vwap-formula/",
+      "summary": "VWAP stands for Volume-Weighted Average Price, which is an average price of a stock during a trading day, weighted by the volume of shares traded at each price.",
+      "supported_kind": null,
+      "disposition": "research_only"
+    },
+    {
+      "engine": "DIRECTIONAL_FNO",
+      "source": "web_search",
+      "query": "VWAP relative volume futures breakout trading strategy",
+      "title": "Trading With VWAP and Moving VWAP - Tutorial and Examples",
+      "url": "https://www.daytrading.com/vwap",
+      "summary": "Volume weighted average price (VWAP) and moving volume weighted average price (moving VWAP, or sometimes MVWAP) are a type of weighted average that include volume in their calculations. It is plotted directly on a price chart.",
       "supported_kind": null,
       "disposition": "research_only"
     },
@@ -736,7 +666,7 @@
       "source": "web_search",
       "query": "order flow market depth futures trading strategy",
       "title": "Order - Wikipedia",
-      "url": "https://en.wikipedia.org/wiki/Order",
+      "url": "https://en.m.wikipedia.org/wiki/Order",
       "summary": "This disambiguation page lists articles associated with the title Order. If an internal link incorrectly led you here, you may wish to change the link to point directly to the intended article.",
       "supported_kind": null,
       "disposition": "research_only"
@@ -765,9 +695,9 @@
       "engine": "DIRECTIONAL_FNO",
       "source": "web_search",
       "query": "order flow market depth futures trading strategy",
-      "title": "Dominos' Menu - Order Pizza, Pasta, Wings & More Online!",
-      "url": "https://www.dominos.com/en/pages/order/menu#!/menu/category/viewall/",
-      "summary": "Order Domino's pizza, pasta, sandwiches & more, available for carryout or delivery. Sign up for Domino's email & text offers for great deals on your next order.",
+      "title": "Grocery Delivery Service | FreshDirect",
+      "url": "https://www.freshdirect.com/",
+      "summary": "FreshDirect is the leader in online grocery delivery. Order fresh produce, prepared food & all your grocery essentials for same day or next day delivery.",
       "supported_kind": null,
       "disposition": "research_only"
     },
@@ -775,9 +705,9 @@
       "engine": "DIRECTIONAL_FNO",
       "source": "web_search",
       "query": "order flow market depth futures trading strategy",
-      "title": "ORDER | English meaning - Cambridge Dictionary",
-      "url": "https://dictionary.cambridge.org/dictionary/english/order",
-      "summary": "ORDER definition: 1. a request to make, supply, or deliver food or goods: 2. a product or a meal that has been asked…. Learn more.",
+      "title": "Uber Eats | Food & Grocery Delivery | Order Groceries and ...",
+      "url": "https://www.ubereats.com/",
+      "summary": "Find the best restaurants that deliver. Get contactless delivery for restaurant takeout, groceries, and more! Order food online or in the Uber Eats app and support local restaurants.",
       "supported_kind": null,
       "disposition": "research_only"
     },
@@ -795,16 +725,6 @@
       "engine": "DIRECTIONAL_FNO",
       "source": "web_search",
       "query": "news sentiment event driven options trading strategy",
-      "title": "Breaking News, Latest News and Videos | CNN",
-      "url": "https://www.cnn.com/",
-      "summary": "View the latest news and breaking news today for U.S., world, weather, entertainment, politics and health at CNN.com.",
-      "supported_kind": null,
-      "disposition": "research_only"
-    },
-    {
-      "engine": "DIRECTIONAL_FNO",
-      "source": "web_search",
-      "query": "news sentiment event driven options trading strategy",
       "title": "Associated Press News: Breaking News, Latest Headlines and Videos | AP News",
       "url": "https://apnews.com/",
       "summary": "Read the latest headlines, breaking news, and videos at APNews.com, the definitive source for independent journalism from every corner of the globe.",
@@ -815,29 +735,29 @@
       "engine": "DIRECTIONAL_FNO",
       "source": "web_search",
       "query": "news sentiment event driven options trading strategy",
-      "title": "Fox News - Breaking News Updates | Latest News Headlines | Photos ...",
-      "url": "https://www.foxnews.com/",
-      "summary": "Latest Current News: U.S., World, Entertainment, Health, Business, Technology, Politics, Sports.",
-      "supported_kind": null,
-      "disposition": "research_only"
-    },
-    {
-      "engine": "DIRECTIONAL_FNO",
-      "source": "web_search",
-      "query": "news sentiment event driven options trading strategy",
-      "title": "Home - BBC News",
-      "url": "https://www.bbc.co.uk/news",
-      "summary": "Visit BBC News for up-to-the-minute news, breaking news, video, audio and feature stories. BBC News provides trusted World and UK news as well as local and regional perspectives.",
-      "supported_kind": null,
-      "disposition": "research_only"
-    },
-    {
-      "engine": "DIRECTIONAL_FNO",
-      "source": "web_search",
-      "query": "news sentiment event driven options trading strategy",
       "title": "NBC News - Breaking Headlines and Video Reports on World, U.S. and ...",
       "url": "https://www.nbcnews.com/",
       "summary": "Go to NBCNews.com for breaking news, videos, and the latest top stories in world news, business, politics, health and pop culture.",
+      "supported_kind": null,
+      "disposition": "research_only"
+    },
+    {
+      "engine": "DIRECTIONAL_FNO",
+      "source": "web_search",
+      "query": "news sentiment event driven options trading strategy",
+      "title": "Breaking News, Latest News and Videos | CNN",
+      "url": "https://www.cnn.com/",
+      "summary": "View the latest news and breaking news today for U.S., world, weather, entertainment, politics and health at CNN.com.",
+      "supported_kind": null,
+      "disposition": "research_only"
+    },
+    {
+      "engine": "DIRECTIONAL_FNO",
+      "source": "web_search",
+      "query": "news sentiment event driven options trading strategy",
+      "title": "Fox News - Breaking News Updates | Latest News Headlines | Photos ...",
+      "url": "https://www.foxnews.com/",
+      "summary": "Breaking News, Latest News and Current News from FOXNews.com. Breaking news and video. Latest Current News: U.S., World, Entertainment, Health, Business, Technology ...",
       "supported_kind": null,
       "disposition": "research_only"
     },
@@ -864,10 +784,10 @@
     {
       "engine": "DIRECTIONAL_FNO",
       "source": "web_search",
-      "query": "global markets overnight lead Indian market trading strategy",
-      "title": "Online and Mobile Banking | Global Credit Union",
-      "url": "https://www.globalcu.org/accounts/online-mobile-banking/",
-      "summary": "Get in touch with us 24/7/365 from anywhere in the world. Whether it’s in a branch or over the phone, you’ll talk to a real person. Our online and mobile banking services enable you to manage your money safely and securely 24/7 from your computer or mobile device.",
+      "query": "news sentiment event driven options trading strategy",
+      "title": "Google News - Headlines",
+      "url": "https://news.google.com/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRFZxYUdjU0FtVnVHZ0pWVXlnQVAB?hl=en-US&ceid=US%3Aen",
+      "summary": "Google News provides the latest headlines from various sources and topics, including politics, business, health, and science.",
       "supported_kind": null,
       "disposition": "research_only"
     },
@@ -885,16 +805,6 @@
       "engine": "DIRECTIONAL_FNO",
       "source": "web_search",
       "query": "global markets overnight lead Indian market trading strategy",
-      "title": "Your world of financial possibilities | Global Credit Union",
-      "url": "https://www.globalcu.org/",
-      "summary": "Global Credit Union provides quality financial services including credit cards, home loans, auto loans, business accounts, and more with personalized service.",
-      "supported_kind": null,
-      "disposition": "research_only"
-    },
-    {
-      "engine": "DIRECTIONAL_FNO",
-      "source": "web_search",
-      "query": "global markets overnight lead Indian market trading strategy",
       "title": "Global Entry - U.S. Customs and Border Protection",
       "url": "https://www.cbp.gov/travel/trusted-traveler-programs/global-entry",
       "summary": "Global Entry is the perfect program for frequent international or business travelers. If you take fewer international flights, consider enrolling in TSA PreCheck and using the free Mobile Passport Control app to reduce wait time.",
@@ -905,9 +815,19 @@
       "engine": "DIRECTIONAL_FNO",
       "source": "web_search",
       "query": "global markets overnight lead Indian market trading strategy",
-      "title": "Global Federal Credit Union Wasilla, AK",
-      "url": "https://www.creditunionsonline.com/credit-union-38-30326.html",
-      "summary": "Are you considering joining Global FCU at the Parks Highway Branch location? Read real reviews from real members to get a sense of their services, features, and the overall member experience at this Parks Highway Branch location.",
+      "title": "GLOBAL Definition & Meaning - Merriam-Webster",
+      "url": "https://www.merriam-webster.com/dictionary/global",
+      "summary": "The meaning of GLOBAL is of, relating to, or involving the entire world : worldwide. How to use global in a sentence.",
+      "supported_kind": null,
+      "disposition": "research_only"
+    },
+    {
+      "engine": "DIRECTIONAL_FNO",
+      "source": "web_search",
+      "query": "global markets overnight lead Indian market trading strategy",
+      "title": "Watch TV Shows Online Free | Stream Live TV Series & Full Episodes",
+      "url": "https://www.globaltv.com/",
+      "summary": "Top shows from Global TV, W Network, Home Network, Flavour Network, Showcase, HISTORY® Channel, Slice, and Global News are on the Global TV App! Stream live, on-demand, or free!",
       "supported_kind": null,
       "disposition": "research_only"
     },
@@ -925,9 +845,9 @@
       "engine": "DIRECTIONAL_FNO",
       "source": "web_search",
       "query": "global markets overnight lead Indian market trading strategy",
-      "title": "Global Federal Credit Union Wasilla, AK, 851 E USA Circle",
-      "url": "https://www.creditunionsonline.com/credit-union-38-30327.html",
-      "summary": "Are you considering joining Global FCU at the Wasilla Branch location? Read real reviews from real members to get a sense of their services, features, and the overall member experience at this Wasilla Branch location.",
+      "title": "Globle Game - Guess the Country Challenge",
+      "url": "https://globle.wordleday.org/",
+      "summary": "Globle will assess your geographic knowledge. The objective of the game is to pinpoint the undisclosed country on the global map. Following each attempt, you'll observe the country you've selected on the map, with the intensity of color indicating proximity to the concealed nation.",
       "supported_kind": null,
       "disposition": "research_only"
     },
@@ -935,9 +855,19 @@
       "engine": "DIRECTIONAL_FNO",
       "source": "web_search",
       "query": "global markets overnight lead Indian market trading strategy",
-      "title": "Watch TV Shows Online Free | Stream Live TV Series & Full Episodes",
-      "url": "https://www.globaltv.com/",
-      "summary": "Top shows from Global TV, W Network, Home Network, Flavour Network, Showcase, HISTORY® Channel, Slice, and Global News are on the Global TV App! Stream live, on-demand, or free!",
+      "title": "Global - Wikipedia",
+      "url": "https://en.wikipedia.org/wiki/Global",
+      "summary": "Search for \"global\" on Wikipedia. This disambiguation page lists articles associated with the title Global. If an internal link incorrectly led you here, you may wish to change the link to point directly to the intended article.",
+      "supported_kind": null,
+      "disposition": "research_only"
+    },
+    {
+      "engine": "DIRECTIONAL_FNO",
+      "source": "web_search",
+      "query": "global markets overnight lead Indian market trading strategy",
+      "title": "About | Culture | Company | Team | Global",
+      "url": "https://global.com/about/",
+      "summary": "At Global, we're proud to be one of the world’s leading media & entertainment groups. Everything we do is driven by our culture, the talented people who make it happen and of course, our loyal audiences and customers.",
       "supported_kind": null,
       "disposition": "research_only"
     },
@@ -978,8 +908,8 @@
       "title": "Evolution of Market Microstructure in the Age of AI",
       "url": "http://arxiv.org/abs/2609.33058v1",
       "summary": "Market microstructure studies how trading rules turn orders into prices and allocations. Those rules have been rebuilt repeatedly: for floor traders, electronic limit order books and high-frequency trading, batch auctions and dark pools, blockchains run by automated market makers and block builders, and now AI agents that discover, pay for, and compete over resources. This survey traces that evolution through one question: can a market allocate scarce goods efficiently and fairly without participants revealing everything they know and want? Each technological shift moved the binding constraint of market design from trader rationality to speed, to control over transaction ordering, to the dimensionality of what participants can report. Impossibility results persist; only their cost moves. We review evidence on high-frequency trading, trading venues, automated market makers, extractable value and algorithmic collusion, and identify allocation as the missing layer of the agent-commerce protocol stack.",
-      "supported_kind": "RSI14_REVERSAL",
-      "disposition": "challenger_shadow"
+      "supported_kind": null,
+      "disposition": "research_only"
     },
     {
       "engine": "DIRECTIONAL_FNO",
@@ -988,8 +918,8 @@
       "title": "Packets, Transactions and Queues: Design Principles for HFT Systems from a Measurement Study of CME Market Data",
       "url": "http://arxiv.org/abs/2609.32848v1",
       "summary": "HFT systems are conventionally built as a single-threaded event loop, on the rule that every thread hop adds latency. We test that rule against a measurement study of more than a year of CME market data for the NQ front-month contract, following every packet and matching-engine transaction through the feed's two exchange timestamps, and checking the results against a live production receiver. Packets arrive in near-critical self-exciting clusters that belong to the matching engine's transactions, not to how the exchange packs them. The engine often processes consecutive transactions within a fraction of a microsecond, while the market-data publisher sends at most one packet per publisher period of about 7.5 microseconds, so a burst reaches the receiver as a train of packets one period apart. This yields design principles for HFT systems. First, a receiver that handles each packet within one publisher period never queues on arrivals, however bursty the market; there one thread is best. Second, above that period a queueing tail appears, driven by the timing of transactions, not by packet rate or size, and two threads can be better than one: splitting the servicing chain into two stages on separate threads removes most of the tail at the cost of one hop on the median. Third, only the slowest stage matters, so a split pays only if it shortens it. Fourth, just under the period, where the production receiver runs, the remaining tail comes from multi-message packets and variable service times, and the levers are cost per message and spread of service, not thread count. An analytic framework, a burst-limit throughput identity and an exact reduction of the tandem to a single bottleneck server, supports these results.",
-      "supported_kind": "SUPPORT_RESISTANCE",
-      "disposition": "challenger_shadow"
+      "supported_kind": null,
+      "disposition": "research_only"
     },
     {
       "engine": "HEDGING",
@@ -998,7 +928,7 @@
       "title": "Algorithmic trading and stochastic integration",
       "url": "http://arxiv.org/abs/2609.31578v1",
       "summary": "We study simple predictable processes whose coefficients are represented by neural networks. On finite measure spaces, we establish density results for neural networks in Orlicz spaces. For filtrations generated by a stochastic process, measurable random variables, including at stopping times, can be approximated by neural networks depending on finitely many observations. Every stochastic integral with respect to a semimartingale can then be approximated, in the semimartingale topology, by integrals of such simple predictable processes. We show that restricting trading strategies to this class leaves the minimal mean-variance hedging error under partial information unchanged and obtain a no-free-lunch characterization in terms of equivalent martingale measures. Finally, the Bichteler-Dellacherie characterization of semimartingales remains valid even upon restricting the predictable integrands to those whose coefficients are represented by neural networks.",
-      "supported_kind": "STOCH_REVERSAL",
+      "supported_kind": null,
       "disposition": "research_only"
     },
     {
@@ -1008,8 +938,8 @@
       "title": "UQ-LOB: Uncertainty-Aware Limit Order Book Mid-Price Forecasting",
       "url": "http://arxiv.org/abs/2609.31491v2",
       "summary": "Forecasting short-horizon mid-price movements from limit order book (LOB) data is central to algorithmic trading, yet most deep LOB forecasters are point predictors: they output a direction or a displacement, but never indicate which of their forecasts can be trusted. We introduce UQ-LOB, a lightweight, encoder-agnostic uncertainty quantification module that attaches to any pretrained LOB encoder and, in the spirit of attentive neural processes, conditions each forecast on a context set of recently completed windows whose outcomes are already realised. The UQ-regression variant outputs a calibrated Gaussian over the future tick displacement, while the UQ-classification variant outputs a categorical distribution over down/up/stationary. Both expose a scalar confidence (predicted signal-to-noise ratio or class probability) that supports selective prediction. On 5.2 billion LOB events across seven cryptocurrency assets and horizons of 5, 10 and 15 seconds, UQ-regression attains near-nominal 68% interval coverage, and restricting to the most confident 10% of predictions raises directional macro F1 by 0.11-0.15 for UQ-regression and 0.05-0.11 for UQ-classification, at every horizon. On large, economically meaningful moves, the tightest confidence tier reaches a directional F1 of 0.88 (down) and 0.83 (up) at the 5-second horizon.",
-      "supported_kind": "SUPPORT_RESISTANCE",
-      "disposition": "challenger_shadow"
+      "supported_kind": null,
+      "disposition": "research_only"
     },
     {
       "engine": "ARBITRAGE",
@@ -1038,8 +968,8 @@
       "title": "Functional Architecture of European Electricity Trading Markets: Requirements for AI Supported Trading Systems under Regulatory Constraints",
       "url": "http://arxiv.org/abs/2609.29108v1",
       "summary": "European electricity trading in the EU operates as a constrained multi-layer system in which legal design, exchange microstructure, and network physics are executed jointly across forward, day-ahead, intraday, and balancing horizons. This paper develops a functional architecture for AI-supported trading that is aligned with market-coupling mechanics, cross-zonal transfer constraints, and compliance obligations under REMIT, MiFID II, MiFIR, and EMIR. The contribution is a formal system specification composed of a decision-state vector, residual-exposure accounting, constrained optimization objective, executable-action permission gate, and fail-closed AI control logic with auditable records. The analysis maps major Nominated Electricity Market Operator (NEMO) venues and related exchange operators into an operational venue topology and identifies where cross-border coordination fails in practice: interface-level timing, permission heterogeneity, and balancing-layer coupling. The resulting framework proposes how AI can be deployed as a bounded decision component inside regulated market operation with explicit governance, rather than as an unconstrained prediction layer.",
-      "supported_kind": "SUPPORT_RESISTANCE",
-      "disposition": "challenger_shadow"
+      "supported_kind": null,
+      "disposition": "research_only"
     },
     {
       "engine": "DIRECTIONAL_FNO",
@@ -1068,8 +998,8 @@
       "title": "Adapting the Actor Model of Concurrency for High-Frequency Trading: Synchronous Message Delivery (fast_send) and a Tick-to-Book Latency Study",
       "url": "http://arxiv.org/abs/2609.21173v1",
       "summary": "The actor model - state isolation, data-race freedom, deadlock resistance, and sequential single-message reasoning - has long been dismissed as unsuitable for high-frequency trading (HFT): actors seem to imply many threads, a mailbox per actor, and a heap-allocated message plus a context switch per interaction, overhead incompatible with a microsecond budget. This paper argues the dismissal is wrong for co-located actors, and supports it both analytically and with a deployed, measured implementation: kaspar-hft, an open-source C++20 framework. Four extensions adapt the model for HFT: fast_send, a synchronous delivery mechanism in which the sending thread runs the receiver's handler inline and returns the reply as a value; actor groups, which co-schedule actors on one thread behind a shared mailbox; per-actor selectable mailbox queues; and a memory pool. fast_send has receiver transparency: the handler cannot tell whether delivery was synchronous or asynchronous, or which thread runs it. A grouped synchronous chain runs on one thread, cutting scheduler context switches from O(N) to O(1), and a thread-local call-chain test catches cyclic invocation before any lock is taken. Microbenchmarks put the synchronous round trip at tens of nanoseconds. On a live CME market-data feed (ES, NQ, ZN futures), socket-to-book latency decomposes into a ~7 microsecond decode-and-book floor plus a per-message slope; the framework's own contribution is under 1% of the floor. The tail is set not by the actor machinery but by the market's non-Poisson, clustered arrival process, characterized in a companion paper. The shared-queue group also yields a production/simulation duality: the same actor code runs unchanged in live trading and deterministic backtest.",
-      "supported_kind": "SUPPORT_RESISTANCE",
-      "disposition": "challenger_shadow"
+      "supported_kind": null,
+      "disposition": "research_only"
     },
     {
       "engine": "DIRECTIONAL_FNO",
@@ -1098,8 +1028,8 @@
       "title": "From Public Evidence to Contractual Outcome: First and Stable Decidability on Kalshi",
       "url": "http://arxiv.org/abs/2609.16642v1",
       "summary": "Public evidence can become sufficient to settle a prediction-market contract before the venue records its first determination, but the relevant boundary depends on the applicable rule version, exact release object, source hierarchy, correction history, and unfinished contract conditions. This paper defines two Kalshi clocks: first decidability, the earliest contemporaneous singleton in the rule-evidence mapping, and stable decidability, the retrospective earliest time after which the same singleton remains unchanged through finalization. A completed retrospective identification test establishes a narrow feasibility result. In a frozen blind pilot, all 25 identities and blinding checks passed and current rule text was recovered for all 25; no exact or bounded historical rule version and no exact or bounded official source-release object was recovered. The full historical recovery covered 152,694 ordinary tickers, 11,530 exact event identities, and 6,540 read-only official requests, with zero historically eligible events and zero historically eligible tickers. This is an observability result, not a claim that no market was decidable or that public evidence never existed. A completed prospective infrastructure shakedown established observation capability for three source programmes across 25 markets, with integrity revalidation of 781,266 lifecycle frames, 22 closed lower-bounded reconnect receipts, no unresolved reconnect gap, no due-but-missed official release, and an inactive price layer. Production evidence enrollment is active. The prospective sample is constructed only at enrollment close from prospectively frozen identities and pre-outcome fields; its frozen target size is selected mechanically under the registered full, reduced, exploratory, or no-go support disposition. No contractual-decidability clock, human-adjudication, price, or cross-venue result is reported here.",
-      "supported_kind": "EMA_CROSS",
-      "disposition": "challenger_shadow"
+      "supported_kind": null,
+      "disposition": "research_only"
     },
     {
       "engine": "DIRECTIONAL_FNO",
@@ -1118,8 +1048,8 @@
       "title": "On-Demand Combinatorial Event Markets on Kalshi: Instantiation, Concentration, and Effective Market Breadth",
       "url": "http://arxiv.org/abs/2609.17610v1",
       "summary": "Kalshi's multivariate-event architecture produces market objects on demand from exact selected legs. Across a registered seven-day interval, 190 independently validated temporal shards yield 7,611,594 unique REST MVE market tickers after excluding 5,777 boundary-overlap observations; the population was created at an average rate of 1.087 million objects per day, with strong hourly burstiness. The hierarchy is sharply compressed relative to the market-object count: 5,262,526 exact event keys, three collection keys, 83,701 selected-leg primitives, and 66,344,938 selected-leg occurrences. The largest collection accounts for 7,217,085 objects (94.82 percent), with an effective collection count of 1.11; the effective primitive count is approximately 720. REST and WebSocket are distinct observation surfaces: 1,487,330 created-notification tickers intersect the REST population in only 276,177 exact tickers. All three observed collection keys have current endpoint confirmation without establishing historical collection or rule versions. The exact structural signature yields 7,611,594 unique signatures with zero collision groups. At retrieval, 2,692,787 objects (35.38 percent) have positive cumulative volume or open interest; all observed 24-hour-volume values are zero and trade-count fields are unavailable. This is current-snapshot activity eligibility, not historical trading. The central result is that a very large on-demand market-object population is generated by a concentrated collection layer and reused primitive vocabulary; economic breadth must be measured at several hierarchical levels rather than by ticker count alone. Exact public endpoint evidence is available for 7,357,576 MVE objects, whereas only 126,806 have an exact determination-to-endpoint pair: terminal-state coverage and lifecycle-path coverage are distinct statistical objects.",
-      "supported_kind": "EMA_CROSS",
-      "disposition": "challenger_shadow"
+      "supported_kind": null,
+      "disposition": "research_only"
     },
     {
       "engine": "DIRECTIONAL_FNO",
@@ -1128,8 +1058,8 @@
       "title": "Resolution Is Not Settlement, Part II: Protocol Finality and Observed Redemption on Polymarket",
       "url": "http://arxiv.org/abs/2609.15373v1",
       "summary": "An Oracle result is not yet a protocol payout, a redeemable position is not yet collateral in a holder's account, and a redemption event is not a complete measure of economic entitlement. This companion paper develops an event-sourced framework for Polymarket conditions from preparation through protocol finality and observed holder realization. The empirical design uses three Conditional Tokens Framework event families derived from a pinned contract application binary interface (ABI): ConditionPreparation, ConditionResolution, and PayoutRedemption. It separates the contract-wide acquisition universe from the frozen Polymarket adapter-question cohort. The exact bridge contains 108,638 linked conditions. Of these, 99,283 have an observed protocol-resolution event by the fixed snapshot at Polygon block 90,114,204 (2026-07-12T17:11:41Z). Among resolved exact-linked conditions, 92,158 have an observed redemption of any amount and 91,817 have an observed positive-payout redemption; condition-specific Kaplan-Meier medians from first protocol resolution are 182 and 200 seconds respectively. The exact-linked payout taxonomy contains 53,847 canonical (0,1) vectors, 45,024 canonical (1,0) vectors, 410 fifty-fifty vectors, two other valid vectors, and 9,355 conditions with no observed resolution. Cross-contract Oracle-adapter-protocol ordering is reported conservatively: 823 conditions have an interval-qualified terminal generation, 48 have multiple candidate generations, 91,638 have no compatible terminal generation in the frozen evidence, and 16,129 are right-censored or otherwise unevaluable. The formal results show that Oracle finality does not identify protocol finality, protocol finality does not identify holder realization, and redemption events alone do not identify the fraction of entitlement redeemed without an independent balance-consistent entitlement denominator.",
-      "supported_kind": "EMA_CROSS",
-      "disposition": "challenger_shadow"
+      "supported_kind": null,
+      "disposition": "research_only"
     },
     {
       "engine": "DIRECTIONAL_FNO",
@@ -1138,8 +1068,8 @@
       "title": "Resolution Is Not Settlement, Part I: Oracle Adjudication and Semantic Governance on Polymarket",
       "url": "http://arxiv.org/abs/2609.15368v1",
       "summary": "Prediction-market resolution is often reduced to a terminal outcome and one timestamp. That representation is inadequate for leveraged event claims because rule versioning, request creation, proposal, dispute, reset, Oracle finality, and adapter terminality are distinct states with different observation precision and balance-sheet consequences. We reconstruct those states for Polymarket using Oracle request generations as the unit of adjudication. The population is frozen at Polygon block 79,721,080 and contains 185,550 initialized adapter-question instances and 350,703 decoded adapter logs. Exact requester-filtered extraction yields 504,332 decoded Oracle lifecycle events: 184,148 request creations, 159,447 proposals, 1,604 disputes, and 159,133 settlements. The accounting closes as 182,671 questions with at least one request plus 1,477 successor generations. Immutable chain identity and deployed request semantics provide exact linkage; unfinished histories remain right-censored. Request age is not semantic resolution age. Median request-to-first-proposal time is 182 seconds on the legacy route but 176,388-744,151 seconds on modern routes; post-reset successor proposals arrive within 300-2,909 seconds at the median. This descriptive contrast does not establish causal efficiency. Exact stable-ID metadata linkage recovers 104,032 of 185,550 questions (56.07%), leaves 81,518 unmatched, and produces no ambiguous exact match. External-source publication and contractual-decidability clocks remain unmeasured population-wide and are not replaced by mechanism timestamps. The results establish an event-sourced account of Oracle adjudication, semantic governance, and adapter terminality. Companion Part II reconstructs Conditional Tokens payout recording and observed redemption, preserving the boundary between adjudication, protocol settlement, and holder realization.",
-      "supported_kind": "RSI14_REVERSAL",
-      "disposition": "challenger_shadow"
+      "supported_kind": null,
+      "disposition": "research_only"
     },
     {
       "engine": "DIRECTIONAL_FNO",
@@ -1258,7 +1188,7 @@
       "title": "AChow906/alpha-lab",
       "url": "https://github.com/AChow906/alpha-lab",
       "summary": "Python backtesting platform for systematic trading research (momentum, mean-reversion, and statistical-arbitrage strategies) on a shared vectorised engine, with options pricing and Monte Carlo risk modelling.",
-      "supported_kind": "RSI14_REVERSAL",
+      "supported_kind": null,
       "disposition": "research_only"
     },
     {
@@ -1288,7 +1218,7 @@
       "title": "Sanaurrehmanarain/Quantitative-DeFi-Research",
       "url": "https://github.com/Sanaurrehmanarain/Quantitative-DeFi-Research",
       "summary": "A comprehensive quantitative analysis of the Decentralized Finance (DeFi) ecosystem, featuring AMM microstructure modeling, high-frequency statistical arbitrage, Monte Carlo stochastic risk simulation, and Black-Scholes options pricing.",
-      "supported_kind": "STOCH_REVERSAL",
+      "supported_kind": null,
       "disposition": "research_only"
     },
     {
@@ -1298,7 +1228,7 @@
       "title": "zishaan1911/Algorithmic-Options-Hedging-Model",
       "url": "https://github.com/zishaan1911/Algorithmic-Options-Hedging-Model",
       "summary": "A multi-threaded options hedging model. Engineered with a decoupled architecture to manage strategy dispatch, dynamic volatility surface generation, and live telemetry logging via SQLite (WAL mode). Ensures mathematically rigorous risk management through MC stochastic simulations and deterministic PCG64-seeded live/backtesting environments.",
-      "supported_kind": "STOCH_REVERSAL",
+      "supported_kind": null,
       "disposition": "research_only"
     },
     {
