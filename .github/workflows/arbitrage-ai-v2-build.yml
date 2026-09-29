@@ -1,6 +1,9 @@
 name: Build Global Arbitrage AI Trader v2
 
 on:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - arbitrage-ai-v2
