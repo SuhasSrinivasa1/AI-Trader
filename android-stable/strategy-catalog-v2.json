@@ -1,5 +1,5 @@
 {
-  "version": "STRAT-WEB-BASE-2026.09",
+  "version": "STRAT-WEB-2026-09-29",
   "strategies": [
     {
       "id": "pd_fvg_sweep",
@@ -216,21 +216,117 @@
       "description": "A challenger variant of volume-backed price expansion.",
       "source": "Price-volume confirmation",
       "priority": 70
+    },
+    {
+      "id": "web_optimal_liquidation_with_support_and_1",
+      "name": "Web Challenger: Optimal Liquidation with Support and Resistance Levels under Multi-Skew Brownian Motion",
+      "kind": "SUPPORT_RESISTANCE",
+      "family": "Weekly Web Research",
+      "description": "Discovered via weekly broad-web research; encoded using supported SUPPORT_RESISTANCE. Must earn promotion through shadow evidence; source: http://arxiv.org/abs/2609.35063v1",
+      "source": "http://arxiv.org/abs/2609.35063v1",
+      "priority": 60
+    },
+    {
+      "id": "web_evolution_of_market_microstructure_i_2",
+      "name": "Web Challenger: Evolution of Market Microstructure in the Age of AI",
+      "kind": "RSI14_REVERSAL",
+      "family": "Weekly Web Research",
+      "description": "Discovered via weekly broad-web research; encoded using supported RSI14_REVERSAL. Must earn promotion through shadow evidence; source: http://arxiv.org/abs/2609.33058v1",
+      "source": "http://arxiv.org/abs/2609.33058v1",
+      "priority": 60
+    },
+    {
+      "id": "web_packets_transactions_and_queues_desi_3",
+      "name": "Web Challenger: Packets, Transactions and Queues: Design Principles for HFT Systems from a Measurement Stu",
+      "kind": "SUPPORT_RESISTANCE",
+      "family": "Weekly Web Research",
+      "description": "Discovered via weekly broad-web research; encoded using supported SUPPORT_RESISTANCE. Must earn promotion through shadow evidence; source: http://arxiv.org/abs/2609.32848v1",
+      "source": "http://arxiv.org/abs/2609.32848v1",
+      "priority": 60
+    },
+    {
+      "id": "web_uq_lob_uncertainty_aware_limit_order_4",
+      "name": "Web Challenger: UQ-LOB: Uncertainty-Aware Limit Order Book Mid-Price Forecasting",
+      "kind": "SUPPORT_RESISTANCE",
+      "family": "Weekly Web Research",
+      "description": "Discovered via weekly broad-web research; encoded using supported SUPPORT_RESISTANCE. Must earn promotion through shadow evidence; source: http://arxiv.org/abs/2609.31491v2",
+      "source": "http://arxiv.org/abs/2609.31491v2",
+      "priority": 60
+    },
+    {
+      "id": "web_functional_architecture_of_european__5",
+      "name": "Web Challenger: Functional Architecture of European Electricity Trading Markets: Requirements for AI Suppo",
+      "kind": "SUPPORT_RESISTANCE",
+      "family": "Weekly Web Research",
+      "description": "Discovered via weekly broad-web research; encoded using supported SUPPORT_RESISTANCE. Must earn promotion through shadow evidence; source: http://arxiv.org/abs/2609.29108v1",
+      "source": "http://arxiv.org/abs/2609.29108v1",
+      "priority": 60
+    },
+    {
+      "id": "web_adapting_the_actor_model_of_concurre_6",
+      "name": "Web Challenger: Adapting the Actor Model of Concurrency for High-Frequency Trading: Synchronous Message De",
+      "kind": "SUPPORT_RESISTANCE",
+      "family": "Weekly Web Research",
+      "description": "Discovered via weekly broad-web research; encoded using supported SUPPORT_RESISTANCE. Must earn promotion through shadow evidence; source: http://arxiv.org/abs/2609.21173v1",
+      "source": "http://arxiv.org/abs/2609.21173v1",
+      "priority": 60
+    },
+    {
+      "id": "web_from_public_evidence_to_contractual__7",
+      "name": "Web Challenger: From Public Evidence to Contractual Outcome: First and Stable Decidability on Kalshi",
+      "kind": "EMA_CROSS",
+      "family": "Weekly Web Research",
+      "description": "Discovered via weekly broad-web research; encoded using supported EMA_CROSS. Must earn promotion through shadow evidence; source: http://arxiv.org/abs/2609.16642v1",
+      "source": "http://arxiv.org/abs/2609.16642v1",
+      "priority": 60
+    },
+    {
+      "id": "web_on_demand_combinatorial_event_market_8",
+      "name": "Web Challenger: On-Demand Combinatorial Event Markets on Kalshi: Instantiation, Concentration, and Effecti",
+      "kind": "EMA_CROSS",
+      "family": "Weekly Web Research",
+      "description": "Discovered via weekly broad-web research; encoded using supported EMA_CROSS. Must earn promotion through shadow evidence; source: http://arxiv.org/abs/2609.17610v1",
+      "source": "http://arxiv.org/abs/2609.17610v1",
+      "priority": 60
+    },
+    {
+      "id": "web_resolution_is_not_settlement_part_ii_9",
+      "name": "Web Challenger: Resolution Is Not Settlement, Part II: Protocol Finality and Observed Redemption on Polyma",
+      "kind": "EMA_CROSS",
+      "family": "Weekly Web Research",
+      "description": "Discovered via weekly broad-web research; encoded using supported EMA_CROSS. Must earn promotion through shadow evidence; source: http://arxiv.org/abs/2609.15373v1",
+      "source": "http://arxiv.org/abs/2609.15373v1",
+      "priority": 60
+    },
+    {
+      "id": "web_resolution_is_not_settlement_part_i__10",
+      "name": "Web Challenger: Resolution Is Not Settlement, Part I: Oracle Adjudication and Semantic Governance on Polym",
+      "kind": "RSI14_REVERSAL",
+      "family": "Weekly Web Research",
+      "description": "Discovered via weekly broad-web research; encoded using supported RSI14_REVERSAL. Must earn promotion through shadow evidence; source: http://arxiv.org/abs/2609.15368v1",
+      "source": "http://arxiv.org/abs/2609.15368v1",
+      "priority": 60
+    },
+    {
+      "id": "web_achauh2723_quantitative_trading_stra_11",
+      "name": "Web Challenger: achauh2723/Quantitative_Trading_Strategy_Development_Task_Aryan_Chauhan",
+      "kind": "EMA_CROSS",
+      "family": "Weekly Web Research",
+      "description": "Discovered via weekly broad-web research; encoded using supported EMA_CROSS. Must earn promotion through shadow evidence; source: https://github.com/achauh2723/Quantitative_Trading_Strategy_Development_Task_Aryan_Chauhan",
+      "source": "https://github.com/achauh2723/Quantitative_Trading_Strategy_Development_Task_Aryan_Chauhan",
+      "priority": 60
     }
   ],
   "research": {
     "mode": "broad_web_weekly",
-    "policy": "Web discoveries are candidates only. Supported rule encodings enter Challenger shadow tests; unsupported/vague ideas remain research-only. Existing Champions are retained until evidence-based demotion.",
-    "engines": [
-      "ARBITRAGE",
-      "HEDGING",
-      "DIRECTIONAL_FNO"
-    ],
-    "sources": [
-      "web search index",
-      "arXiv",
-      "GitHub public repositories"
-    ],
-    "last_research_at": null
+    "last_research_at": "2026-09-29T17:33:03.956287+00:00",
+    "finding_count": 145,
+    "challenger_count": 11,
+    "engine_counts": {
+      "ARBITRAGE": 40,
+      "HEDGING": 43,
+      "DIRECTIONAL_FNO": 62
+    },
+    "policy": "Discovery never promotes directly. Supported encodings enter Challenger shadow tests; unsupported or vague ideas remain research-only. Existing Champions remain until evidence-based demotion."
   }
 }
