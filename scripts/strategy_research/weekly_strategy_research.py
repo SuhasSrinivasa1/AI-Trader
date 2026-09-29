@@ -31,28 +31,28 @@ QUERIES={
 }
 
 KIND_RULES=[
- (r"opening range|orb","ORB_RVOL"),
- (r"vwap.*reclaim|reclaim.*vwap","VWAP_RECLAIM"),
- (r"vwap.*pullback|pullback.*vwap","VWAP_PULLBACK"),
- (r"bollinger|squeeze","BOLL_SQUEEZE"),
- (r"donchian","DONCHIAN"),
- (r"ema.*cross|moving average.*cross","EMA_CROSS"),
- (r"trend.*pullback|pullback.*trend","TREND_PULLBACK"),
- (r"macd","MACD"),
- (r"rsi.?2","RSI2_TREND"),
- (r"rsi|relative strength index","RSI14_REVERSAL"),
- (r"stochastic","STOCH_REVERSAL"),
- (r"inside bar","INSIDE_BAR"),
- (r"engulf","ENGULFING"),
- (r"hammer|shooting star","HAMMER"),
- (r"morning star|evening star","MORNING_STAR"),
- (r"three white soldiers|black crows","THREE_SOLDIERS"),
- (r"gap.?and.?go|gap continuation","GAP_GO"),
- (r"nr7|narrow range","NR7_EXPANSION"),
- (r"volume.*breakout|breakout.*volume|relative volume","VOLUME_BREAKOUT"),
- (r"atr.*breakout|average true range.*breakout","ATR_BREAKOUT"),
- (r"support|resistance","SUPPORT_RESISTANCE"),
- (r"adx|trend strength","ADX_TREND"),
+ (r"\bopening range\b|\borb\b","ORB_RVOL"),
+ (r"\bvwap\b.{0,30}\breclaim\b|\breclaim\b.{0,30}\bvwap\b","VWAP_RECLAIM"),
+ (r"\bvwap\b.{0,30}\bpullback\b|\bpullback\b.{0,30}\bvwap\b","VWAP_PULLBACK"),
+ (r"\bbollinger\b|\bvolatility squeeze\b","BOLL_SQUEEZE"),
+ (r"\bdonchian\b","DONCHIAN"),
+ (r"\b(?:ema|exponential moving average)\b.{0,35}\b(?:cross|crossover)\b","EMA_CROSS"),
+ (r"\btrend\b.{0,25}\bpullback\b|\bpullback\b.{0,25}\btrend\b","TREND_PULLBACK"),
+ (r"\bmacd\b","MACD"),
+ (r"\brsi\s*\(?2\)?\b","RSI2_TREND"),
+ (r"\brsi\b|\brelative strength index\b","RSI14_REVERSAL"),
+ (r"\bstochastic oscillator\b|\bstochastic reversal\b","STOCH_REVERSAL"),
+ (r"\binside[- ]bar\b","INSIDE_BAR"),
+ (r"\bengulf(?:ing)?\b","ENGULFING"),
+ (r"\bhammer candl|\bshooting star candl","HAMMER"),
+ (r"\bmorning star\b|\bevening star\b","MORNING_STAR"),
+ (r"\bthree white soldiers\b|\bthree black crows\b","THREE_SOLDIERS"),
+ (r"\bgap[- ]and[- ]go\b|\bgap continuation\b","GAP_GO"),
+ (r"\bnr7\b|\bnarrow range 7\b","NR7_EXPANSION"),
+ (r"\bvolume breakout\b|\brelative volume\b.{0,30}\bbreakout\b|\brvol\b.{0,30}\bbreakout\b","VOLUME_BREAKOUT"),
+ (r"\batr\b.{0,30}\bbreakout\b|\baverage true range\b.{0,30}\bbreakout\b","ATR_BREAKOUT"),
+ (r"\bsupport (?:and|&|/) resistance\b|\bsupport level\b.{0,30}\bresistance level\b|\bresistance level\b.{0,30}\bsupport level\b","SUPPORT_RESISTANCE"),
+ (r"\badx\b|\baverage directional index\b","ADX_TREND"),
 ]
 
 def get(url,headers=None,timeout=20):
@@ -123,6 +123,10 @@ def dedupe(items):
 
 def supported_kind(item):
     text=(item.get("title","")+" "+item.get("summary","")).lower()
+    reject=r"\bkalshi\b|\bpolymarket\b|\belectricity market\b|\benergy market\b|\bsports betting\b|\bprediction market\b"
+    if re.search(reject,text): return None
+    context=r"\btrading\b|\btrader\b|\bstock\b|\bequity\b|\bfutures?\b|\boptions?\b|\btechnical analysis\b|\bprice action\b|\bmarket price\b"
+    if not re.search(context,text): return None
     for pat,kind in KIND_RULES:
         if re.search(pat,text): return kind
     return None
