@@ -1,0 +1,38 @@
+name: Weekly Strategy Web Research
+
+on:
+  schedule:
+    - cron: '30 18 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run broad-web research
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/strategy_research/weekly_strategy_research.py
+      - name: Validate outputs
+        run: |
+          python -m json.tool android-stable/strategy-catalog-v2.json >/dev/null
+          python -m json.tool android-stable/strategy-research-latest.json >/dev/null
+      - name: Commit refreshed research catalogue
+        run: |
+          if git diff --quiet -- android-stable/strategy-catalog-v2.json android-stable/strategy-research-latest.json; then
+            echo "No catalogue change"
+            exit 0
+          fi
+          git config user.name "Global Quant Research Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add android-stable/strategy-catalog-v2.json android-stable/strategy-research-latest.json
+          git commit -m "Weekly strategy web research refresh"
+          git push
