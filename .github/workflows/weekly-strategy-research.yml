@@ -3,6 +3,11 @@ name: Weekly Strategy Web Research
 on:
   schedule:
     - cron: '30 18 * * 0'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/strategy_research/**'
+      - '.github/workflows/weekly-strategy-research.yml'
   workflow_dispatch:
 
 permissions:
