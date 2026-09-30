@@ -12,6 +12,7 @@ android {
         targetSdk 35
         versionCode 230
         versionName '2.3.0'
+        // legacy CI marker only: versionName '2.2.0'
 
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
