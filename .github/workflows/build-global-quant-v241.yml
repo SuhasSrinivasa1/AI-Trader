@@ -1,0 +1,101 @@
+name: Build Global Quant Trader AI v2.4.1
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'global-quant-v241/**'
+      - '.github/workflows/build-global-quant-v241.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Bootstrap Android SDK 36
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ANDROID_HOME="$HOME/android-sdk"
+          mkdir -p "$ANDROID_HOME/cmdline-tools"
+          curl -fsSL https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o /tmp/android-cmdline.zip
+          unzip -q /tmp/android-cmdline.zip -d /tmp/android-cmdline
+          mv /tmp/android-cmdline/cmdline-tools "$ANDROID_HOME/cmdline-tools/latest"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          printf "y\\n%.0s" {1..50} | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Reconstruct exact v2.4.1 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat global-quant-v241/part*.b64 > /tmp/gqt241.b64
+          echo "f915912cd3ef64fbdb3b73d43e6839c8c8a8a29a80dc6ee88b6aad9de7d8690d  /tmp/gqt241.b64" | sha256sum -c -
+          base64 -d /tmp/gqt241.b64 > /tmp/gqt241.tar.gz
+          echo "a814c4f58eebc8349e69b6cd6b15a56c80bc67f3976ca068349b817e8bfe9ee1  /tmp/gqt241.tar.gz" | sha256sum -c -
+          rm -rf /tmp/gqt241
+          mkdir -p /tmp/gqt241
+          tar -xzf /tmp/gqt241.tar.gz -C /tmp/gqt241
+          echo "ROOT=/tmp/gqt241" >> "$GITHUB_ENV"
+
+          grep -q 'applicationId = "com.suhas.globalquanttraderai"' /tmp/gqt241/app/build.gradle.kts
+          grep -q 'versionName = "2.4.1"' /tmp/gqt241/app/build.gradle.kts
+          grep -q 'versionCode = 241' /tmp/gqt241/app/build.gradle.kts
+          grep -n 'versionCode\|versionName\|applicationId' /tmp/gqt241/app/build.gradle.kts
+
+      - name: Unit tests
+        run: gradle --no-daemon --console=plain -p "$ROOT" :app:testDebugUnitTest
+
+      - name: Lint diagnostics
+        continue-on-error: true
+        run: gradle --no-daemon --console=plain -p "$ROOT" :app:lintDebug
+
+      - name: Build release APK and verify identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --console=plain -p "$ROOT" :app:assembleRelease
+          OUT="$ROOT/app/build/outputs/apk/release"
+          APK="$OUT/Global-Quant-Trader-AI-v2.4.1-S24-Android16.apk"
+          cp "$OUT/app-release.apk" "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" > "$OUT/signature.txt"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" > "$OUT/package-check.txt"
+          grep -q "package: name='com.suhas.globalquanttraderai'" "$OUT/package-check.txt"
+          sha256sum "$APK" > "$OUT/SHA256.txt"
+
+      - name: Package exact source
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$ROOT"
+          zip -qr /tmp/Global-Quant-Trader-AI-v2.4.1-source.zip . -x '.gradle/*' 'app/build/*' 'build/*'
+          cp /tmp/Global-Quant-Trader-AI-v2.4.1-source.zip "$ROOT/app/build/outputs/apk/release/"
+
+      - name: Upload v2.4.1 artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Global-Quant-Trader-AI-v2.4.1-S24
+          path: |
+            ${{ env.ROOT }}/app/build/outputs/apk/release/Global-Quant-Trader-AI-v2.4.1-S24-Android16.apk
+            ${{ env.ROOT }}/app/build/outputs/apk/release/SHA256.txt
+            ${{ env.ROOT }}/app/build/outputs/apk/release/signature.txt
+            ${{ env.ROOT }}/app/build/outputs/apk/release/package-check.txt
+            ${{ env.ROOT }}/app/build/outputs/apk/release/Global-Quant-Trader-AI-v2.4.1-source.zip
+            ${{ env.ROOT }}/app/build/reports/tests/testDebugUnitTest/
+            ${{ env.ROOT }}/app/build/reports/lint-results-debug.html
+          if-no-files-found: error
