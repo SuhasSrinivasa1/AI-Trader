@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.TimeZone;
 
+// v2.3.3 scheduler fallback: persisted first, OEM-compatible non-persisted retry.
 final class ResearchScheduler {
     static final int JOB_ID = 23030;
     private static final long DEADLINE_SLACK_MS = 60L * 60L * 1000L;
