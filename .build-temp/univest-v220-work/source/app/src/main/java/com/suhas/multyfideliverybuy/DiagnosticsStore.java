@@ -152,7 +152,7 @@ final class DiagnosticsStore {
                 addText(zip, "snapshot.json", snapshot(c).toString(2));
                 addText(zip, "README.txt",
                         "Univest AutoTrade diagnostic export\n" +
-                        "v2.3.1 stores diagnostics in daily IST files. The app UI shows only today's trading signals/trades/errors.\n" +
+                        "v2.3.2 stores diagnostics in daily IST files. The app UI shows only today's trading signals/trades/errors.\n" +
                         "Historical notification/runtime/broker logs remain in this export for debugging.\n" +
                         "Groww TOTP token, TOTP secret, generated OTP and access token are never exported.\n");
             }
@@ -163,7 +163,7 @@ final class DiagnosticsStore {
     private static JSONObject snapshot(Context c) {
         JSONObject j = new JSONObject();
         try {
-            j.put("app", "Univest AutoTrade"); j.put("version", "2.3.1"); j.put("versionCode", 231);
+            j.put("app", "Univest AutoTrade"); j.put("version", "2.3.2"); j.put("versionCode", 232);
             j.put("sourcePackageLock", "com.univest.capp"); j.put("productLock", "CNC DELIVERY ONLY");
             j.put("executionMode", AppPrefs.getExecutionMode(c)); j.put("entryBudget", UnivestManager.ENTRY_BUDGET);
             j.put("reentryBudget", UnivestManager.REENTRY_BUDGET); j.put("downwardAverageBudget", AppPrefs.getAveragingBudget(c));
