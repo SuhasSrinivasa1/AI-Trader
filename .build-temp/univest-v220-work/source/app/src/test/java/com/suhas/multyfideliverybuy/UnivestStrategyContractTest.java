@@ -35,4 +35,15 @@ public class UnivestStrategyContractTest {
         assertFalse(GrowwClient.isValidBase32("not-valid-***"));
         assertFalse(GrowwClient.isValidBase32(""));
     }
+    @Test public void backInRangeUsesBrokerTruthForBudget() {
+        assertEquals(20000, UnivestManager.budgetForBackInRange(0, false));
+        assertEquals(5000, UnivestManager.budgetForBackInRange(10, false));
+        assertEquals(0, UnivestManager.budgetForBackInRange(0, true));
+        assertEquals(0, UnivestManager.budgetForBackInRange(10, true));
+    }
+    @Test public void parserRejectsNonEquityUnivestContent() {
+        assertNull(UnivestParser.parse("Stock: NIFTY\nIndex update\nBook Profit"));
+        assertNull(UnivestParser.parse("Stock: GOLD\nCommodity\nNew recommendation\nDuration: 1 month"));
+        assertNull(UnivestParser.parse("Stock: ABC\nPromotional offer\nNew recommendation\nDuration: 1 month"));
+    }
 }
