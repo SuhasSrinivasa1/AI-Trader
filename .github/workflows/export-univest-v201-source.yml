@@ -1,0 +1,17 @@
+name: Export Univest v2.0.1 Source
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/export-univest-v201-source.yml'
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Univest-AutoTrade-v2.0.1-SOURCE
+          path: .build-temp/univest-v201-final/source.tar.gz
+          if-no-files-found: error
+          retention-days: 7
