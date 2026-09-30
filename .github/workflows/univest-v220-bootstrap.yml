@@ -1,0 +1,28 @@
+name: Univest v2.2.0 Bootstrap Extraction
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/univest-v220-bootstrap.yml']
+permissions:
+  contents: write
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: univest-v220-build
+          fetch-depth: 0
+      - name: Extract source into temporary branch
+        run: |
+          set -euo pipefail
+          rm -rf .build-temp/univest-v220-work
+          mkdir -p .build-temp/univest-v220-work/source
+          tar -xzf .build-temp/univest-v210-final/source.tar.gz -C .build-temp/univest-v220-work/source
+          find .build-temp/univest-v220-work/source -type f | sort > .build-temp/univest-v220-work/source-inventory.txt
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add .build-temp/univest-v220-work/source .build-temp/univest-v220-work/source-inventory.txt
+          git diff --cached --quiet && exit 0
+          git commit -m "Extract Univest v2.1.0 source for v2.2.0"
+          git push origin HEAD:univest-v220-build
