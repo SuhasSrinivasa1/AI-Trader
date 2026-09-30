@@ -46,7 +46,7 @@ public class MainActivity extends Activity {
 
     private Switch liveModeSwitch, armSwitch, averagingSwitch;
     private EditText totpTokenInput, totpSecretInput, expectedIpInput;
-    private TextView sourceStatus, connectionStatus, lastAction, holdingsStatus, recentEvents, listenerStatus;
+    private TextView liveBanner, sourceStatus, connectionStatus, lastAction, holdingsStatus, recentEvents, listenerStatus;
     private TextView signalsToday, tradesToday, errorsToday, archiveCount;
     private File pendingExport;
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -103,8 +103,12 @@ public class MainActivity extends Activity {
         scroll.addView(root, new ScrollView.LayoutParams(-1, -2));
 
         root.addView(text("UNIVEST AUTOTRADE", 27, TEXT, true));
-        root.addView(text("v2.1.0 • BROKER-RECONCILED FINAL", 12, ACCENT, true), margins(0,4,0,3));
-        root.addView(text("Official Univest signals → NSE equity → CNC delivery only", 14, MUTED, false), margins(0,0,0,14));
+        root.addView(text("v2.2.0 • BROKER TRUTH EXECUTION", 12, ACCENT, true), margins(0,4,0,3));
+        root.addView(text("Official Univest signals → NSE equity → CNC delivery only", 14, MUTED, false), margins(0,0,0,10));
+        liveBanner = text("PAPER MODE\nNO REAL ORDERS", 18, TEXT, true);
+        liveBanner.setGravity(Gravity.CENTER);
+        liveBanner.setPadding(dp(12), dp(12), dp(12), dp(12));
+        root.addView(liveBanner, margins(0,0,0,14));
 
         LinearLayout contract = card();
         contract.addView(section("LOCKED TRADING CONTRACT"));
@@ -113,7 +117,7 @@ public class MainActivity extends Activity {
         contract.addView(text("Package source lock: com.univest.capp", 12, MUTED, false));
         contract.addView(text("Product lock: NSE CASH • CNC DELIVERY ONLY • no intraday", 13, ACCENT, true), margins(0,5,0,0));
         contract.addView(text("New eligible ≤3-month equity pick: ₹20,000 initial buy", 13, TEXT, false), margins(0,8,0,0));
-        contract.addView(text("Univest back-in-range / ideal-range signal: +₹5,000 CNC", 13, TEXT, false));
+        contract.addView(text("Back-in-range: broker flat → ₹20,000 missed entry; holding exists → +₹5,000 CNC", 13, TEXT, false));
         contract.addView(text("Controlled downward averaging: ₹5,000 at -2%, -4%, -6% from initial fill", 13, TEXT, false));
         contract.addView(text("Official book-profit / exit: cancel tracked averaging orders and sell full broker CNC holding", 13, TEXT, false));
         root.addView(contract, margins(0,0,0,12));
@@ -166,7 +170,7 @@ public class MainActivity extends Activity {
         status.addView(lastAction, margins(0,8,0,0));
         holdingsStatus = text("No tracked Univest campaigns.", 13, MUTED, false);
         status.addView(holdingsStatus, margins(0,10,0,0));
-        status.addView(text("Duplicate protection uses exact-notification suppression + Groww holdings/open orders + broker order-reference idempotency. Local ACTIVE state alone no longer blocks a real entry.", 12, MUTED, false), margins(0,10,0,0));
+        status.addView(text("Order safety uses Groww holdings/open orders + broker order-reference idempotency. Notification history/similarity and local ACTIVE state never block a broker-flat valid entry.", 12, MUTED, false), margins(0,10,0,0));
         root.addView(status, margins(0,0,0,12));
 
         LinearLayout signals = card();
@@ -224,7 +228,7 @@ public class MainActivity extends Activity {
         settings.addView(instruments, margins(0,8,0,0));
         root.addView(settings);
 
-        root.addView(text("v2.1 architecture: broker truth > local state • exact Android duplicate suppression • no pre-readiness signal consumption • deterministic order references • daily operational logs + historical archive • fixed 3-level controlled averaging.", 11, MUTED, false), margins(2,14,2,0));
+        root.addView(text("v2.2 architecture: broker truth > local state • every official Univest signal evaluated • deterministic broker order references • daily operational logs + historical archive • fixed 3-level controlled averaging.", 11, MUTED, false), margins(2,14,2,0));
         return scroll;
     }
 
@@ -369,6 +373,13 @@ public class MainActivity extends Activity {
         sourceStatus.setTextColor(ACCENT);
         boolean ready = AppPrefs.isReadyForBuy(this);
         String mode = live ? "LIVE" : "PAPER";
+        boolean liveReady = live && enabled && ready;
+        liveBanner.setText(liveReady ? "LIVE ORDERS ENABLED\nREAL MONEY / CNC DELIVERY"
+                : (live ? "LIVE MODE — DISARMED / NOT READY\nNO NEW BUY ORDERS" : "PAPER MODE\nNO REAL ORDERS"));
+        GradientDrawable bannerBg = new GradientDrawable();
+        bannerBg.setCornerRadius(dp(14));
+        bannerBg.setColor(liveReady ? Color.rgb(150, 35, 35) : (live ? Color.rgb(88, 58, 18) : Color.rgb(18, 74, 67)));
+        liveBanner.setBackground(bannerBg);
         connectionStatus.setText("Mode: " + mode + " • Groww: " + (ready ? "READY ✓" : "NOT READY")
                 + " • Static IP " + (AppPrefs.isStaticIpMatch(this) ? "MATCH ✓" : "not confirmed")
                 + "\n" + AppPrefs.getAuthTestMessage(this));
