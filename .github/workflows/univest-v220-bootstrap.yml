@@ -83,7 +83,7 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging release/Univest-AutoTrade-v2.3.2-SIGNED.apk | tee release/APK-BADGING.txt
           grep -q "package: name='com.suhas.multyfideliverybuy'" release/APK-BADGING.txt
           grep -q "versionCode='232'" release/APK-BADGING.txt
-          grep -q "versionName='2.3.1'" release/APK-BADGING.txt
+          grep -q "versionName='2.3.2'" release/APK-BADGING.txt
           sha256sum release/Univest-AutoTrade-v2.3.2-SIGNED.apk | tee release/APK-SHA256.txt
           cp .build-temp/test-results.txt release/test-results.txt
           unzip -t release/Univest-AutoTrade-v2.3.2-source.zip >/dev/null
