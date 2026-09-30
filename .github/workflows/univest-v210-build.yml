@@ -55,11 +55,11 @@ jobs:
           zip -qr ../../../release/Univest-AutoTrade-v2.2.0-source.zip . -x '*/build/*' '.gradle/*' '*.jks' '*.keystore'
       - name: Sign and verify release APK
         env:
-          KS_B64_A: ${{ secrets.UNIVEST_RELEASE_KEYSTORE_BASE64 }}
-          KS_B64_B: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
-          KS_PASS: ${{ secrets.RELEASE_STORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
-          KEY_PASS: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          KS_B64_A: ${{ secrets.MULTYFI_SIGNING_KEY }}
+          KS_B64_B: ${{ secrets.UNIVEST_RELEASE_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.MULTYFI_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.MULTYFI_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.MULTYFI_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           APK="$(find .build-temp/univest-v220-work/source/app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' | head -1)"
