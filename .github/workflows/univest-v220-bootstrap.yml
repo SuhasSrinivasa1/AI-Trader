@@ -1,4 +1,4 @@
-name: Univest AutoTrade v2.3.1 Release Build Bootstrap
+name: Univest AutoTrade v2.3.2 Release Build Bootstrap
 on:
   push:
     branches: [main]
@@ -34,12 +34,12 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Validate v2.3.1 simplified UI contract
+      - name: Validate v2.3.2 simplified UI contract
         shell: bash
         run: |
           set -euo pipefail
           SRC=.build-temp/univest-v220-work/source
-          grep -q "versionCode 231" "$SRC/app/build.gradle"
+          grep -q "versionCode 232" "$SRC/app/build.gradle"
           grep -q "versionName '2.3.1'" "$SRC/app/build.gradle"
           grep -R -q 'com.univest.capp' "$SRC/app/src/main/java"
           grep -R -q 'ENTRY_BUDGET = 20000' "$SRC/app/src/main/java"
@@ -52,6 +52,8 @@ jobs:
           grep -q 'Univest' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/DashboardActivity.java"
           grep -q 'Strategy' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/DashboardActivity.java"
           grep -q 'Forecast' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/DashboardActivity.java"
+          grep -q 'SETTINGS' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/DashboardActivity.java"
+          ! grep -q 'startActivity(new Intent(this, MainActivity.class))' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/DashboardActivity.java"
       - name: Unit tests and release build
         working-directory: .build-temp/univest-v220-work/source
         shell: bash
@@ -64,7 +66,7 @@ jobs:
           set -euo pipefail
           mkdir -p release
           cd .build-temp/univest-v220-work/source
-          zip -qr ../../../release/Univest-AutoTrade-v2.3.1-source.zip . -x '*/build/*' '.gradle/*' '*.jks' '*.keystore' '*credentials.env'
+          zip -qr ../../../release/Univest-AutoTrade-v2.3.2-source.zip . -x '*/build/*' '.gradle/*' '*.jks' '*.keystore' '*credentials.env'
       - name: Generate new signing identity and sign APK
         shell: bash
         run: |
@@ -73,27 +75,27 @@ jobs:
           test -n "$APK" && test -s "$APK"
           PASS="$(openssl rand -hex 24)"
           KS="$RUNNER_TEMP/univest-v230-release.jks"
-          keytool -genkeypair -v             -keystore "$KS"             -storepass "$PASS"             -keypass "$PASS"             -alias univest-v220             -keyalg RSA -keysize 4096 -validity 10000             -dname 'CN=Univest AutoTrade v2.3.1, OU=Private Release, O=Univest AutoTrade, L=Bengaluru, ST=Karnataka, C=IN'
+          keytool -genkeypair -v             -keystore "$KS"             -storepass "$PASS"             -keypass "$PASS"             -alias univest-v220             -keyalg RSA -keysize 4096 -validity 10000             -dname 'CN=Univest AutoTrade v2.3.2, OU=Private Release, O=Univest AutoTrade, L=Bengaluru, ST=Karnataka, C=IN'
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$APK" "$RUNNER_TEMP/aligned.apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign             --ks "$KS"             --ks-pass "pass:$PASS"             --ks-key-alias univest-v220             --key-pass "pass:$PASS"             --v1-signing-enabled true             --v2-signing-enabled true             --v3-signing-enabled true             --out release/Univest-AutoTrade-v2.3.1-SIGNED.apk             "$RUNNER_TEMP/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign             --ks "$KS"             --ks-pass "pass:$PASS"             --ks-key-alias univest-v220             --key-pass "pass:$PASS"             --v1-signing-enabled true             --v2-signing-enabled true             --v3-signing-enabled true             --out release/Univest-AutoTrade-v2.3.2-SIGNED.apk             "$RUNNER_TEMP/aligned.apk"
           rm -f "$KS"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs release/Univest-AutoTrade-v2.3.1-SIGNED.apk | tee release/APK-SIGNATURE.txt
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging release/Univest-AutoTrade-v2.3.1-SIGNED.apk | tee release/APK-BADGING.txt
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs release/Univest-AutoTrade-v2.3.2-SIGNED.apk | tee release/APK-SIGNATURE.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging release/Univest-AutoTrade-v2.3.2-SIGNED.apk | tee release/APK-BADGING.txt
           grep -q "package: name='com.suhas.multyfideliverybuy'" release/APK-BADGING.txt
-          grep -q "versionCode='231'" release/APK-BADGING.txt
+          grep -q "versionCode='232'" release/APK-BADGING.txt
           grep -q "versionName='2.3.1'" release/APK-BADGING.txt
-          sha256sum release/Univest-AutoTrade-v2.3.1-SIGNED.apk | tee release/APK-SHA256.txt
+          sha256sum release/Univest-AutoTrade-v2.3.2-SIGNED.apk | tee release/APK-SHA256.txt
           cp .build-temp/test-results.txt release/test-results.txt
-          unzip -t release/Univest-AutoTrade-v2.3.1-source.zip >/dev/null
+          unzip -t release/Univest-AutoTrade-v2.3.2-source.zip >/dev/null
       - name: Build report
         shell: bash
         run: |
           set -euo pipefail
           CERT="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' release/APK-SIGNATURE.txt | head -1)"
           {
-            echo "Univest AutoTrade v2.3.1 build: SUCCESS"
+            echo "Univest AutoTrade v2.3.2 build: SUCCESS"
             echo "package=com.suhas.multyfideliverybuy"
-            echo "versionCode=231"
+            echo "versionCode=232"
             echo "versionName=2.3.1"
             echo "source=com.univest.capp only"
             echo "product=NSE CASH / CNC DELIVERY"
@@ -104,10 +106,10 @@ jobs:
             echo "exit=cancel averaging then sell actual broker CNC holding"
             echo "signing_certificate_sha256=$CERT"
             echo "signing_identity=new ephemeral identity authorized by user"
-          } > release/Univest-AutoTrade-v2.3.1-build-report.txt
+          } > release/Univest-AutoTrade-v2.3.2-build-report.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: Univest-AutoTrade-v2.3.1-FINAL
+          name: Univest-AutoTrade-v2.3.2-FINAL
           retention-days: 14
           path: release/*
           if-no-files-found: error
