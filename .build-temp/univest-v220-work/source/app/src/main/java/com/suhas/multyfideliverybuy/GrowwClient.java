@@ -16,6 +16,8 @@ import java.net.URLEncoder;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 import javax.crypto.Mac;
@@ -35,6 +37,17 @@ final class GrowwClient {
     private static final String SMART_MODIFY_URL = "https://api.groww.in/v1/order-advance/modify/";
     private static final String POSITION_SYMBOL_URL = "https://api.groww.in/v1/positions/trading-symbol";
     private static final String HOLDINGS_URL = "https://api.groww.in/v1/holdings/user";
+    private static final String HISTORICAL_CANDLES_URL = "https://api.groww.in/v1/historical/candles";
+
+
+    static final class Candle {
+        final long epochSeconds;
+        final double open, high, low, close, volume;
+        Candle(long epochSeconds, double open, double high, double low, double close, double volume) {
+            this.epochSeconds = epochSeconds; this.open = open; this.high = high; this.low = low;
+            this.close = close; this.volume = volume;
+        }
+    }
 
     static final class Result {
         final boolean success;
@@ -347,6 +360,45 @@ final class GrowwClient {
     }
 
     static double getLtpForAutomation(Context context, String symbol) throws Exception { return getLtp(context, symbol); }
+
+
+    static List<Candle> getHistoricalCandles(Context context, String symbol, long startMillis, long endMillis, String candleInterval) throws Exception {
+        if (symbol == null || symbol.trim().isEmpty()) return new ArrayList<>();
+        long start = Math.max(0L, startMillis / 1000L);
+        long end = Math.max(start + 60L, endMillis / 1000L);
+        String interval = candleInterval == null || candleInterval.trim().isEmpty() ? "1day" : candleInterval.trim();
+        String endpoint = HISTORICAL_CANDLES_URL
+                + "?exchange=NSE&segment=CASH&groww_symbol=" + URLEncoder.encode("NSE-" + symbol.trim().toUpperCase(Locale.US), StandardCharsets.UTF_8.name())
+                + "&start_time=" + start
+                + "&end_time=" + end
+                + "&candle_interval=" + URLEncoder.encode(interval, StandardCharsets.UTF_8.name());
+        HttpResponse r = get(endpoint, ensureToken(context), true);
+        if (r.code == 401 || r.code == 403) {
+            AppPrefs.clearAccessToken(context);
+            Result a = authenticate(context);
+            if (!a.success) throw new IllegalStateException(a.message);
+            r = get(endpoint, AppPrefs.getAccessToken(context), true);
+        }
+        if (r.code < 200 || r.code >= 300) throw new IllegalStateException("Historical candle HTTP " + r.code + ": " + shortText(r.body));
+        JSONObject json = new JSONObject(r.body);
+        JSONObject payload = json.optJSONObject("payload");
+        JSONArray candles = payload == null ? null : payload.optJSONArray("candles");
+        ArrayList<Candle> out = new ArrayList<>();
+        if (candles == null) return out;
+        for (int i = 0; i < candles.length(); i++) {
+            JSONArray a = candles.optJSONArray(i);
+            if (a == null || a.length() < 6) continue;
+            out.add(new Candle(a.optLong(0, 0L), a.optDouble(1, 0), a.optDouble(2, 0),
+                    a.optDouble(3, 0), a.optDouble(4, 0), a.optDouble(5, 0)));
+        }
+        return out;
+    }
+
+    static GttResult createResearchCncSellTarget(Context context, String symbol, int quantity, double target, String referenceId) {
+        return createGttDetailed(context, symbol, quantity, "CNC", "SELL", "UP", target, referenceId);
+    }
+
+
 
     static GttResult createUnivestCncBuyGtt(Context context, String symbol, int quantity, double target, String referenceId) {
         return createGttDetailed(context, symbol, quantity, "CNC", "BUY", "DOWN", target, referenceId);
