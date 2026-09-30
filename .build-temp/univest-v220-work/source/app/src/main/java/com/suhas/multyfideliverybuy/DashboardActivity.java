@@ -489,9 +489,9 @@ public class DashboardActivity extends Activity {
         }
         box.addView(iconView, new LinearLayout.LayoutParams(dp(70), dp(40)));
 
-        TextView label = text(label, 11, selected ? TEXT : SUBTEXT, selected);
-        label.setGravity(Gravity.CENTER);
-        box.addView(label);
+        TextView labelView = text(label, 11, selected ? TEXT : SUBTEXT, selected);
+        labelView.setGravity(Gravity.CENTER);
+        box.addView(labelView);
 
         box.setOnClickListener(v -> {
             selectedTab = tab;
