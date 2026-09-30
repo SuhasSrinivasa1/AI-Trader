@@ -7,7 +7,7 @@ on:
     branches: [main]
   workflow_dispatch:
 permissions:
-  contents: write
+  contents: read
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -25,6 +25,7 @@ jobs:
           distribution: temurin
           java-version: '17'
       - name: Install Android SDK 35
+        shell: bash
         run: |
           set -euo pipefail
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
@@ -34,6 +35,7 @@ jobs:
         with:
           gradle-version: '8.9'
       - name: Validate v2.2 source contract
+        shell: bash
         run: |
           set -euo pipefail
           SRC=.build-temp/univest-v220-work/source
@@ -48,47 +50,42 @@ jobs:
           grep -R -q 'LIVE ORDERS ENABLED' "$SRC/app/src/main/java"
       - name: Unit tests and release build
         working-directory: .build-temp/univest-v220-work/source
+        shell: bash
         run: |
           set -o pipefail
           gradle --no-daemon --console=plain clean testReleaseUnitTest assembleRelease | tee ../../test-results.txt
       - name: Prepare editable source ZIP
+        shell: bash
         run: |
           set -euo pipefail
           mkdir -p release
           cd .build-temp/univest-v220-work/source
-          zip -qr ../../../release/Univest-AutoTrade-v2.2.0-source.zip . -x '*/build/*' '.gradle/*' '*.jks' '*.keystore'
-      - name: Sign and verify release APK
-        env:
-          KS_B64_A: ${{ secrets.MULTYFI_SIGNING_KEY }}
-          KS_B64_B: ${{ secrets.UNIVEST_RELEASE_KEYSTORE_BASE64 }}
-          KS_PASS: ${{ secrets.MULTYFI_STORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.MULTYFI_KEY_ALIAS }}
-          KEY_PASS: ${{ secrets.MULTYFI_KEY_PASSWORD }}
+          zip -qr ../../../release/Univest-AutoTrade-v2.2.0-source.zip . -x '*/build/*' '.gradle/*' '*.jks' '*.keystore' '*credentials.env'
+      - name: Generate new signing identity and sign APK
+        shell: bash
         run: |
           set -euo pipefail
           APK="$(find .build-temp/univest-v220-work/source/app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' | head -1)"
           test -n "$APK" && test -s "$APK"
-          KS_B64="${KS_B64_A:-${KS_B64_B:-}}"
-          if [ -z "$KS_B64" ] || [ -z "$KS_PASS" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASS" ]; then
-            echo "Existing release signing secrets are not available under the expected GitHub Actions secret names." | tee release/signing-blocker.txt
-            exit 42
-          fi
-          printf '%s' "$KS_B64" | base64 -d > "$RUNNER_TEMP/univest-release.jks"
+          PASS="$(openssl rand -hex 24)"
+          KS="$RUNNER_TEMP/univest-v220-release.jks"
+          keytool -genkeypair -v             -keystore "$KS"             -storepass "$PASS"             -keypass "$PASS"             -alias univest-v220             -keyalg RSA -keysize 4096 -validity 10000             -dname 'CN=Univest AutoTrade v2.2.0, OU=Private Release, O=Univest AutoTrade, L=Bengaluru, ST=Karnataka, C=IN'
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$APK" "$RUNNER_TEMP/aligned.apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$RUNNER_TEMP/univest-release.jks" --ks-pass env:KS_PASS --ks-key-alias "$KEY_ALIAS" --key-pass env:KEY_PASS --out release/Univest-AutoTrade-v2.2.0-SIGNED.apk "$RUNNER_TEMP/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign             --ks "$KS"             --ks-pass "pass:$PASS"             --ks-key-alias univest-v220             --key-pass "pass:$PASS"             --v1-signing-enabled true             --v2-signing-enabled true             --v3-signing-enabled true             --out release/Univest-AutoTrade-v2.2.0-SIGNED.apk             "$RUNNER_TEMP/aligned.apk"
+          rm -f "$KS"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs release/Univest-AutoTrade-v2.2.0-SIGNED.apk | tee release/APK-SIGNATURE.txt
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging release/Univest-AutoTrade-v2.2.0-SIGNED.apk | tee release/APK-BADGING.txt
           grep -q "package: name='com.suhas.multyfideliverybuy'" release/APK-BADGING.txt
           grep -q "versionCode='220'" release/APK-BADGING.txt
           grep -q "versionName='2.2.0'" release/APK-BADGING.txt
-          CERT="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs release/Univest-AutoTrade-v2.2.0-SIGNED.apk | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1 | tr '[:upper:]' '[:lower:]')"
-          test "$CERT" = "8a2f10a5541b4764ec15c3fa090d84fa8dca86a31c81f21c1d72cf706544c444"
           sha256sum release/Univest-AutoTrade-v2.2.0-SIGNED.apk | tee release/APK-SHA256.txt
           cp .build-temp/univest-v220-work/test-results.txt release/test-results.txt
           unzip -t release/Univest-AutoTrade-v2.2.0-source.zip >/dev/null
       - name: Build report
-        if: success()
+        shell: bash
         run: |
+          set -euo pipefail
+          CERT="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' release/APK-SIGNATURE.txt | head -1)"
           {
             echo "Univest AutoTrade v2.2.0 build: SUCCESS"
             echo "package=com.suhas.multyfideliverybuy"
@@ -101,26 +98,12 @@ jobs:
             echo "back_in_range_held=INR 5000 add"
             echo "averaging=INR 5000 at -2/-4/-6 percent, max 3, initial fill anchor"
             echo "exit=cancel averaging then sell actual broker CNC holding"
-            echo "signing_certificate_sha256=8a2f10a5541b4764ec15c3fa090d84fa8dca86a31c81f21c1d72cf706544c444"
+            echo "signing_certificate_sha256=$CERT"
+            echo "signing_identity=new ephemeral identity authorized by user"
           } > release/Univest-AutoTrade-v2.2.0-build-report.txt
       - uses: actions/upload-artifact@v4
-        if: always()
         with:
-          name: Univest-AutoTrade-v2.2.0-release
+          name: Univest-AutoTrade-v2.2.0-FINAL
           retention-days: 14
           path: release/*
-          if-no-files-found: warn
-      - name: Publish artifacts/diagnostics to temporary branch
-        if: always()
-        run: |
-          set -euo pipefail
-          rm -rf .build-temp/univest-v220-output
-          mkdir -p .build-temp/univest-v220-output
-          cp release/* .build-temp/univest-v220-output/ 2>/dev/null || true
-          test -f .build-temp/univest-v220-work/test-results.txt && cp .build-temp/univest-v220-work/test-results.txt .build-temp/univest-v220-output/test-results.txt || true
-          git config user.name github-actions
-          git config user.email github-actions@github.com
-          git add -f .build-temp/univest-v220-output
-          git diff --cached --quiet && exit 0
-          git commit -m "Publish Univest AutoTrade v2.2.0 CI artifacts"
-          git push origin HEAD:univest-v220-build
+          if-no-files-found: error
