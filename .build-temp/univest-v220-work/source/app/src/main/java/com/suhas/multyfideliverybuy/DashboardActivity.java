@@ -151,7 +151,9 @@ public class DashboardActivity extends Activity {
         LinearLayout status = card();
         status.addView(sectionRow("RESEARCH STATUS", lastResearchTime()));
         status.addView(text(AppPrefs.getResearchStatus(this), 13, TEXT, false), margins(0, 12, 0, 0));
-        status.addView(text("Runs only outside NSE market hours • scheduled around 17:30 IST", 12, SUBTEXT, false), margins(0, 8, 0, 0));
+        status.addView(text("Runs only outside NSE market hours • target around 17:30 IST", 12, SUBTEXT, false), margins(0, 8, 0, 0));
+        status.addView(text("Scheduler: " + ResearchScheduler.statusText(this), 12,
+                AppPrefs.getResearchScheduleMethod(this).startsWith("JOB_") ? GREEN : AMBER, false), margins(0, 8, 0, 0));
         root.addView(status, margins(0, 18, 0, 14));
 
         Button scan = primaryButton("RUN OFF-MARKET SCAN");
@@ -264,6 +266,27 @@ public class DashboardActivity extends Activity {
 
         safety.addView(text("Official source only • NSE CASH • CNC delivery • ₹20,000 initial • ₹5,000 re-entry/averaging", 12, SUBTEXT, false), margins(0, 10, 0, 0));
         root.addView(safety, margins(0, 0, 0, 14));
+
+        LinearLayout scheduler = card();
+        scheduler.addView(sectionRow("RESEARCH SCHEDULER",
+                AppPrefs.getResearchScheduleMethod(this).startsWith("JOB_") ? "ACTIVE" : "NEEDS ATTENTION"));
+        scheduler.addView(text(ResearchScheduler.statusText(this), 13,
+                AppPrefs.getResearchScheduleMethod(this).startsWith("JOB_") ? GREEN : AMBER, false), margins(0, 10, 0, 0));
+        Button repairSchedule = secondaryButton("REPAIR / RESCHEDULE RESEARCH");
+        repairSchedule.setOnClickListener(v -> {
+            repairSchedule.setEnabled(false);
+            repairSchedule.setText("SCHEDULING…");
+            new Thread(() -> {
+                ResearchScheduler.ensureScheduled(getApplicationContext());
+                runOnUiThread(() -> {
+                    Toast.makeText(this, ResearchScheduler.statusText(this), Toast.LENGTH_LONG).show();
+                    render();
+                });
+            }, "research-schedule-repair").start();
+        });
+        scheduler.addView(repairSchedule, fixedMargins(-1, 50, 0, 12, 0, 0));
+        scheduler.addView(text("Older scheduler failures remain in today's diagnostic history even after a successful repair.", 11, SUBTEXT, false), margins(0, 8, 0, 0));
+        root.addView(scheduler, margins(0, 0, 0, 14));
 
         LinearLayout permissions = card();
         permissions.addView(sectionRow("NOTIFICATION ACCESS", notificationAccessEnabled() ? "ENABLED" : "REQUIRED"));
