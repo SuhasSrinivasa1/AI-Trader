@@ -3,6 +3,8 @@ on:
   push:
     branches: [main]
     paths: ['.github/workflows/univest-v220-bootstrap.yml']
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: write
