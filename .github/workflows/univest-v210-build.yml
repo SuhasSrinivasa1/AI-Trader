@@ -106,15 +106,17 @@ jobs:
           retention-days: 14
           path: release/*
           if-no-files-found: warn
-      - name: Publish successful artifacts to temporary branch
-        if: success()
+      - name: Publish artifacts/diagnostics to temporary branch
+        if: always()
         run: |
           set -euo pipefail
           rm -rf .build-temp/univest-v220-output
           mkdir -p .build-temp/univest-v220-output
-          cp release/* .build-temp/univest-v220-output/
+          cp release/* .build-temp/univest-v220-output/ 2>/dev/null || true
+          test -f .build-temp/univest-v220-work/test-results.txt && cp .build-temp/univest-v220-work/test-results.txt .build-temp/univest-v220-output/test-results.txt || true
           git config user.name github-actions
           git config user.email github-actions@github.com
           git add -f .build-temp/univest-v220-output
-          git commit -m "Publish Univest AutoTrade v2.2.0 validated artifacts"
+          git diff --cached --quiet && exit 0
+          git commit -m "Publish Univest AutoTrade v2.2.0 CI artifacts"
           git push origin HEAD:univest-v220-build
