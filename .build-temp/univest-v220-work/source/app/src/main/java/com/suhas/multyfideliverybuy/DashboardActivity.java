@@ -6,13 +6,12 @@ import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.graphics.PorterDuff;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
 import android.provider.Settings;
 import android.text.InputType;
 import android.view.Gravity;
@@ -20,6 +19,7 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.Switch;
@@ -35,60 +35,54 @@ import java.util.List;
 import java.util.Locale;
 
 public class DashboardActivity extends Activity {
-    private static final int BG = Color.rgb(7, 13, 24);
-    private static final int SURFACE = Color.rgb(14, 25, 40);
-    private static final int SURFACE_2 = Color.rgb(18, 32, 50);
-    private static final int BORDER = Color.rgb(35, 57, 78);
+    private static final int BG = Color.rgb(7, 15, 27);
+    private static final int NAV_BG = Color.rgb(8, 18, 31);
+    private static final int SURFACE = Color.rgb(14, 27, 43);
+    private static final int SURFACE_2 = Color.rgb(18, 35, 54);
+    private static final int BORDER = Color.rgb(35, 61, 83);
     private static final int TEXT = Color.rgb(244, 249, 252);
-    private static final int SUBTEXT = Color.rgb(166, 190, 207);
-    private static final int TEAL = Color.rgb(22, 199, 183);
-    private static final int BLUE = Color.rgb(76, 141, 255);
-    private static final int GREEN = Color.rgb(61, 220, 151);
-    private static final int AMBER = Color.rgb(255, 180, 84);
-    private static final int RED = Color.rgb(255, 105, 120);
-    private static final int REQUEST_EXPORT = 8232;
+    private static final int SUBTEXT = Color.rgb(166, 191, 209);
+    private static final int TEAL = Color.rgb(28, 201, 184);
+    private static final int BLUE = Color.rgb(82, 145, 255);
+    private static final int GREEN = Color.rgb(75, 220, 158);
+    private static final int AMBER = Color.rgb(255, 185, 92);
+    private static final int RED = Color.rgb(255, 108, 124);
+    private static final int REQUEST_EXPORT = 8240;
 
     private FrameLayout contentHost;
     private LinearLayout bottomNav;
     private int selectedTab = 0;
     private File pendingExport;
-    private final Handler handler = new Handler(Looper.getMainLooper());
-    private boolean resumed;
-
-    private final Runnable refresher = new Runnable() {
-        @Override public void run() {
-            if (!resumed) return;
-            render();
-            handler.postDelayed(this, 5000L);
-        }
-    };
+    private long lastBrokerSyncAt = 0L;
 
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
         getWindow().setStatusBarColor(BG);
-        getWindow().setNavigationBarColor(BG);
+        getWindow().setNavigationBarColor(NAV_BG);
         ResearchScheduler.ensureScheduled(getApplicationContext());
         requestNotificationPermissionIfNeeded();
+        setContentView(buildShell());
+
         new Thread(() -> {
             ResearchDiagnosticsImporter.importOfficialSignals(getApplicationContext());
             try { UnivestManager.migrateLegacyRules(getApplicationContext()); } catch (Throwable ignored) {}
-        }, "dashboard-init").start();
-        setContentView(buildShell());
+            try {
+                UnivestManager.reconcileAll(getApplicationContext());
+                lastBrokerSyncAt = System.currentTimeMillis();
+            } catch (Throwable t) {
+                DiagnosticsStore.error(getApplicationContext(), "DASHBOARD_INITIAL_RECONCILE_FAILED", "",
+                        "Initial broker reconciliation failed.", t);
+            }
+            runOnUiThread(this::render);
+        }, "univest-final-init").start();
+
         render();
     }
 
     @Override protected void onResume() {
         super.onResume();
-        resumed = true;
-        handler.removeCallbacks(refresher);
-        refresher.run();
-        if (selectedTab == 0) reconcileBroker();
-    }
-
-    @Override protected void onPause() {
-        resumed = false;
-        handler.removeCallbacks(refresher);
-        super.onPause();
+        ResearchScheduler.ensureScheduled(getApplicationContext());
+        render();
     }
 
     private View buildShell() {
@@ -102,9 +96,9 @@ public class DashboardActivity extends Activity {
         bottomNav = new LinearLayout(this);
         bottomNav.setOrientation(LinearLayout.HORIZONTAL);
         bottomNav.setGravity(Gravity.CENTER);
-        bottomNav.setPadding(dp(8), dp(8), dp(8), dp(8));
-        bottomNav.setBackgroundColor(Color.rgb(9, 17, 29));
-        shell.addView(bottomNav, new LinearLayout.LayoutParams(-1, dp(82)));
+        bottomNav.setPadding(dp(8), dp(6), dp(8), dp(8));
+        bottomNav.setBackgroundColor(NAV_BG);
+        shell.addView(bottomNav, new LinearLayout.LayoutParams(-1, dp(80)));
         return shell;
     }
 
@@ -121,105 +115,110 @@ public class DashboardActivity extends Activity {
     private View buildUnivestTab() {
         ScrollView scroll = baseScroll();
         LinearLayout root = scrollRoot(scroll);
-        root.addView(header("UNIVEST", "Broker-truth execution"));
+        root.addView(appHeader("UNIVEST", "Official signal execution"));
 
-        root.addView(healthCard(), margins(0, 18, 0, 14));
-        root.addView(executionCard(), margins(0, 0, 0, 14));
+        root.addView(healthCard(), margins(0, 20, 0, 14));
+
+        Button sync = secondaryButton("SYNC BROKER STATUS");
+        sync.setOnClickListener(v -> syncBrokerStatus(sync));
+        root.addView(sync, fixedMargins(-1, 52, 0, 0, 0, 14));
+
+        root.addView(executionSummaryCard(), margins(0, 0, 0, 14));
 
         LinearLayout campaigns = card();
-        campaigns.addView(sectionRow("BROKER STATUS", "Today"));
-        campaigns.addView(text(activeCampaignSummary(), 13, TEXT, false), margins(0, 12, 0, 0));
+        campaigns.addView(sectionRow("BROKER-RECONCILED STATUS", "Today"));
+        campaigns.addView(body(activeCampaignSummary()), margins(0, 12, 0, 0));
         root.addView(campaigns, margins(0, 0, 0, 14));
 
         LinearLayout signals = card();
-        signals.addView(sectionRow("TODAY'S SIGNALS", String.valueOf(DiagnosticsStore.todayNotificationCount(this))));
-        signals.addView(text(DiagnosticsStore.todayTradingSignals(this, 6), 13, TEXT, false), margins(0, 12, 0, 0));
+        signals.addView(sectionRow("TODAY'S UNIVEST SIGNALS", String.valueOf(DiagnosticsStore.todayNotificationCount(this))));
+        signals.addView(body(DiagnosticsStore.todayTradingSignals(this, 6)), margins(0, 12, 0, 0));
         root.addView(signals, margins(0, 0, 0, 14));
 
         LinearLayout trades = card();
         trades.addView(sectionRow("TRADE JOURNAL", AppPrefs.getExecutionMode(this)));
-        trades.addView(text(DiagnosticsStore.todayTrades(this, 6), 13, TEXT, false), margins(0, 12, 0, 0));
-        root.addView(trades, margins(0, 0, 0, 20));
+        trades.addView(body(DiagnosticsStore.todayTrades(this, 6)), margins(0, 12, 0, 0));
+        root.addView(trades, margins(0, 0, 0, 22));
         return scroll;
     }
 
     private View buildStrategyTab() {
         ScrollView scroll = baseScroll();
         LinearLayout root = scrollRoot(scroll);
-        root.addView(header("STRATEGY", "Univest recommendation DNA"));
+        root.addView(appHeader("STRATEGY", "Recommendation DNA & champions"));
 
         LinearLayout status = card();
-        status.addView(sectionRow("RESEARCH STATUS", lastResearchTime()));
-        status.addView(text(AppPrefs.getResearchStatus(this), 13, TEXT, false), margins(0, 12, 0, 0));
-        status.addView(text("Runs only outside NSE market hours • target around 17:30 IST", 12, SUBTEXT, false), margins(0, 8, 0, 0));
-        status.addView(text("Scheduler: " + ResearchScheduler.statusText(this), 12,
-                AppPrefs.getResearchScheduleMethod(this).startsWith("JOB_") ? GREEN : AMBER, false), margins(0, 8, 0, 0));
-        root.addView(status, margins(0, 18, 0, 14));
+        status.addView(sectionRow("RESEARCH ENGINE", lastResearchTime()));
+        status.addView(body(AppPrefs.getResearchStatus(this)), margins(0, 12, 0, 0));
+        status.addView(meta("Off-market only • target run around 17:30 IST"), margins(0, 8, 0, 0));
+        status.addView(meta("Scheduler: " + ResearchScheduler.statusText(this),
+                AppPrefs.getResearchScheduleMethod(this).startsWith("JOB_") ? GREEN : AMBER), margins(0, 8, 0, 0));
+        root.addView(status, margins(0, 20, 0, 14));
 
-        Button scan = primaryButton("RUN OFF-MARKET SCAN");
+        Button scan = primaryButton("RUN OFF-MARKET RESEARCH");
         scan.setOnClickListener(v -> runResearchNow(scan));
         root.addView(scan, fixedMargins(-1, 54, 0, 0, 0, 14));
 
         LinearLayout champions = card();
         champions.addView(sectionRow("STRATEGY CHAMPIONS", "5 families"));
-        champions.addView(text(ResearchEngine.strategiesText(this), 13, TEXT, false), margins(0, 12, 0, 0));
+        champions.addView(body(ResearchEngine.strategiesText(this)), margins(0, 12, 0, 0));
         root.addView(champions, margins(0, 0, 0, 14));
 
         LinearLayout archive = card();
         archive.addView(sectionRow("RECOMMENDATION ARCHIVE", "1–3 month"));
-        archive.addView(text(ResearchStore.recentRecommendationsText(this, 10), 13, TEXT, false), margins(0, 12, 0, 0));
+        archive.addView(body(ResearchStore.recentRecommendationsText(this, 10)), margins(0, 12, 0, 0));
         root.addView(archive, margins(0, 0, 0, 14));
 
         LinearLayout dna = card();
         dna.addView(sectionRow("BUY → SELL DNA", "Pattern learning"));
-        dna.addView(text("Compares candle structure, trend, ATR, volume, momentum and later official exit behaviour. Provisional volatility-normalized ranges are replaced as completed campaigns accumulate.", 13, TEXT, false), margins(0, 12, 0, 0));
+        dna.addView(body("Compares candle structure, trend, ATR, volume, momentum and later official exit behaviour. Provisional volatility-normalized ranges are replaced as completed campaigns accumulate."), margins(0, 12, 0, 0));
         root.addView(dna, margins(0, 0, 0, 14));
 
         LinearLayout intel = card();
         intel.addView(sectionRow("MARKET INTELLIGENCE", "India + Global"));
-        intel.addView(text(ResearchEngine.intelligenceText(this), 13, TEXT, false), margins(0, 12, 0, 0));
-        root.addView(intel, margins(0, 0, 0, 20));
+        intel.addView(body(ResearchEngine.intelligenceText(this)), margins(0, 12, 0, 0));
+        root.addView(intel, margins(0, 0, 0, 22));
         return scroll;
     }
 
     private View buildForecastTab() {
         ScrollView scroll = baseScroll();
         LinearLayout root = scrollRoot(scroll);
-        root.addView(header("FORECAST", "Next expected Univest-like picks"));
+        root.addView(appHeader("FORECAST", "Next expected Univest-like picks"));
 
         LinearLayout intro = card();
         intro.addView(sectionRow("FORECAST ENGINE", lastResearchTime()));
-        intro.addView(text("Ranks NSE candidates by similarity to historically observed Univest 1–3 month recommendations.", 13, TEXT, false), margins(0, 12, 0, 0));
-        intro.addView(text("Forecasts are research-only. Only an official com.univest.capp signal can enter the broker execution lane.", 12, SUBTEXT, false), margins(0, 8, 0, 0));
-        root.addView(intro, margins(0, 18, 0, 14));
+        intro.addView(body("Ranks NSE candidates by similarity to historically observed Univest 1–3 month recommendations."), margins(0, 12, 0, 0));
+        intro.addView(meta("Research only • forecasts never enter the official broker execution lane"), margins(0, 8, 0, 0));
+        root.addView(intro, margins(0, 20, 0, 14));
 
         LinearLayout expected = card();
-        expected.addView(sectionRow("NEXT EXPECTED", "Top 10"));
-        expected.addView(text(ResearchEngine.predictionsText(this, 10), 13, TEXT, false), margins(0, 12, 0, 0));
+        expected.addView(sectionRow("NEXT EXPECTED RECOMMENDATIONS", "Top 10"));
+        expected.addView(body(ResearchEngine.predictionsText(this, 10)), margins(0, 12, 0, 0));
         root.addView(expected, margins(0, 0, 0, 14));
 
         LinearLayout ranges = card();
         ranges.addView(sectionRow("ENTRY / EXIT RANGE", "Model"));
-        ranges.addView(text("Each candidate includes a buy-pattern zone, chase ceiling and sell-pattern zone normalized by volatility. Learned strategy-specific ranges take over as evidence improves.", 13, TEXT, false), margins(0, 12, 0, 0));
+        ranges.addView(body("Each candidate includes a buy-pattern zone, chase ceiling and sell-pattern zone normalized by volatility. Strategy-specific learned ranges replace provisional ATR ranges as evidence improves."), margins(0, 12, 0, 0));
         root.addView(ranges, margins(0, 0, 0, 14));
 
         Button scan = primaryButton("REFRESH FORECAST OFF-MARKET");
         scan.setOnClickListener(v -> runResearchNow(scan));
-        root.addView(scan, fixedMargins(-1, 54, 0, 0, 0, 20));
+        root.addView(scan, fixedMargins(-1, 54, 0, 0, 0, 22));
         return scroll;
     }
 
     private View buildSettingsTab() {
         ScrollView scroll = baseScroll();
         LinearLayout root = scrollRoot(scroll);
-        root.addView(header("SETTINGS", "Connection, safety and diagnostics"));
+        root.addView(appHeader("SETTINGS", "Connection, safety & maintenance"));
 
         LinearLayout connection = card();
         connection.addView(sectionRow("GROWW CONNECTION", AppPrefs.isReadyForBuy(this) ? "READY" : "NOT READY"));
 
         EditText token = input("Groww TOTP token", true);
         token.setText(AppPrefs.getApiKey(this));
-        connection.addView(token, margins(0, 12, 0, 0));
+        connection.addView(token, margins(0, 14, 0, 0));
 
         EditText secret = input("TOTP Base32 secret", true);
         secret.setText(AppPrefs.getTotpSecret(this));
@@ -236,61 +235,59 @@ public class DashboardActivity extends Activity {
         Button test = primaryButton("TEST CONNECTION & AUTH");
         test.setOnClickListener(v -> testConnection(test));
         connection.addView(test, fixedMargins(-1, 52, 0, 10, 0, 0));
-        root.addView(connection, margins(0, 18, 0, 14));
+        root.addView(connection, margins(0, 20, 0, 14));
 
         LinearLayout safety = card();
         safety.addView(sectionRow("EXECUTION SAFETY", AppPrefs.getExecutionMode(this)));
 
         Switch live = styledSwitch("LIVE MODE — REAL CNC ORDERS", AppPrefs.isLiveMode(this));
+        safety.addView(live, margins(0, 8, 0, 0));
+
+        Switch avg = styledSwitch("CONTROLLED DOWNWARD AVERAGING", AppPrefs.isAveragingEnabled(this));
+        safety.addView(avg, margins(0, 0, 0, 0));
+
+        Switch arm = styledSwitch("ARM UNIVEST AUTOTRADE", AppPrefs.isUnivestEnabled(this));
+        safety.addView(arm, margins(0, 0, 0, 0));
+
         live.setOnCheckedChangeListener((b, checked) -> {
             AppPrefs.setExecutionMode(this, checked ? AppPrefs.MODE_LIVE : AppPrefs.MODE_PAPER);
             AppPrefs.setUnivestEnabled(this, false);
             AppPrefs.setUnivestStatus(this, "Execution mode changed to " + (checked ? "LIVE" : "PAPER") + "; automation DISARMED.");
             DiagnosticsStore.runtime(this, "EXECUTION_MODE_CHANGED", "", AppPrefs.getUnivestStatus(this));
+            Toast.makeText(this, "Mode changed. AutoTrade disarmed for safety.", Toast.LENGTH_LONG).show();
             render();
         });
-        safety.addView(live, margins(0, 10, 0, 0));
 
-        Switch avg = styledSwitch("CONTROLLED DOWNWARD AVERAGING", AppPrefs.isAveragingEnabled(this));
         avg.setOnCheckedChangeListener((b, checked) -> {
             AppPrefs.setAveragingEnabled(this, checked);
             AppPrefs.setUnivestEnabled(this, false);
-            DiagnosticsStore.runtime(this, "AVERAGING_SETTING_CHANGED", "", "Averaging " + (checked ? "enabled" : "disabled") + "; automation disarmed.");
+            DiagnosticsStore.runtime(this, "AVERAGING_SETTING_CHANGED", "",
+                    "Averaging " + (checked ? "enabled" : "disabled") + "; automation disarmed.");
+            Toast.makeText(this, "Averaging changed. AutoTrade disarmed for safety.", Toast.LENGTH_LONG).show();
             render();
         });
-        safety.addView(avg, margins(0, 4, 0, 0));
 
-        Switch arm = styledSwitch("ARM UNIVEST AUTOTRADE", AppPrefs.isUnivestEnabled(this));
         arm.setOnCheckedChangeListener((b, checked) -> onArmRequested(checked));
-        safety.addView(arm, margins(0, 4, 0, 0));
 
-        safety.addView(text("Official source only • NSE CASH • CNC delivery • ₹20,000 initial • ₹5,000 re-entry/averaging", 12, SUBTEXT, false), margins(0, 10, 0, 0));
+        safety.addView(meta("Official source only • NSE CASH • CNC delivery"), margins(0, 10, 0, 0));
+        safety.addView(meta("₹20,000 initial • ₹5,000 re-entry/averaging • -2% / -4% / -6% ladder"), margins(0, 6, 0, 0));
         root.addView(safety, margins(0, 0, 0, 14));
 
         LinearLayout scheduler = card();
-        scheduler.addView(sectionRow("RESEARCH SCHEDULER",
-                AppPrefs.getResearchScheduleMethod(this).startsWith("JOB_") ? "ACTIVE" : "NEEDS ATTENTION"));
-        scheduler.addView(text(ResearchScheduler.statusText(this), 13,
-                AppPrefs.getResearchScheduleMethod(this).startsWith("JOB_") ? GREEN : AMBER, false), margins(0, 10, 0, 0));
-        Button repairSchedule = secondaryButton("REPAIR / RESCHEDULE RESEARCH");
-        repairSchedule.setOnClickListener(v -> {
-            repairSchedule.setEnabled(false);
-            repairSchedule.setText("SCHEDULING…");
-            new Thread(() -> {
-                ResearchScheduler.ensureScheduled(getApplicationContext());
-                runOnUiThread(() -> {
-                    Toast.makeText(this, ResearchScheduler.statusText(this), Toast.LENGTH_LONG).show();
-                    render();
-                });
-            }, "research-schedule-repair").start();
-        });
-        scheduler.addView(repairSchedule, fixedMargins(-1, 50, 0, 12, 0, 0));
-        scheduler.addView(text("Older scheduler failures remain in today's diagnostic history even after a successful repair.", 11, SUBTEXT, false), margins(0, 8, 0, 0));
+        boolean scheduleOk = AppPrefs.getResearchScheduleMethod(this).startsWith("JOB_");
+        scheduler.addView(sectionRow("RESEARCH SCHEDULER", scheduleOk ? "ACTIVE" : "NEEDS ATTENTION"));
+        scheduler.addView(meta(ResearchScheduler.statusText(this), scheduleOk ? GREEN : AMBER), margins(0, 10, 0, 0));
+        Button repair = secondaryButton("REPAIR / RESCHEDULE RESEARCH");
+        repair.setOnClickListener(v -> repairSchedule(repair));
+        scheduler.addView(repair, fixedMargins(-1, 50, 0, 12, 0, 0));
+        scheduler.addView(meta("Historical scheduler errors remain in diagnostics even after a successful repair."), margins(0, 8, 0, 0));
         root.addView(scheduler, margins(0, 0, 0, 14));
 
         LinearLayout permissions = card();
-        permissions.addView(sectionRow("NOTIFICATION ACCESS", notificationAccessEnabled() ? "ENABLED" : "REQUIRED"));
-        permissions.addView(text(notificationAccessEnabled() ? "Official Univest notifications can be received." : "Enable notification-listener access before arming.", 13, notificationAccessEnabled() ? GREEN : AMBER, false), margins(0, 10, 0, 0));
+        boolean notif = notificationAccessEnabled();
+        permissions.addView(sectionRow("NOTIFICATION ACCESS", notif ? "ENABLED" : "REQUIRED"));
+        permissions.addView(meta(notif ? "Official Univest notifications can be received." : "Enable notification-listener access before arming.",
+                notif ? GREEN : AMBER), margins(0, 10, 0, 0));
         Button access = secondaryButton("OPEN NOTIFICATION ACCESS");
         access.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)));
         permissions.addView(access, fixedMargins(-1, 50, 0, 12, 0, 0));
@@ -298,6 +295,7 @@ public class DashboardActivity extends Activity {
 
         LinearLayout data = card();
         data.addView(sectionRow("DATA & DIAGNOSTICS", "Maintenance"));
+
         Button instruments = secondaryButton("REFRESH NSE INSTRUMENT MAP");
         instruments.setOnClickListener(v -> refreshInstruments(instruments));
         data.addView(instruments, fixedMargins(-1, 50, 0, 10, 0, 0));
@@ -306,95 +304,130 @@ public class DashboardActivity extends Activity {
         export.setOnClickListener(v -> createExport());
         data.addView(export, fixedMargins(-1, 50, 0, 10, 0, 0));
 
-        data.addView(text("Today's errors", 12, SUBTEXT, true), margins(0, 14, 0, 6));
+        data.addView(text("Recent errors", 12, SUBTEXT, true), margins(0, 16, 0, 6));
         data.addView(text(DiagnosticsStore.todayErrors(this, 5), 12, TEXT, false));
-        root.addView(data, margins(0, 0, 0, 20));
+        root.addView(data, margins(0, 0, 0, 14));
+
+        LinearLayout about = card();
+        about.addView(sectionRow("ABOUT", "Final UI"));
+        about.addView(body("Univest AutoTrade v2.4.0"), margins(0, 10, 0, 0));
+        about.addView(meta("Package: com.suhas.multyfideliverybuy"), margins(0, 6, 0, 0));
+        about.addView(meta("Official execution and Research/Forecast remain isolated by design."), margins(0, 6, 0, 0));
+        root.addView(about, margins(0, 0, 0, 22));
 
         return scroll;
     }
 
-    private View header(String title, String subtitle) {
+    private View appHeader(String title, String subtitle) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
 
         LinearLayout left = new LinearLayout(this);
         left.setOrientation(LinearLayout.VERTICAL);
-        left.addView(text(title, 29, TEXT, true));
-        left.addView(text(subtitle, 12, SUBTEXT, false), margins(0, 2, 0, 0));
+        left.addView(text(title, 30, TEXT, true));
+        left.addView(text(subtitle, 12, SUBTEXT, false), margins(0, 3, 0, 0));
         row.addView(left, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        TextView refresh = iconButton("↻");
-        refresh.setOnClickListener(v -> manualRefresh());
-        row.addView(refresh, new LinearLayout.LayoutParams(dp(48), dp(48)));
-
-        TextView gear = iconButton("⚙");
-        gear.setOnClickListener(v -> {
-            selectedTab = 3;
-            render();
-        });
-        row.addView(gear, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        TextView version = text("v2.4.0", 11, TEAL, true);
+        version.setGravity(Gravity.CENTER);
+        version.setPadding(dp(10), dp(6), dp(10), dp(6));
+        GradientDrawable chip = new GradientDrawable();
+        chip.setColor(Color.rgb(12, 54, 58));
+        chip.setCornerRadius(dp(14));
+        chip.setStroke(dp(1), Color.rgb(28, 107, 109));
+        version.setBackground(chip);
+        row.addView(version, new LinearLayout.LayoutParams(-2, -2));
         return row;
     }
 
     private View healthCard() {
         LinearLayout c = card();
-        c.addView(sectionRow("SYSTEM HEALTH", currentClock()));
+        c.addView(sectionRow("SYSTEM HEALTH", lastBrokerSyncAt > 0 ? "Synced " + clock(lastBrokerSyncAt) : "Not synced"));
 
         LinearLayout badges = new LinearLayout(this);
         badges.setOrientation(LinearLayout.HORIZONTAL);
         badges.addView(badge("Groww", AppPrefs.isReadyForBuy(this)));
         badges.addView(badge("Univest", notificationAccessEnabled()), badgeLp());
-        badges.addView(badge("Research", AppPrefs.getResearchLastNightlyRun(this) > 0L), badgeLp());
-        c.addView(badges, margins(0, 12, 0, 0));
+        badges.addView(badge("Research", AppPrefs.getResearchScheduleMethod(this).startsWith("JOB_")), badgeLp());
+        c.addView(badges, margins(0, 14, 0, 0));
 
-        c.addView(text("Static IP " + (AppPrefs.isStaticIpMatch(this) ? "matched" : "not confirmed") + " • " + activeCampaignCount() + " active campaigns • " + DiagnosticsStore.todayNotificationCount(this) + " notifications today", 12, SUBTEXT, false), margins(0, 12, 0, 0));
+        c.addView(meta("Static IP " + (AppPrefs.isStaticIpMatch(this) ? "matched" : "not confirmed")
+                + " • " + activeCampaignCount() + " active campaigns"
+                + " • " + DiagnosticsStore.todayNotificationCount(this) + " notifications today"), margins(0, 12, 0, 0));
 
-        String mode = AppPrefs.isLiveMode(this) && AppPrefs.isUnivestEnabled(this) ? "LIVE ORDERS ENABLED" : "SAFE / DISARMED";
-        c.addView(statusPill(mode, AppPrefs.isLiveMode(this) && AppPrefs.isUnivestEnabled(this) ? GREEN : BLUE), margins(0, 12, 0, 0));
+        boolean liveArmed = AppPrefs.isLiveMode(this) && AppPrefs.isUnivestEnabled(this);
+        c.addView(statusPill(liveArmed ? "LIVE ORDERS ENABLED" : "SAFE / DISARMED", liveArmed ? GREEN : BLUE),
+                margins(0, 12, 0, 0));
         return c;
     }
 
-    private View executionCard() {
+    private View executionSummaryCard() {
         LinearLayout c = card();
-        c.addView(sectionRow("UNIVEST EXECUTION", AppPrefs.getExecutionMode(this)));
+        c.addView(sectionRow("EXECUTION PROFILE", AppPrefs.getExecutionMode(this)));
+        c.addView(body(AppPrefs.isUnivestEnabled(this) ? "AutoTrade is ARMED" : "AutoTrade is DISARMED"), margins(0, 10, 0, 0));
+        c.addView(meta("₹20,000 initial • ₹5,000 back-in-range • ₹5,000 averaging at -2% / -4% / -6%"), margins(0, 8, 0, 0));
+        c.addView(meta("Official book-profit/exit cancels tracked averaging orders and sells the actual broker CNC holding."), margins(0, 6, 0, 0));
 
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        LinearLayout labels = new LinearLayout(this);
-        labels.setOrientation(LinearLayout.VERTICAL);
-        labels.addView(text(AppPrefs.isUnivestEnabled(this) ? "ARMED" : "DISARMED", 20, TEXT, true));
-        labels.addView(text(AppPrefs.isLiveMode(this) ? "Real CNC order mode" : "Paper / monitor mode", 12, SUBTEXT, false), margins(0, 4, 0, 0));
-        row.addView(labels, new LinearLayout.LayoutParams(0, -2, 1f));
-
-        Switch arm = new Switch(this);
-        arm.setChecked(AppPrefs.isUnivestEnabled(this));
-        arm.setScaleX(1.15f);
-        arm.setScaleY(1.15f);
-        arm.setOnCheckedChangeListener((b, checked) -> onArmRequested(checked));
-        row.addView(arm, new LinearLayout.LayoutParams(dp(82), dp(56)));
-        c.addView(row, margins(0, 10, 0, 0));
-
-        c.addView(text("₹20,000 initial • ₹5,000 back-in-range • ₹5,000 averaging at -2% / -4% / -6%", 12, SUBTEXT, false), margins(0, 10, 0, 0));
-        c.addView(text("Official book-profit/exit cancels tracked averaging orders and sells actual broker CNC holding.", 12, SUBTEXT, false), margins(0, 8, 0, 0));
+        Button manage = secondaryButton("MANAGE EXECUTION SETTINGS");
+        manage.setOnClickListener(v -> {
+            selectedTab = 3;
+            render();
+        });
+        c.addView(manage, fixedMargins(-1, 50, 0, 12, 0, 0));
         return c;
+    }
+
+    private void syncBrokerStatus(Button button) {
+        button.setEnabled(false);
+        button.setText("SYNCING…");
+        new Thread(() -> {
+            try {
+                UnivestManager.reconcileAll(getApplicationContext());
+                lastBrokerSyncAt = System.currentTimeMillis();
+                runOnUiThread(() -> {
+                    Toast.makeText(this, "Broker status synchronized.", Toast.LENGTH_SHORT).show();
+                    render();
+                });
+            } catch (Throwable t) {
+                DiagnosticsStore.error(getApplicationContext(), "DASHBOARD_RECONCILE_FAILED", "",
+                        "Broker reconciliation failed.", t);
+                runOnUiThread(() -> {
+                    Toast.makeText(this, "Broker sync failed: " + safeMessage(t), Toast.LENGTH_LONG).show();
+                    render();
+                });
+            }
+        }, "univest-broker-sync").start();
+    }
+
+    private void repairSchedule(Button button) {
+        button.setEnabled(false);
+        button.setText("SCHEDULING…");
+        new Thread(() -> {
+            ResearchScheduler.ensureScheduled(getApplicationContext());
+            runOnUiThread(() -> {
+                Toast.makeText(this, ResearchScheduler.statusText(this), Toast.LENGTH_LONG).show();
+                render();
+            });
+        }, "research-schedule-repair").start();
     }
 
     private void onArmRequested(boolean checked) {
         if (checked && AppPrefs.isLiveMode(this) && !AppPrefs.isReadyForBuy(this)) {
             AppPrefs.setUnivestEnabled(this, false);
-            DiagnosticsStore.error(this, "LIVE_ARM_READINESS_BLOCK", "", "LIVE ARM blocked. Test Groww connection and static IP first.", null);
+            DiagnosticsStore.error(this, "LIVE_ARM_READINESS_BLOCK", "",
+                    "LIVE ARM blocked. Test Groww connection and static IP first.", null);
             Toast.makeText(this, "LIVE blocked: test Groww connection and static IP first.", Toast.LENGTH_LONG).show();
             render();
             return;
         }
+
         if (checked && AppPrefs.isLiveMode(this)) {
             new AlertDialog.Builder(this)
                     .setTitle("Arm LIVE Univest AutoTrade?")
                     .setMessage("This permits real-money NSE CASH / CNC orders from official Univest notifications. Research forecasts remain non-executing.")
-                    .setNegativeButton("Cancel", (d,w) -> render())
-                    .setPositiveButton("Arm LIVE", (d,w) -> {
+                    .setNegativeButton("Cancel", (d, w) -> render())
+                    .setPositiveButton("Arm LIVE", (d, w) -> {
                         AppPrefs.setUnivestEnabled(this, true);
                         AppPrefs.setUnivestStatus(this, "UNIVEST AUTOTRADE ARMED • LIVE mode • source + CNC locks active.");
                         DiagnosticsStore.runtime(this, "ARMED", "", AppPrefs.getUnivestStatus(this));
@@ -402,8 +435,10 @@ public class DashboardActivity extends Activity {
                     }).show();
             return;
         }
+
         AppPrefs.setUnivestEnabled(this, checked);
-        AppPrefs.setUnivestStatus(this, checked ? "UNIVEST AUTOTRADE ARMED • PAPER mode." : "UNIVEST AUTOTRADE DISARMED.");
+        AppPrefs.setUnivestStatus(this,
+                checked ? "UNIVEST AUTOTRADE ARMED • PAPER mode." : "UNIVEST AUTOTRADE DISARMED.");
         DiagnosticsStore.runtime(this, checked ? "ARMED" : "DISARMED", "", AppPrefs.getUnivestStatus(this));
         render();
     }
@@ -414,7 +449,8 @@ public class DashboardActivity extends Activity {
         AppPrefs.setExpectedStaticIp(this, ip.getText().toString());
         AppPrefs.invalidateConnectionReadiness(this);
         AppPrefs.setUnivestEnabled(this, false);
-        DiagnosticsStore.runtime(this, "CONNECTION_SETTINGS_CHANGED", "", "Connection settings changed; readiness invalidated and automation disarmed.");
+        DiagnosticsStore.runtime(this, "CONNECTION_SETTINGS_CHANGED", "",
+                "Connection settings changed; readiness invalidated and automation disarmed.");
         Toast.makeText(this, "Saved. Run connection test before LIVE arming.", Toast.LENGTH_LONG).show();
         render();
     }
@@ -432,7 +468,8 @@ public class DashboardActivity extends Activity {
             NetworkCheck.Result ip = NetworkCheck.detectAndCompare(getApplicationContext());
             GrowwClient.Result auth = ip.match
                     ? GrowwClient.refreshAndTestAuthentication(getApplicationContext())
-                    : new GrowwClient.Result(false, false, 0, "Authentication not tested because static IP does not match.");
+                    : new GrowwClient.Result(false, false, 0,
+                    "Authentication not tested because static IP does not match.");
             DiagnosticsStore.broker(getApplicationContext(), "STATIC_IP_TEST", "", ip.match, ip.message);
             DiagnosticsStore.broker(getApplicationContext(), "GROWW_AUTH_TEST", "", auth.success, auth.message);
             runOnUiThread(() -> {
@@ -448,31 +485,13 @@ public class DashboardActivity extends Activity {
         new Thread(() -> {
             boolean changed = InstrumentRepository.refreshIfStale(getApplicationContext());
             List<InstrumentRepository.Instrument> list = InstrumentRepository.load(getApplicationContext());
-            DiagnosticsStore.runtime(getApplicationContext(), "INSTRUMENT_MAP_REFRESH", "", "NSE CASH instruments available: " + list.size() + (changed ? " • fresh download" : " • cache/asset"));
+            DiagnosticsStore.runtime(getApplicationContext(), "INSTRUMENT_MAP_REFRESH", "",
+                    "NSE CASH instruments available: " + list.size() + (changed ? " • fresh download" : " • cache/asset"));
             runOnUiThread(() -> {
                 Toast.makeText(this, "Instrument map ready: " + list.size() + " NSE CASH symbols.", Toast.LENGTH_LONG).show();
                 render();
             });
         }, "dashboard-instrument-refresh").start();
-    }
-
-    private void reconcileBroker() {
-        new Thread(() -> {
-            try { UnivestManager.reconcileAll(getApplicationContext()); }
-            catch (Throwable t) { DiagnosticsStore.error(getApplicationContext(), "DASHBOARD_RECONCILE_FAILED", "", "Broker reconciliation failed.", t); }
-            runOnUiThread(this::render);
-        }, "dashboard-reconcile").start();
-    }
-
-    private void manualRefresh() {
-        Toast.makeText(this, "Refreshing…", Toast.LENGTH_SHORT).show();
-        new Thread(() -> {
-            ResearchDiagnosticsImporter.importOfficialSignals(getApplicationContext());
-            if (selectedTab == 0) {
-                try { UnivestManager.reconcileAll(getApplicationContext()); } catch (Throwable ignored) {}
-            }
-            runOnUiThread(this::render);
-        }, "dashboard-refresh").start();
     }
 
     private void runResearchNow(Button button) {
@@ -484,39 +503,46 @@ public class DashboardActivity extends Activity {
         button.setText("RUNNING…");
         new Thread(() -> {
             ResearchEngine.runNightly(getApplicationContext());
-            runOnUiThread(this::render);
+            runOnUiThread(() -> {
+                Toast.makeText(this, "Off-market research completed.", Toast.LENGTH_SHORT).show();
+                render();
+            });
         }, "research-manual").start();
     }
 
     private void renderBottomNav() {
         bottomNav.removeAllViews();
-        bottomNav.addView(navItem("◆", "Univest", 0), navParams());
-        bottomNav.addView(navItem("◎", "Strategy", 1), navParams());
-        bottomNav.addView(navItem("↗", "Forecast", 2), navParams());
-        bottomNav.addView(navItem("⚙", "Settings", 3), navParams());
+        bottomNav.addView(navItem(R.drawable.ic_univest_nav, "Univest", 0), navParams());
+        bottomNav.addView(navItem(R.drawable.ic_strategy_nav, "Strategy", 1), navParams());
+        bottomNav.addView(navItem(R.drawable.ic_forecast_nav, "Forecast", 2), navParams());
+        bottomNav.addView(navItem(R.drawable.ic_settings_nav, "Settings", 3), navParams());
     }
 
-    private View navItem(String icon, String label, int tab) {
+    private View navItem(int iconRes, String label, int tab) {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setGravity(Gravity.CENTER);
-        boolean selected = selectedTab == tab;
+        box.setMinimumHeight(dp(64));
+        box.setContentDescription(label + (selectedTab == tab ? ", selected" : ""));
 
-        TextView iconView = text(icon, 20, selected ? Color.rgb(5, 18, 22) : SUBTEXT, true);
-        iconView.setGravity(Gravity.CENTER);
-        if (selected) {
-            GradientDrawable pill = new GradientDrawable();
-            pill.setColor(TEAL);
-            pill.setCornerRadius(dp(22));
-            iconView.setBackground(pill);
-        }
-        box.addView(iconView, new LinearLayout.LayoutParams(dp(70), dp(40)));
+        boolean selected = selectedTab == tab;
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(selected ? Color.rgb(15, 53, 62) : Color.TRANSPARENT);
+        bg.setCornerRadius(dp(16));
+        box.setBackground(bg);
+
+        ImageView icon = new ImageView(this);
+        icon.setImageResource(iconRes);
+        icon.setColorFilter(selected ? TEAL : SUBTEXT, PorterDuff.Mode.SRC_IN);
+        icon.setContentDescription(null);
+        box.addView(icon, new LinearLayout.LayoutParams(dp(24), dp(24)));
 
         TextView labelView = text(label, 11, selected ? TEXT : SUBTEXT, selected);
         labelView.setGravity(Gravity.CENTER);
-        box.addView(labelView);
+        box.addView(labelView, margins(0, 4, 0, 0));
 
         box.setOnClickListener(v -> {
+            if (selectedTab == tab) return;
             selectedTab = tab;
             render();
         });
@@ -524,17 +550,20 @@ public class DashboardActivity extends Activity {
     }
 
     private LinearLayout.LayoutParams navParams() {
-        return new LinearLayout.LayoutParams(0, -1, 1f);
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, -1, 1f);
+        p.setMargins(dp(3), 0, dp(3), 0);
+        return p;
     }
 
     private View badge(String label, boolean ok) {
-        TextView v = text(label + " " + (ok ? "✓" : "—"), 11, ok ? Color.rgb(4, 24, 22) : SUBTEXT, true);
+        TextView v = text(label + " " + (ok ? "✓" : "—"), 11,
+                ok ? Color.rgb(5, 30, 27) : SUBTEXT, true);
         v.setGravity(Gravity.CENTER);
         v.setPadding(dp(10), dp(7), dp(10), dp(7));
         GradientDrawable g = new GradientDrawable();
-        g.setColor(ok ? Color.rgb(92, 226, 192) : SURFACE_2);
+        g.setColor(ok ? Color.rgb(94, 226, 193) : SURFACE_2);
         g.setCornerRadius(dp(16));
-        g.setStroke(dp(1), ok ? Color.rgb(92, 226, 192) : BORDER);
+        g.setStroke(dp(1), ok ? Color.rgb(94, 226, 193) : BORDER);
         v.setBackground(g);
         return v;
     }
@@ -550,7 +579,7 @@ public class DashboardActivity extends Activity {
         v.setGravity(Gravity.CENTER);
         v.setPadding(dp(12), dp(9), dp(12), dp(9));
         GradientDrawable g = new GradientDrawable();
-        g.setColor(color == GREEN ? Color.rgb(19, 75, 62) : Color.rgb(24, 58, 97));
+        g.setColor(color == GREEN ? Color.rgb(19, 75, 62) : Color.rgb(23, 58, 94));
         g.setCornerRadius(dp(14));
         g.setStroke(dp(1), color);
         v.setBackground(g);
@@ -561,18 +590,23 @@ public class DashboardActivity extends Activity {
         List<UnivestStateStore.State> states = UnivestStateStore.all(this);
         StringBuilder b = new StringBuilder();
         for (UnivestStateStore.State s : states) {
-            if (s == null || s.symbol == null || s.symbol.isEmpty() || UnivestStateStore.EXITED.equals(s.phase)) continue;
+            if (s == null || s.symbol == null || s.symbol.isEmpty() ||
+                    UnivestStateStore.EXITED.equals(s.phase)) continue;
             if (b.length() > 0) b.append("\n\n");
             b.append(s.symbol).append(" • ").append(s.phase).append(" • qty ").append(s.quantity);
             if (s.anchorPrice > 0) b.append(String.format(Locale.US, " • anchor ₹%.2f", s.anchorPrice));
         }
-        return b.length() == 0 ? "No active tracked campaigns. Groww holdings and open orders remain execution truth." : b.toString();
+        return b.length() == 0
+                ? "No active tracked campaigns. Groww holdings and open orders remain execution truth."
+                : b.toString();
     }
 
     private int activeCampaignCount() {
         int n = 0;
-        for (UnivestStateStore.State s : UnivestStateStore.all(this))
-            if (s != null && s.symbol != null && !s.symbol.isEmpty() && !UnivestStateStore.EXITED.equals(s.phase)) n++;
+        for (UnivestStateStore.State s : UnivestStateStore.all(this)) {
+            if (s != null && s.symbol != null && !s.symbol.isEmpty() &&
+                    !UnivestStateStore.EXITED.equals(s.phase)) n++;
+        }
         return n;
     }
 
@@ -582,17 +616,31 @@ public class DashboardActivity extends Activity {
     }
 
     private void requestNotificationPermissionIfNeeded() {
-        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
+        if (Build.VERSION.SDK_INT >= 33 &&
+                checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 4310);
-    }
-
-    private String currentClock() {
-        return new SimpleDateFormat("HH:mm:ss", Locale.US).format(new Date());
+        }
     }
 
     private String lastResearchTime() {
         long t = AppPrefs.getResearchLastNightlyRun(this);
-        return t > 0 ? new SimpleDateFormat("dd MMM • HH:mm", Locale.US).format(new Date(t)) : "Not run";
+        return t > 0 ? formatTime(t, "dd MMM • HH:mm") : "Not run";
+    }
+
+    private String clock(long t) {
+        return formatTime(t, "HH:mm:ss");
+    }
+
+    private String formatTime(long t, String pattern) {
+        SimpleDateFormat f = new SimpleDateFormat(pattern, Locale.US);
+        f.setTimeZone(java.util.TimeZone.getTimeZone("Asia/Kolkata"));
+        return f.format(new Date(t));
+    }
+
+    private String safeMessage(Throwable t) {
+        if (t == null) return "unknown error";
+        String m = t.getMessage();
+        return m == null || m.trim().isEmpty() ? t.getClass().getSimpleName() : m;
     }
 
     private void createExport() {
@@ -608,16 +656,19 @@ public class DashboardActivity extends Activity {
                     startActivityForResult(i, REQUEST_EXPORT);
                 });
             } catch (Exception e) {
-                runOnUiThread(() -> Toast.makeText(this, "Export failed: " + e.getMessage(), Toast.LENGTH_LONG).show());
+                runOnUiThread(() ->
+                        Toast.makeText(this, "Export failed: " + e.getMessage(), Toast.LENGTH_LONG).show());
             }
         }, "dashboard-export").start();
     }
 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode != REQUEST_EXPORT || resultCode != RESULT_OK || data == null || data.getData() == null || pendingExport == null) return;
+        if (requestCode != REQUEST_EXPORT || resultCode != RESULT_OK ||
+                data == null || data.getData() == null || pendingExport == null) return;
         Uri uri = data.getData();
-        try (FileInputStream in = new FileInputStream(pendingExport); OutputStream out = getContentResolver().openOutputStream(uri, "w")) {
+        try (FileInputStream in = new FileInputStream(pendingExport);
+             OutputStream out = getContentResolver().openOutputStream(uri, "w")) {
             if (out == null) throw new IllegalStateException("Cannot open selected export destination.");
             byte[] b = new byte[8192];
             int n;
@@ -639,7 +690,7 @@ public class DashboardActivity extends Activity {
     private LinearLayout scrollRoot(ScrollView scroll) {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(18), dp(22), dp(18), dp(22));
+        root.setPadding(dp(18), dp(22), dp(18), dp(18));
         scroll.addView(root, new ScrollView.LayoutParams(-1, -2));
         return root;
     }
@@ -650,7 +701,7 @@ public class DashboardActivity extends Activity {
         l.setPadding(dp(16), dp(16), dp(16), dp(16));
         GradientDrawable g = new GradientDrawable();
         g.setColor(SURFACE);
-        g.setCornerRadius(dp(18));
+        g.setCornerRadius(dp(20));
         g.setStroke(dp(1), BORDER);
         l.setBackground(g);
         return l;
@@ -667,11 +718,16 @@ public class DashboardActivity extends Activity {
         return row;
     }
 
-    private TextView iconButton(String symbol) {
-        TextView v = text(symbol, 25, SUBTEXT, true);
-        v.setGravity(Gravity.CENTER);
-        v.setClickable(true);
-        return v;
+    private TextView body(String s) {
+        return text(s, 13, TEXT, false);
+    }
+
+    private TextView meta(String s) {
+        return meta(s, SUBTEXT);
+    }
+
+    private TextView meta(String s, int color) {
+        return text(s, 12, color, false);
     }
 
     private Switch styledSwitch(String label, boolean checked) {
@@ -680,7 +736,8 @@ public class DashboardActivity extends Activity {
         s.setTextSize(14);
         s.setTextColor(TEXT);
         s.setChecked(checked);
-        s.setPadding(0, dp(7), 0, dp(7));
+        s.setMinHeight(dp(52));
+        s.setGravity(Gravity.CENTER_VERTICAL);
         return s;
     }
 
@@ -691,8 +748,11 @@ public class DashboardActivity extends Activity {
         e.setTextColor(TEXT);
         e.setTextSize(14);
         e.setSingleLine(true);
+        e.setMinHeight(dp(52));
         e.setPadding(dp(14), dp(12), dp(14), dp(12));
-        e.setInputType(secret ? InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD : InputType.TYPE_CLASS_TEXT);
+        e.setInputType(secret
+                ? InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD
+                : InputType.TYPE_CLASS_TEXT);
         GradientDrawable g = new GradientDrawable();
         g.setColor(SURFACE_2);
         g.setCornerRadius(dp(12));
@@ -716,8 +776,9 @@ public class DashboardActivity extends Activity {
         b.setText(label);
         b.setAllCaps(false);
         b.setTextSize(14);
-        b.setTextColor(Color.rgb(4, 22, 24));
+        b.setTextColor(Color.rgb(4, 25, 27));
         b.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        b.setMinHeight(dp(48));
         GradientDrawable g = new GradientDrawable();
         g.setColor(TEAL);
         g.setCornerRadius(dp(14));
@@ -732,6 +793,7 @@ public class DashboardActivity extends Activity {
         b.setTextSize(13);
         b.setTextColor(TEXT);
         b.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        b.setMinHeight(dp(48));
         GradientDrawable g = new GradientDrawable();
         g.setColor(SURFACE_2);
         g.setCornerRadius(dp(14));
