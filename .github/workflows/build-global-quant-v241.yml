@@ -87,6 +87,12 @@ jobs:
               if name=="ArbitrageRepository.kt":
                   x=x.replace('\\\"','"')
               p.write_text(x)
+
+          test=Path(sys.argv[1])/"app/src/test/java/com/suhas/arbitrageedge/LiveTogglePolicyTest.kt"
+          if test.exists():
+              x=test.read_text()
+              x=x.replace("\\n","\n")
+              test.write_text(x)
           PY
           echo 'cGFja2FnZSBjb20uc3VoYXMuYXJiaXRyYWdlZWRnZQoKaW1wb3J0IGFuZHJvaWQuY29udGVudC5Db250ZXh0CmltcG9ydCBqYXZhLmlvLkZpbGUKaW1wb3J0IGphdmEudGltZS5ab25lZERhdGVUaW1lCmltcG9ydCBqYXZhLnRpbWUuWm9uZUlkCgpvYmplY3QgQXBwTG9nIHsKICAgIHByaXZhdGUgY29uc3QgdmFsIE5BTUUgPSAiZ2xvYmFsX3F1YW50X3RyYWRlci5sb2ciCiAgICBAU3luY2hyb25pemVkIGZ1biB3cml0ZShjb250ZXh0OiBDb250ZXh0LCB0YWc6IFN0cmluZywgbWVzc2FnZTogU3RyaW5nKSB7CiAgICAgICAgcnVuQ2F0Y2hpbmcgewogICAgICAgICAgICB2YWwgZiA9IEZpbGUoY29udGV4dC5maWxlc0RpciwgTkFNRSkKICAgICAgICAgICAgaWYgKGYuZXhpc3RzKCkgJiYgZi5sZW5ndGgoKSA+IDJfMDAwXzAwMCkgewogICAgICAgICAgICAgICAgdmFsIG9sZCA9IEZpbGUoY29udGV4dC5maWxlc0RpciwgImdsb2JhbF9xdWFudF90cmFkZXIucHJldmlvdXMubG9nIikKICAgICAgICAgICAgICAgIGlmIChvbGQuZXhpc3RzKCkpIG9sZC5kZWxldGUoKQogICAgICAgICAgICAgICAgZi5yZW5hbWVUbyhvbGQpCiAgICAgICAgICAgIH0KICAgICAgICAgICAgdmFsIHRzID0gWm9uZWREYXRlVGltZS5ub3coWm9uZUlkLm9mKCJBc2lhL0tvbGthdGEiKSkKICAgICAgICAgICAgZi5hcHBlbmRUZXh0KCIkdHMgWyR0YWddICR7bWVzc2FnZS5yZXBsYWNlKCdcbicsJyAnKX1cbiIpCiAgICAgICAgfQogICAgfQogICAgZnVuIHJlYWQoY29udGV4dDogQ29udGV4dCk6IFN0cmluZyA9IHJ1bkNhdGNoaW5nIHsKICAgICAgICBGaWxlKGNvbnRleHQuZmlsZXNEaXIsIE5BTUUpLnRha2VJZiB7IGl0LmV4aXN0cygpIH0/LnJlYWRUZXh0KCkub3JFbXB0eSgpCiAgICB9LmdldE9yRGVmYXVsdCgiIikKfQo=' | base64 -d > "$ROOT/app/src/main/java/com/suhas/arbitrageedge/AppLog.kt"
           grep -RFn '\\n' "$ROOT/app/src/main/java/com/suhas/arbitrageedge" --include='*.kt' || true
