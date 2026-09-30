@@ -164,6 +164,25 @@ final class AppPrefs {
         f.setTimeZone(TimeZone.getTimeZone("Asia/Kolkata")); return f.format(new Date(ms));
     }
 
+
+    // v2.3 Research Lab is deliberately isolated from official Univest execution state.
+    static boolean isResearchAutoTradeEnabled(Context c) { return p(c).getBoolean("research_autotrade_enabled", false); }
+    static void setResearchAutoTradeEnabled(Context c, boolean v) { p(c).edit().putBoolean("research_autotrade_enabled", v).apply(); }
+    static int getResearchBudget(Context c) { return Math.max(1000, Math.min(20000, p(c).getInt("research_budget", 5000))); }
+    static void setResearchBudget(Context c, int v) { p(c).edit().putInt("research_budget", Math.max(1000, Math.min(20000, v))).apply(); }
+    static int getResearchMaxPositions(Context c) { return Math.max(1, Math.min(5, p(c).getInt("research_max_positions", 2))); }
+    static void setResearchMaxPositions(Context c, int v) { p(c).edit().putInt("research_max_positions", Math.max(1, Math.min(5, v))).apply(); }
+    static String getResearchStatus(Context c) { return p(c).getString("research_status", "Research Lab has not run yet."); }
+    static long getResearchStatusTime(Context c) { return p(c).getLong("research_status_time", 0L); }
+    static void setResearchStatus(Context c, String v) {
+        p(c).edit().putString("research_status", v == null ? "" : v)
+                .putLong("research_status_time", System.currentTimeMillis()).apply();
+    }
+    static int getResearchScanCursor(Context c) { return Math.max(0, p(c).getInt("research_scan_cursor", 0)); }
+    static void setResearchScanCursor(Context c, int v) { p(c).edit().putInt("research_scan_cursor", Math.max(0, v)).apply(); }
+    static long getResearchLastNightlyRun(Context c) { return p(c).getLong("research_last_nightly", 0L); }
+    static void setResearchLastNightlyRun(Context c, long v) { p(c).edit().putLong("research_last_nightly", v).apply(); }
+
     static boolean isUnivestV2Migrated(Context c) { return p(c).getBoolean("univest_v2_migrated", false); }
     static void setUnivestV2Migrated(Context c, boolean v) { p(c).edit().putBoolean("univest_v2_migrated", v).apply(); }
 
