@@ -40,7 +40,7 @@ jobs:
           set -euo pipefail
           SRC=.build-temp/univest-v220-work/source
           grep -q "versionCode 233" "$SRC/app/build.gradle"
-          grep -q "versionName '2.3.2'" "$SRC/app/build.gradle"
+          grep -q "versionName '2.3.3'" "$SRC/app/build.gradle"
           grep -R -q 'com.univest.capp' "$SRC/app/src/main/java"
           grep -R -q 'ENTRY_BUDGET = 20000' "$SRC/app/src/main/java"
           grep -R -q 'REENTRY_BUDGET = 5000' "$SRC/app/src/main/java"
@@ -86,7 +86,7 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging release/Univest-AutoTrade-v2.3.3-SIGNED.apk | tee release/APK-BADGING.txt
           grep -q "package: name='com.suhas.multyfideliverybuy'" release/APK-BADGING.txt
           grep -q "versionCode='233'" release/APK-BADGING.txt
-          grep -q "versionName='2.3.2'" release/APK-BADGING.txt
+          grep -q "versionName='2.3.3'" release/APK-BADGING.txt
           sha256sum release/Univest-AutoTrade-v2.3.3-SIGNED.apk | tee release/APK-SHA256.txt
           cp .build-temp/test-results.txt release/test-results.txt
           unzip -t release/Univest-AutoTrade-v2.3.3-source.zip >/dev/null
