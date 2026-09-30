@@ -35,7 +35,9 @@ final class UnivestParser {
         // Strictly equity-delivery ideas only. Univest also publishes derivatives/commodity content.
         if (containsAny(lower,
                 "option pick", "options", "future pick", "futures", "commodity", "commodities",
-                "mcx", "currency", "forex", "f&o", "fno", "call option", "put option")) {
+                "mcx", "currency", "forex", "f&o", "fno", "call option", "put option",
+                "nifty", "sensex", "bank nifty", "index update", "market outlook",
+                "webinar", "offer", "discount", "subscribe", "promotion", "promotional")) {
             return null;
         }
 
