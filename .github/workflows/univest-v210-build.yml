@@ -1,0 +1,78 @@
+name: Univest AutoTrade v2.1.0 Reliability Build
+on:
+  push:
+    paths:
+      - '.github/workflows/univest-v210-build.yml'
+      - '.build-temp/univest-v210-final/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Android SDK 35
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Reconstruct source
+        run: |
+          rm -rf UnivestAutoTrade
+          mkdir UnivestAutoTrade
+          tar -xzf .build-temp/univest-v210-final/source.tar.gz -C UnivestAutoTrade
+      - name: Validate production contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "versionCode 210" UnivestAutoTrade/app/build.gradle
+          grep -q "versionName '2.1.0'" UnivestAutoTrade/app/build.gradle
+          grep -R -q 'com.univest.capp' UnivestAutoTrade/app/src/main/java
+          grep -R -q 'ENTRY_BUDGET = 20000' UnivestAutoTrade/app/src/main/java
+          grep -R -q 'REENTRY_BUDGET = 5000' UnivestAutoTrade/app/src/main/java
+          grep -R -q 'AVERAGE_BUDGET = 5000' UnivestAutoTrade/app/src/main/java
+          grep -R -q 'AVERAGE_STEP_PCT = 2.0' UnivestAutoTrade/app/src/main/java
+          grep -R -q 'MAX_AVERAGE_LEVELS = 3' UnivestAutoTrade/app/src/main/java
+          grep -R -q 'ENTRY_ALREADY_HELD' UnivestAutoTrade/app/src/main/java
+          grep -R -q 'STALE_STATE_REPAIRED' UnivestAutoTrade/app/src/main/java
+          grep -R -q 'ANDROID_NOTIFICATION_DUPLICATE_SUPPRESSED' UnivestAutoTrade/app/src/main/java
+          grep -R -q 'todayTradingSignals' UnivestAutoTrade/app/src/main/java
+          grep -R -q 'post(TOKEN_URL, totpToken, body.toString(), true)' UnivestAutoTrade/app/src/main/java
+      - name: Unit tests and release build
+        working-directory: UnivestAutoTrade
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle --no-daemon --console=plain clean testReleaseUnitTest assembleRelease
+      - name: Collect APK and metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          APK="$(find UnivestAutoTrade/app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' | head -1)"
+          test -n "$APK" && test -s "$APK"
+          cp "$APK" release/Univest-AutoTrade-v2.1.0-UNSIGNED.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | tee release/APK-BADGING.txt
+          grep -q "package: name='com.suhas.multyfideliverybuy'" release/APK-BADGING.txt
+          grep -q "versionCode='210'" release/APK-BADGING.txt
+          grep -q "versionName='2.1.0'" release/APK-BADGING.txt
+          sha256sum release/Univest-AutoTrade-v2.1.0-UNSIGNED.apk > release/APK-SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Univest-AutoTrade-v2.1.0-UNSIGNED
+          retention-days: 7
+          path: release/*
+          if-no-files-found: error
