@@ -183,6 +183,19 @@ final class AppPrefs {
     static long getResearchLastNightlyRun(Context c) { return p(c).getLong("research_last_nightly", 0L); }
     static void setResearchLastNightlyRun(Context c, long v) { p(c).edit().putLong("research_last_nightly", v).apply(); }
 
+    static String getResearchScheduleMethod(Context c) { return p(c).getString("research_schedule_method", "NOT_SCHEDULED"); }
+    static long getResearchNextScheduledAt(Context c) { return p(c).getLong("research_next_scheduled_at", 0L); }
+    static String getResearchScheduleError(Context c) { return p(c).getString("research_schedule_error", ""); }
+    static long getResearchScheduleUpdatedAt(Context c) { return p(c).getLong("research_schedule_updated_at", 0L); }
+    static void setResearchScheduleState(Context c, String method, long nextAt, String error) {
+        p(c).edit()
+                .putString("research_schedule_method", method == null ? "" : method)
+                .putLong("research_next_scheduled_at", Math.max(0L, nextAt))
+                .putString("research_schedule_error", error == null ? "" : error)
+                .putLong("research_schedule_updated_at", System.currentTimeMillis())
+                .apply();
+    }
+
     static boolean isUnivestV2Migrated(Context c) { return p(c).getBoolean("univest_v2_migrated", false); }
     static void setUnivestV2Migrated(Context c, boolean v) { p(c).edit().putBoolean("univest_v2_migrated", v).apply(); }
 
