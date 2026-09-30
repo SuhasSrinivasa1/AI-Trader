@@ -8,15 +8,12 @@ import android.os.Build;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
  * Historical class name retained so Android keeps the existing notification-listener grant on upgrade.
- * v2.1 accepts notifications ONLY from the official Univest Android package com.univest.capp.
+ * v2.2 accepts notifications ONLY from the official Univest Android package com.univest.capp.
  */
 public class MultyfiNotificationService extends NotificationListenerService {
     static final String UNIVEST_PACKAGE = "com.univest.capp";
@@ -37,13 +34,9 @@ public class MultyfiNotificationService extends NotificationListenerService {
         if (!UNIVEST_PACKAGE.equals(packageName)) return; // hard package source lock
 
         String combined = collectText(sbn.getNotification());
-        String fingerprint = shortHash(packageName + "|" + combined.replaceAll("\\s+", " ").trim());
-        if (!AppPrefs.claimNotificationFingerprint(getApplicationContext(), fingerprint)) {
-            DiagnosticsStore.runtime(getApplicationContext(), "ANDROID_NOTIFICATION_DUPLICATE_SUPPRESSED", "",
-                    "Identical Univest notification delivery suppressed within 30 seconds • fingerprint " + fingerprint + ".");
-            return;
-        }
 
+        // v2.2: every official Univest delivery is archived and evaluated. Notification similarity/history is
+        // never an execution gate; broker holdings/open BUY orders and deterministic broker references provide safety.
         UnivestParser.Signal signal = UnivestParser.parse(combined);
         DiagnosticsStore.notification(getApplicationContext(), packageName, combined, signal);
         if (signal == null) {
@@ -61,9 +54,8 @@ public class MultyfiNotificationService extends NotificationListenerService {
 
         // Do NOT permanently consume a signal before broker readiness/execution. Earlier builds did this and a
         // temporary auth/readiness problem could cause the only real Univest alert of the day to be marked
-        // "already processed". Exact Android duplicates are already suppressed for 30 seconds above; LIVE
-        // execution is additionally protected by broker holdings, open-order reconciliation and Groww order
-        // reference idempotency. A later genuine notification must remain eligible for a retry.
+        // "already processed". LIVE execution is protected by broker holdings, open-order reconciliation and Groww order
+        // reference idempotency; notification-level duplicate filtering is intentionally not an execution gate. A later genuine notification must remain eligible for a retry.
 
         final long postTime = sbn.getPostTime();
         if (signal.type == UnivestParser.Type.ENTRY || signal.type == UnivestParser.Type.REENTRY) {
@@ -122,10 +114,4 @@ public class MultyfiNotificationService extends NotificationListenerService {
         nm.notify((int) (System.currentTimeMillis() & 0x7FFFFFFF), b.build());
     }
 
-    private static String shortHash(String s) {
-        try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256"); byte[] d = md.digest((s == null ? "" : s).getBytes(StandardCharsets.UTF_8));
-            StringBuilder out = new StringBuilder(); for (int i = 0; i < 8; i++) out.append(String.format(Locale.US, "%02x", d[i])); return out.toString();
-        } catch (Exception e) { return Integer.toHexString((s == null ? "" : s).hashCode()); }
-    }
 }
