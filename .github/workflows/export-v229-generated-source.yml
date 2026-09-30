@@ -1,0 +1,32 @@
+name: Export generated v2.3.0 source
+
+on:
+  push:
+    branches:
+      - multyfi-v2.3.1-intraday-only
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/export-v229-generated-source.yml'
+      - 'hotfix/run_v230.py'
+  workflow_dispatch:
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply v2.3.0 release chain
+        run: python3 hotfix/run_v230.py
+      - name: Upload generated source
+        uses: actions/upload-artifact@v4
+        with:
+          name: multyfi-v230-generated-source
+          path: |
+            android-stable/app/src/main/java/com/suhas/multyfiautobuy/stable/
+            android-stable/app/src/test/java/com/suhas/multyfiautobuy/stable/
+            android-stable/app/src/main/res/
+            android-stable/app/build.gradle
+          if-no-files-found: error
