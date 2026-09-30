@@ -44,7 +44,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cat global-quant-v241/part*.b64 > /tmp/gqt241.b64
+          cat \
+            global-quant-v241/part00.b64 \
+            global-quant-v241/part01.b64 \
+            global-quant-v241/exact/p02_00.txt \
+            global-quant-v241/exact/p02_01.txt \
+            global-quant-v241/exact/p02_02.txt \
+            global-quant-v241/exact/p02_03.txt \
+            global-quant-v241/exact/p03_00.txt \
+            global-quant-v241/exact/p03_01_00.txt \
+            global-quant-v241/exact/p03_01_01.txt \
+            global-quant-v241/exact/p03_01_02.txt \
+            global-quant-v241/exact/p03_01_03.txt \
+            global-quant-v241/exact/p03_02.txt \
+            global-quant-v241/exact/p03_03.txt \
+            > /tmp/gqt241.b64
           echo "f915912cd3ef64fbdb3b73d43e6839c8c8a8a29a80dc6ee88b6aad9de7d8690d  /tmp/gqt241.b64" | sha256sum -c -
           base64 -d /tmp/gqt241.b64 > /tmp/gqt241.tar.gz
           echo "a814c4f58eebc8349e69b6cd6b15a56c80bc67f3976ca068349b817e8bfe9ee1  /tmp/gqt241.tar.gz" | sha256sum -c -
