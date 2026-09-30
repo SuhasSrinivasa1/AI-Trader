@@ -108,39 +108,93 @@ final class UnivestManager {
         String symbol = instrument.symbol;
 
         if (AppPrefs.isPaperMode(context)) {
-            String msg = "PAPER ADD • ₹5,000 CNC delivery re-entry simulation • no Groww order sent.";
+            String msg = "PAPER BACK-IN-RANGE • broker-flat would mean ₹20,000 initial/missed entry; held would mean ₹5,000 add • no Groww order sent.";
             DiagnosticsStore.paperTrade(context, "PAPER_REENTRY", symbol, msg);
-            status(context, "PAPER MODE • UNIVEST BACK-IN-RANGE • " + symbol + " • simulated ₹5,000 CNC add. No Groww order sent.");
+            status(context, "PAPER MODE • UNIVEST BACK-IN-RANGE • " + symbol + " • simulated decision only. No Groww order sent.");
             return;
         }
 
         if (!instrument.buyAllowed) { fail(context, "REENTRY_BUY_BLOCKED", symbol, "Groww instrument master marks buy_allowed=0.", null); return; }
         GrowwClient.PositionSnapshot before = GrowwClient.getCncPosition(context, symbol);
         if (!before.success) { fail(context, "REENTRY_HOLDING_CHECK_FAILED", symbol, before.message, null); return; }
-        if (before.quantity <= 0) {
-            status(context, "UNIVEST BACK-IN-RANGE IGNORED • " + symbol + " • no CNC holding found.");
-            DiagnosticsStore.runtime(context, "REENTRY_IGNORED_NO_HOLDING", symbol, before.message); return;
+
+        GrowwClient.Result pending = GrowwClient.checkForActiveCncBuyOrder(context, symbol);
+        if (pending.unknown) { fail(context, "REENTRY_PENDING_ORDER_CHECK_UNKNOWN", symbol, pending.message, null); return; }
+        if (pending.success) {
+            DiagnosticsStore.runtime(context, "REENTRY_PENDING_BROKER_ORDER", symbol, pending.message);
+            status(context, "UNIVEST BACK-IN-RANGE • " + symbol + " • no second BUY: broker already has an open CNC BUY.");
+            return;
         }
 
-        DiagnosticsStore.runtime(context, "REENTRY_ACCEPTED", symbol, "Back-in-range notification • fixed ₹5,000 CNC delivery add.");
-        String orderRef = stableRef("UR", symbol, signal.rawText, notificationPostTime);
-        GrowwClient.ExecutionResult r = GrowwClient.placeUnivestCncMarketBuy(context, symbol, REENTRY_BUDGET, orderRef);
-        if (!r.submitted) { fail(context, "REENTRY_NOT_SUBMITTED", symbol, r.message, null); DiagnosticsStore.trade(context, "REENTRY_BUY_FAILED", symbol, r.message, r); return; }
+        final boolean missedInitial = before.quantity <= 0;
+        final int budget = missedInitial ? ENTRY_BUDGET : REENTRY_BUDGET;
+        final String kind = missedInitial ? "MISSED_INITIAL_ENTRY" : "HELD_BACK_IN_RANGE_ADD";
+
+        if (missedInitial) {
+            UnivestStateStore.State stale = UnivestStateStore.get(context, symbol);
+            if (stale != null && !UnivestStateStore.EXITED.equals(stale.phase)) {
+                cancelAveragingLadder(context, stale);
+                stale.phase = UnivestStateStore.EXITED; stale.quantity = 0; stale.principal = 0;
+                stale.lastAction = "State repaired from broker truth before back-in-range: no CNC holding and no open CNC BUY.";
+                UnivestStateStore.put(context, stale);
+                DiagnosticsStore.runtime(context, "STALE_STATE_REPAIRED", symbol, stale.lastAction);
+            }
+            if (!UnivestStateStore.reserveNewEntry(context, symbol)) {
+                fail(context, "REENTRY_RESERVATION_FAILED", symbol, "Unable to reserve missed initial entry after broker reconciliation.", null); return;
+            }
+        }
+
+        DiagnosticsStore.runtime(context, "REENTRY_ACCEPTED", symbol,
+                kind + " • broker qty " + before.quantity + " • selected budget ₹" + budget + " CNC delivery.");
+        String orderRef = stableRef(missedInitial ? "UM" : "UR", symbol, signal.rawText, notificationPostTime);
+        GrowwClient.ExecutionResult r = GrowwClient.placeUnivestCncMarketBuy(context, symbol, budget, orderRef);
+        if (!r.submitted) {
+            if (missedInitial) UnivestStateStore.releasePendingEntry(context, symbol, "Missed-entry CNC BUY not submitted: " + r.message);
+            fail(context, "REENTRY_NOT_SUBMITTED", symbol, r.message, null);
+            DiagnosticsStore.trade(context, missedInitial ? "MISSED_ENTRY_BUY_FAILED" : "REENTRY_BUY_FAILED", symbol, r.message, r);
+            return;
+        }
 
         UnivestStateStore.State state = UnivestStateStore.get(context, symbol);
-        if (state == null) { state = new UnivestStateStore.State(); state.symbol = symbol; state.anchorPrice = before.netPrice; state.tickSize = instrument.tickSize; }
-        state.phase = r.filled ? UnivestStateStore.ACTIVE : state.phase;
-        if (r.filled) {
-            state.quantity = before.quantity + r.filledQuantity;
-            state.principal = Math.max(0, state.principal) + Math.max(0, r.averagePrice) * Math.max(0, r.filledQuantity);
-            state.reentryUsed = true;
-            state.lastAction = "₹5,000 back-in-range CNC add executed • qty " + r.filledQuantity + " • avg ₹" + money(r.averagePrice);
-        } else state.lastAction = "₹5,000 CNC add submitted but fill not confirmed • order " + r.orderId;
-        UnivestStateStore.put(context, state);
-        DiagnosticsStore.trade(context, r.filled ? "REENTRY_BUY_EXECUTED" : "REENTRY_FILL_UNCONFIRMED", symbol, state.lastAction, r);
+        if (state == null) { state = new UnivestStateStore.State(); state.symbol = symbol; }
+        state.tickSize = instrument.tickSize;
+        if (missedInitial) {
+            state.phase = r.filled && r.filledQuantity > 0 ? UnivestStateStore.ACTIVE : UnivestStateStore.ENTRY_PENDING;
+            state.quantity = Math.max(0, r.filledQuantity);
+            state.anchorPrice = r.filled ? r.averagePrice : 0;
+            state.principal = Math.max(0, r.averagePrice) * Math.max(0, r.filledQuantity);
+            state.estimatedBuyCharges = state.principal > 0 ? DeliveryNetTarget.buyCharges(state.principal) : 0;
+            state.averageLevel = 0; state.reentryUsed = false; state.exitOrderId = r.orderId;
+            state.lastAction = r.filled
+                    ? "Missed initial ₹20,000 CNC entry recovered from back-in-range • qty " + r.filledQuantity + " • avg ₹" + money(r.averagePrice)
+                    : "Missed initial ₹20,000 CNC BUY submitted; fill not yet confirmed • order " + r.orderId;
+            UnivestStateStore.put(context, state);
+            if (r.filled && r.averagePrice > 0) armAveragingLadder(context, state, r.orderId);
+        } else {
+            state.phase = r.filled ? UnivestStateStore.ACTIVE : state.phase;
+            if (state.anchorPrice <= 0 && before.netPrice > 0) state.anchorPrice = before.netPrice;
+            if (r.filled) {
+                state.quantity = before.quantity + r.filledQuantity;
+                state.principal = Math.max(0, state.principal) + Math.max(0, r.averagePrice) * Math.max(0, r.filledQuantity);
+                state.reentryUsed = true;
+                state.lastAction = "₹5,000 back-in-range CNC add executed • qty " + r.filledQuantity + " • avg ₹" + money(r.averagePrice);
+            } else state.lastAction = "₹5,000 CNC add submitted but fill not confirmed • order " + r.orderId;
+            UnivestStateStore.put(context, state);
+        }
+
+        DiagnosticsStore.trade(context,
+                missedInitial ? (r.filled ? "MISSED_ENTRY_BUY_EXECUTED" : "MISSED_ENTRY_FILL_UNCONFIRMED")
+                              : (r.filled ? "REENTRY_BUY_EXECUTED" : "REENTRY_FILL_UNCONFIRMED"),
+                symbol, state.lastAction, r);
         long age = r.dispatchAtMillis > 0 && notificationPostTime > 0 ? Math.max(0, r.dispatchAtMillis - notificationPostTime) : -1;
-        status(context, "UNIVEST ₹5,000 CNC RE-ENTRY " + (r.filled ? "EXECUTED" : "SUBMITTED") + " • " + symbol
+        status(context, "UNIVEST " + (missedInitial ? "₹20,000 MISSED INITIAL CNC ENTRY " : "₹5,000 CNC BACK-IN-RANGE ADD ")
+                + (r.filled ? "EXECUTED" : "SUBMITTED") + " • " + symbol
                 + (age >= 0 ? " • source age " + age + " ms" : "") + " • " + r.message);
+    }
+
+    static int budgetForBackInRange(int brokerQuantity, boolean pendingBuy) {
+        if (pendingBuy) return 0;
+        return brokerQuantity > 0 ? REENTRY_BUDGET : ENTRY_BUDGET;
     }
 
     static void handleExit(Context context, UnivestParser.Signal signal, long notificationPostTime) {
