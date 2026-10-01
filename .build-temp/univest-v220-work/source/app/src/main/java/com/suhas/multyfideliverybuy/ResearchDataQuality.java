@@ -28,7 +28,8 @@ final class ResearchDataQuality {
         if (p.optInt("dataPoints", 0) < 20) m.add("insufficient daily candles");
         if (p.optInt("minuteDataPoints", 0) < 10) m.add("minute context");
         if ("UNKNOWN_NOT_CONNECTED".equals(p.optString("fundamentalsStatus", "UNKNOWN_NOT_CONNECTED"))) m.add("fundamentals");
-        if ("NOT_CONNECTED".equals(p.optString("marketRegimeStatus", "NOT_CONNECTED"))) m.add("NIFTY/sector regime");
+        if ("NOT_CONNECTED".equals(p.optString("marketRegimeStatus", "NOT_CONNECTED"))) m.add("broad-market regime");
+        if ("NOT_CONNECTED".equals(p.optString("sectorContextStatus", "NOT_CONNECTED"))) m.add("sector relative strength");
         if (p.optString("newsSignal", "").isEmpty()) m.add("news enrichment");
         if (m.isEmpty()) return "complete";
         StringBuilder b = new StringBuilder();
