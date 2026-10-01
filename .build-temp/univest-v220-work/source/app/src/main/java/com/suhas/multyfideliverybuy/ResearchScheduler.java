@@ -156,8 +156,7 @@ final class ResearchScheduler {
         run.set(Calendar.SECOND, 0);
         run.set(Calendar.MILLISECOND, 0);
         if (!run.after(now)) run.add(Calendar.DAY_OF_MONTH, 1);
-        while (run.get(Calendar.DAY_OF_WEEK) == Calendar.SATURDAY ||
-               run.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY) {
+        while (!NseTradingCalendar.isTradingDay(run.getTimeInMillis())) {
             run.add(Calendar.DAY_OF_MONTH, 1);
         }
         return run.getTimeInMillis();
