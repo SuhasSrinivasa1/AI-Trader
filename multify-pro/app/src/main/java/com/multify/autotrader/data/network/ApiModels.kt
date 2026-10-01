@@ -1,0 +1,8 @@
+package com.multify.autotrader.data.network
+import com.google.gson.annotations.SerializedName
+
+data class NotificationPayload(@SerializedName("event_id")val eventId:String,@SerializedName("source_package")val sourcePackage:String,@SerializedName("app_label")val appLabel:String,val title:String,val text:String,@SerializedName("big_text")val bigText:String,@SerializedName("posted_at_ms")val postedAtMs:Long)
+data class DecisionResponse(@SerializedName("event_type")val eventType:String?=null,val symbol:String?=null,val action:String="UNKNOWN",val reason:String="",val mode:String="unknown",val quantity:Int?=null)
+data class HealthResponse(val ok:Boolean=false,val version:String?=null,val scope:String?=null,@SerializedName("session_state")val sessionState:String?=null,@SerializedName("broker_configured")val brokerConfigured:Boolean=false,@SerializedName("trading_mode")val tradingMode:String?=null,@SerializedName("kill_switch")val killSwitch:Boolean=false)
+data class DashboardResponse(@SerializedName("realised_pnl")val realisedPnl:Double=0.0,@SerializedName("unrealised_pnl")val unrealisedPnl:Double=0.0,val trades:Int=0,val wins:Int=0,val losses:Int=0,@SerializedName("open_positions")val openPositions:Int=0,@SerializedName("daily_profit_lock")val dailyProfitLock:Double=5000.0,@SerializedName("daily_loss_limit")val dailyLossLimit:Double=2500.0)
+data class PositionResponse(val symbol:String="",val quantity:Int=0,@SerializedName("average_price")val averagePrice:Double=0.0,val ltp:Double?=null,@SerializedName("unrealised_pnl")val unrealisedPnl:Double=0.0,@SerializedName("realised_pnl")val realisedPnl:Double=0.0)
