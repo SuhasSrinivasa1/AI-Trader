@@ -149,6 +149,8 @@ final class DiagnosticsStore {
                     Arrays.sort(files, Comparator.comparing(File::getName));
                     for (File f : files) if (f.isFile() && f.getName().endsWith(".jsonl")) addFile(zip, f, "logs/" + f.getName());
                 }
+                File research = new File(c.getFilesDir(), "research_lab");
+                addDirectory(zip, research, "research_lab/");
                 addText(zip, "snapshot.json", snapshot(c).toString(2));
                 addText(zip, "README.txt",
                         "Univest AutoTrade diagnostic export\n" +
@@ -172,6 +174,14 @@ final class DiagnosticsStore {
             j.put("growwReady", AppPrefs.isReadyForBuy(c)); j.put("staticIpMatch", AppPrefs.isStaticIpMatch(c));
             j.put("lastDetectedIp", AppPrefs.getLastDetectedIp(c)); j.put("lastStatus", AppPrefs.getUnivestStatus(c));
             j.put("todayNotificationCount", todayNotificationCount(c));
+            j.put("researchAutoTradeEnabled", AppPrefs.isResearchAutoTradeEnabled(c));
+            j.put("researchCapitalLimit", AppPrefs.getResearchCapitalLimit(c));
+            j.put("researchMaxPositions", AppPrefs.getResearchMaxPositions(c));
+            j.put("researchOrchestratorStage", AppPrefs.getResearchOrchestratorStage(c));
+            j.put("researchOrchestratorStatus", AppPrefs.getResearchOrchestratorStatus(c));
+            j.put("researchForecastTargetKey", AppPrefs.getResearchForecastTargetKey(c));
+            j.put("researchAccuracy", ResearchTradeEngine.accuracyText(c));
+            j.put("researchFailureClusters", ResearchTradeEngine.failureClustersText(c));
             JSONArray states = new JSONArray(); for (UnivestStateStore.State s : UnivestStateStore.all(c)) states.put(s.toJson());
             j.put("states", states);
         } catch (Exception ignored) {}
@@ -180,6 +190,17 @@ final class DiagnosticsStore {
 
     static void clear(Context c) {
         synchronized (LOCK) { File d = dir(c); File[] fs = d.listFiles(); if (fs != null) for (File f : fs) if (f.isFile()) f.delete(); }
+    }
+
+    private static void addDirectory(ZipOutputStream zip, File dir, String prefix) throws Exception {
+        if (dir == null || !dir.exists()) return;
+        File[] files = dir.listFiles();
+        if (files == null) return;
+        Arrays.sort(files, Comparator.comparing(File::getName));
+        for (File f : files) {
+            if (f.isDirectory()) addDirectory(zip, f, prefix + f.getName() + "/");
+            else if (f.isFile()) addFile(zip, f, prefix + f.getName());
+        }
     }
 
     private static File dir(Context c) { return new File(c.getFilesDir(), DIR); }
