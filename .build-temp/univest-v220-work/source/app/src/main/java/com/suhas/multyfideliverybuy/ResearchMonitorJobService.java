@@ -7,10 +7,10 @@ public class ResearchMonitorJobService extends JobService {
     @Override public boolean onStartJob(JobParameters params) {
         new Thread(() -> {
             try {
-                ResearchTradeEngine.evaluateLive(getApplicationContext());
+                ResearchOrchestrator.tick(getApplicationContext());
             } catch (Throwable t) {
                 DiagnosticsStore.error(getApplicationContext(), "RESEARCH_MONITOR_JOB_FAILED", "",
-                        "Research live monitor failed.", t);
+                        "Research orchestrator monitor failed.", t);
             } finally {
                 jobFinished(params, false);
             }
