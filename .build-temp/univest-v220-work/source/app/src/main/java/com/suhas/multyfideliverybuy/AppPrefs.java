@@ -206,6 +206,19 @@ final class AppPrefs {
     static long getResearchLastNightlyRun(Context c) { return p(c).getLong("research_last_nightly", 0L); }
     static void setResearchLastNightlyRun(Context c, long v) { p(c).edit().putLong("research_last_nightly", v).apply(); }
 
+    static String getResearchActionSymbol(Context c) { return p(c).getString("research_action_symbol", ""); }
+    static String getResearchActionType(Context c) { return p(c).getString("research_action_type", ""); }
+    static void setResearchAction(Context c, String symbol, String type) {
+        p(c).edit().putString("research_action_symbol", clean(symbol))
+                .putString("research_action_type", clean(type)).apply();
+    }
+    static String getResearchAccuracyText(Context c) {
+        return p(c).getString("research_accuracy_text", "No closed Research trades yet.");
+    }
+    static void setResearchAccuracyText(Context c, String v) {
+        p(c).edit().putString("research_accuracy_text", v == null ? "" : v).apply();
+    }
+
     static String getResearchScheduleMethod(Context c) { return p(c).getString("research_schedule_method", "NOT_SCHEDULED"); }
     static long getResearchNextScheduledAt(Context c) { return p(c).getLong("research_next_scheduled_at", 0L); }
     static String getResearchScheduleError(Context c) { return p(c).getString("research_schedule_error", ""); }
