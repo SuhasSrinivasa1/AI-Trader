@@ -28,6 +28,9 @@ final class ResearchEngine {
     private static final int SCAN_THREADS = 4;
     private static final int FINAL_LIMIT = 10;
     static final String STRATEGY_VERSION = "R2.7-1";
+    private static final Object SCAN_RATE_LOCK = new Object();
+    private static long lastScanRequestAt = 0L;
+    private static final long SCAN_REQUEST_SPACING_MS = 150L;
 
     private ResearchEngine() {}
 
@@ -273,8 +276,18 @@ final class ResearchEngine {
         return out;
     }
 
+    private static void throttleScanRequest() throws InterruptedException {
+        synchronized (SCAN_RATE_LOCK) {
+            long now = System.currentTimeMillis();
+            long wait = SCAN_REQUEST_SPACING_MS - (now - lastScanRequestAt);
+            if (wait > 0) Thread.sleep(wait);
+            lastScanRequestAt = System.currentTimeMillis();
+        }
+    }
+
     private static JSONObject scoreInstrument(Context c, InstrumentRepository.Instrument ins, long now) {
         try {
+            throttleScanRequest();
             List<GrowwClient.Candle> candles = GrowwClient.getHistoricalCandles(
                     c, ins.symbol, now - 140 * DAY, now, "1day");
             ResearchMath.Features f = ResearchMath.fromCandles(candles);
