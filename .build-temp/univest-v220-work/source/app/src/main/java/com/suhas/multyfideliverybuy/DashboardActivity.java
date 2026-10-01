@@ -911,10 +911,11 @@ public class DashboardActivity extends Activity {
 
                 boolean wasArmed = AppPrefs.isUnivestEnabled(DashboardActivity.this);
                 AppPrefs.setUnivestEnabled(DashboardActivity.this, false);
+                AppPrefs.setResearchAutoTradeEnabled(DashboardActivity.this, false);
                 String event = initialEntry ? "INITIAL_BUDGET_CHANGED" : "ADD_BUDGET_CHANGED";
                 String detail = (initialEntry ? "Initial entry" : "Re-entry/averaging")
                         + " budget changed from " + formatRupees(old) + " to " + formatRupees(amount)
-                        + "; AutoTrade disarmed for safety.";
+                        + "; Univest AutoTrade and Research AutoTrade disarmed for safety.";
                 AppPrefs.setUnivestStatus(DashboardActivity.this, detail);
                 DiagnosticsStore.runtime(DashboardActivity.this, event, "", detail);
 
