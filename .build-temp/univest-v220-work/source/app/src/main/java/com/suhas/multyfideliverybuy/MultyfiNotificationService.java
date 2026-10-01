@@ -66,8 +66,11 @@ public class MultyfiNotificationService extends NotificationListenerService {
                 DiagnosticsStore.error(getApplicationContext(), "BUY_READINESS_BLOCK", signal.symbol, msg, null);
                 return;
             }
+            int configuredBudget = signal.type == UnivestParser.Type.ENTRY
+                    ? AppPrefs.getUnivestBudget(getApplicationContext())
+                    : AppPrefs.getUnivestAddBudget(getApplicationContext());
             AppPrefs.setUnivestStatus(getApplicationContext(), "UNIVEST " + signal.type + " DETECTED • " + signal.symbol
-                    + " • " + (signal.type == UnivestParser.Type.ENTRY ? "₹20,000" : "₹5,000")
+                    + " • ₹" + java.text.NumberFormat.getIntegerInstance(new java.util.Locale("en", "IN")).format(configuredBudget)
                     + " CNC " + AppPrefs.getExecutionMode(getApplicationContext()) + " path queued.");
             buyExecutor.execute(() -> {
                 UnivestManager.handle(getApplicationContext(), signal, postTime);
