@@ -39,6 +39,7 @@ public class MultyfiNotificationService extends NotificationListenerService {
         // never an execution gate; broker holdings/open BUY orders and deterministic broker references provide safety.
         UnivestParser.Signal signal = UnivestParser.parse(combined);
         DiagnosticsStore.notification(getApplicationContext(), packageName, combined, signal);
+        if (signal != null) ResearchTradeEngine.onOfficialSignal(getApplicationContext(), signal, sbn.getPostTime());
         if (signal == null) {
             DiagnosticsStore.runtime(getApplicationContext(), "UNIVEST_NOTIFICATION_NO_TRADE", "",
                     "Notification archived but did not match an eligible <=3 month equity entry, back-in-range add, or equity book-profit/exit rule.");
