@@ -37,7 +37,11 @@ jobs:
         run: |
           set -euo pipefail
           SRC=/tmp/v163/Global-Edge-AI-Trader-v1.5.0-source
-          tr -d '\r\n ' < fresh-global-edge/v163/v162-to-v163.patch.gz.b64 | base64 -d > /tmp/v163.patch.gz
+          echo '9ed5304b732eb8bf8338b453efacc07e63e34dd9af841e8c602388becd44baec  fresh-global-edge/v163/patch-parts/part-00.b64' | sha256sum -c -
+          echo 'ca44a32006c5eef35214f9e9f8653a72b8f33231ade097cf412add3389c237f1  fresh-global-edge/v163/patch-parts/part-01.b64' | sha256sum -c -
+          echo '9cbf6053d45f6106b0e1cced43e75b8b889cdfa503a54b0d3bbe8889e27f3792  fresh-global-edge/v163/patch-parts/part-02.b64' | sha256sum -c -
+          echo 'b70ef909a574d927d1f07fa5f8747a5038d0415f02464266e145ff7111f1a78d  fresh-global-edge/v163/patch-parts/part-03.b64' | sha256sum -c -
+          cat fresh-global-edge/v163/patch-parts/part-*.b64 | tr -d '\r\n ' | base64 -d > /tmp/v163.patch.gz
           echo 'a097b67c748cbb9f1ebeb7262b55455bf52861b64221e5b6b0dfe1a44c32f9a5  /tmp/v163.patch.gz' | sha256sum -c -
           gzip -t /tmp/v163.patch.gz
           gunzip -c /tmp/v163.patch.gz > /tmp/v163.patch
