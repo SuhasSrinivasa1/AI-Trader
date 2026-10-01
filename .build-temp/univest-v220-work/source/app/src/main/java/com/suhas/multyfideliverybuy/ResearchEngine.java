@@ -125,6 +125,29 @@ final class ResearchEngine {
                 j.put("reasons", reasons(ft));
                 j.put("counterSignals", counter(ft));
                 j.put("fundamentalsStatus", "UNKNOWN_NOT_CONNECTED");
+                try {
+                    List<GrowwClient.Candle> minute = GrowwClient.getHistoricalCandles(
+                            c, symbol, Math.max(0L, at - 20L * 60L * 1000L),
+                            at + 8L * 60L * 60L * 1000L, "1minute");
+                    ResearchEventMath.Profile ep = ResearchEventMath.profile(minute, at);
+                    j.put("eventMinutePoints", ep.points);
+                    j.put("eventPrice", ep.eventPrice);
+                    j.put("pre15ReturnPct", ep.pre15ReturnPct);
+                    j.put("pre15Vwap", ep.pre15Vwap);
+                    j.put("anchoredVwap", ep.anchoredVwap);
+                    j.put("postMfe15Pct", ep.postMfe15Pct);
+                    j.put("postMae15Pct", ep.postMae15Pct);
+                    j.put("postMfe30Pct", ep.postMfe30Pct);
+                    j.put("postMae30Pct", ep.postMae30Pct);
+                    j.put("postMfeSessionPct", ep.postMfeSessionPct);
+                    j.put("postMaeSessionPct", ep.postMaeSessionPct);
+                    j.put("eventVolumeAcceleration", ep.volumeAcceleration);
+                    j.put("timeToPeakMinutes", ep.timeToPeakMinutes);
+                    ResearchEventStore.appendMinuteCandles(c, symbol, minute, source, at);
+                } catch (Throwable intradayError) {
+                    j.put("eventMinuteStatus", "UNAVAILABLE: " + (intradayError.getMessage() == null
+                            ? intradayError.getClass().getSimpleName() : intradayError.getMessage()));
+                }
                 ResearchStore.appendFeature(c, j);
                 done.add(key);
                 n++;
@@ -414,7 +437,14 @@ final class ResearchEngine {
                 JSONObject xf = nearestFeature(c, symbol, xa, "OFFICIAL_UNIVEST_EXIT");
                 String row = symbol + " • " + horizon
                         + "\nEntry fingerprint: " + (ef == null ? "pending replay" : ef.optString("reasons", ""))
-                        + "\nExit fingerprint: " + (xf == null ? "pending replay" : xf.optString("counterSignals", ""));
+                        + (ef == null ? "" : String.format(Locale.US,
+                        "\nEntry event: pre15 %.1f%% • 15m MFE %.1f%% / MAE %.1f%% • session MFE %.1f%% • anchored VWAP ₹%.2f",
+                        ef.optDouble("pre15ReturnPct"), ef.optDouble("postMfe15Pct"), ef.optDouble("postMae15Pct"),
+                        ef.optDouble("postMfeSessionPct"), ef.optDouble("anchoredVwap")))
+                        + "\nExit fingerprint: " + (xf == null ? "pending replay" : xf.optString("counterSignals", ""))
+                        + (xf == null ? "" : String.format(Locale.US,
+                        "\nExit event: pre15 %.1f%% • post-exit 15m MFE %.1f%% / MAE %.1f%%",
+                        xf.optDouble("pre15ReturnPct"), xf.optDouble("postMfe15Pct"), xf.optDouble("postMae15Pct")));
                 rows.add(row);
                 open.remove(symbol);
             }
