@@ -22,6 +22,7 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.SeekBar;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -241,12 +242,28 @@ public class DashboardActivity extends Activity {
         safety.addView(sectionRow("EXECUTION SAFETY", AppPrefs.getExecutionMode(this)));
 
         Switch live = styledSwitch("LIVE MODE — REAL CNC ORDERS", AppPrefs.isLiveMode(this));
-        safety.addView(live, margins(0, 8, 0, 0));
-
         Switch avg = styledSwitch("CONTROLLED DOWNWARD AVERAGING", AppPrefs.isAveragingEnabled(this));
-        safety.addView(avg, margins(0, 0, 0, 0));
-
         Switch arm = styledSwitch("ARM UNIVEST AUTOTRADE", AppPrefs.isUnivestEnabled(this));
+
+        safety.addView(budgetSlider(
+                "INITIAL ENTRY BUDGET",
+                "Used for a new eligible 1–3 month recommendation and a missed initial entry.",
+                AppPrefs.getUnivestBudget(this),
+                true,
+                arm), margins(0, 12, 0, 0));
+
+        safety.addView(budgetSlider(
+                "RE-ENTRY + AVERAGING BUDGET",
+                "One shared amount for an idea back in entry range and for each -2% / -4% / -6% averaging level.",
+                AppPrefs.getUnivestAddBudget(this),
+                false,
+                arm), margins(0, 12, 0, 0));
+
+        safety.addView(meta("₹0 disables that buy leg. Range: ₹0–₹1,00,000 in ₹1,000 steps."), margins(0, 10, 0, 0));
+        safety.addView(meta("Budget changes apply to new orders and newly-created averaging GTTs. Existing broker-hosted averaging GTTs are left unchanged for safety."), margins(0, 6, 0, 10));
+
+        safety.addView(live, margins(0, 2, 0, 0));
+        safety.addView(avg, margins(0, 0, 0, 0));
         safety.addView(arm, margins(0, 0, 0, 0));
 
         live.setOnCheckedChangeListener((b, checked) -> {
@@ -270,7 +287,9 @@ public class DashboardActivity extends Activity {
         arm.setOnCheckedChangeListener((b, checked) -> onArmRequested(checked));
 
         safety.addView(meta("Official source only • NSE CASH • CNC delivery"), margins(0, 10, 0, 0));
-        safety.addView(meta("₹20,000 initial • ₹5,000 re-entry/averaging • -2% / -4% / -6% ladder"), margins(0, 6, 0, 0));
+        safety.addView(meta(formatRupees(AppPrefs.getUnivestBudget(this)) + " initial • "
+                + formatRupees(AppPrefs.getUnivestAddBudget(this)) + " re-entry / each averaging level • -2% / -4% / -6% ladder"),
+                margins(0, 6, 0, 0));
         root.addView(safety, margins(0, 0, 0, 14));
 
         LinearLayout scheduler = card();
@@ -310,7 +329,7 @@ public class DashboardActivity extends Activity {
 
         LinearLayout about = card();
         about.addView(sectionRow("ABOUT", "Final UI"));
-        about.addView(body("Univest AutoTrade v2.4.1"), margins(0, 10, 0, 0));
+        about.addView(body("Univest AutoTrade v2.5.0"), margins(0, 10, 0, 0));
         about.addView(meta("Package: com.suhas.multyfideliverybuy"), margins(0, 6, 0, 0));
         about.addView(meta("Official execution and Research/Forecast remain isolated by design."), margins(0, 6, 0, 0));
         root.addView(about, margins(0, 0, 0, 22));
@@ -329,7 +348,7 @@ public class DashboardActivity extends Activity {
         left.addView(text(subtitle, 12, SUBTEXT, false), margins(0, 3, 0, 0));
         row.addView(left, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        TextView version = text("v2.4.1", 11, TEAL, true);
+        TextView version = text("v2.5.0", 11, TEAL, true);
         version.setGravity(Gravity.CENTER);
         version.setPadding(dp(10), dp(6), dp(10), dp(6));
         GradientDrawable chip = new GradientDrawable();
@@ -366,7 +385,9 @@ public class DashboardActivity extends Activity {
         LinearLayout c = card();
         c.addView(sectionRow("EXECUTION PROFILE", AppPrefs.getExecutionMode(this)));
         c.addView(body(AppPrefs.isUnivestEnabled(this) ? "AutoTrade is ARMED" : "AutoTrade is DISARMED"), margins(0, 10, 0, 0));
-        c.addView(meta("₹20,000 initial • ₹5,000 back-in-range • ₹5,000 averaging at -2% / -4% / -6%"), margins(0, 8, 0, 0));
+        c.addView(meta(formatRupees(AppPrefs.getUnivestBudget(this)) + " initial • "
+                + formatRupees(AppPrefs.getUnivestAddBudget(this))
+                + " back-in-range / each averaging level at -2% / -4% / -6%"), margins(0, 8, 0, 0));
         c.addView(meta("Official book-profit/exit cancels tracked averaging orders and sells the actual broker CNC holding."), margins(0, 6, 0, 0));
 
         Button manage = secondaryButton("MANAGE EXECUTION SETTINGS");
@@ -728,6 +749,88 @@ public class DashboardActivity extends Activity {
 
     private TextView meta(String s, int color) {
         return text(s, 12, color, false);
+    }
+
+    private View budgetSlider(String title, String description, int currentBudget,
+                              boolean initialEntry, Switch armSwitch) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(12), dp(12), dp(12), dp(10));
+
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(SURFACE_2);
+        bg.setCornerRadius(dp(14));
+        bg.setStroke(dp(1), BORDER);
+        box.setBackground(bg);
+
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView label = text(title, 13, TEXT, true);
+        row.addView(label, new LinearLayout.LayoutParams(0, -2, 1f));
+
+        TextView value = text(formatRupees(currentBudget), 15, TEAL, true);
+        value.setGravity(Gravity.END);
+        row.addView(value, new LinearLayout.LayoutParams(-2, -2));
+        box.addView(row);
+
+        box.addView(meta(description), margins(0, 6, 0, 4));
+
+        SeekBar seek = new SeekBar(this);
+        seek.setMax(AppPrefs.UNIVEST_BUDGET_MAX / AppPrefs.UNIVEST_BUDGET_STEP);
+        seek.setProgress(AppPrefs.normalizeUnivestBudget(currentBudget) / AppPrefs.UNIVEST_BUDGET_STEP);
+        seek.setContentDescription(title + ", " + formatRupees(currentBudget));
+        box.addView(seek, new LinearLayout.LayoutParams(-1, dp(44)));
+
+        LinearLayout limits = new LinearLayout(this);
+        limits.setOrientation(LinearLayout.HORIZONTAL);
+        TextView zero = meta("₹0");
+        TextView max = meta("₹1,00,000");
+        max.setGravity(Gravity.END);
+        limits.addView(zero, new LinearLayout.LayoutParams(0, -2, 1f));
+        limits.addView(max, new LinearLayout.LayoutParams(0, -2, 1f));
+        box.addView(limits);
+
+        seek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
+                int amount = progress * AppPrefs.UNIVEST_BUDGET_STEP;
+                value.setText(formatRupees(amount));
+                bar.setContentDescription(title + ", " + formatRupees(amount));
+            }
+
+            @Override public void onStartTrackingTouch(SeekBar bar) {}
+
+            @Override public void onStopTrackingTouch(SeekBar bar) {
+                int amount = AppPrefs.normalizeUnivestBudget(bar.getProgress() * AppPrefs.UNIVEST_BUDGET_STEP);
+                int old = initialEntry ? AppPrefs.getUnivestBudget(DashboardActivity.this)
+                        : AppPrefs.getUnivestAddBudget(DashboardActivity.this);
+                if (amount == old) return;
+
+                if (initialEntry) AppPrefs.setUnivestBudget(DashboardActivity.this, amount);
+                else AppPrefs.setUnivestAddBudget(DashboardActivity.this, amount);
+
+                boolean wasArmed = AppPrefs.isUnivestEnabled(DashboardActivity.this);
+                AppPrefs.setUnivestEnabled(DashboardActivity.this, false);
+                String event = initialEntry ? "INITIAL_BUDGET_CHANGED" : "ADD_BUDGET_CHANGED";
+                String detail = (initialEntry ? "Initial entry" : "Re-entry/averaging")
+                        + " budget changed from " + formatRupees(old) + " to " + formatRupees(amount)
+                        + "; AutoTrade disarmed for safety.";
+                AppPrefs.setUnivestStatus(DashboardActivity.this, detail);
+                DiagnosticsStore.runtime(DashboardActivity.this, event, "", detail);
+
+                if (wasArmed && armSwitch.isChecked()) armSwitch.setChecked(false);
+                Toast.makeText(DashboardActivity.this,
+                        "Saved " + formatRupees(amount) + ". AutoTrade is disarmed; re-arm when ready.",
+                        Toast.LENGTH_LONG).show();
+            }
+        });
+        return box;
+    }
+
+    private String formatRupees(int amount) {
+        java.text.NumberFormat f = java.text.NumberFormat.getIntegerInstance(new Locale("en", "IN"));
+        return "₹" + f.format(Math.max(0, amount));
     }
 
     private Switch styledSwitch(String label, boolean checked) {
