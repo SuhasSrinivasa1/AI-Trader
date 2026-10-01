@@ -401,6 +401,8 @@ public class DashboardActivity extends Activity {
         Button repair = secondaryButton("REPAIR / RESCHEDULE RESEARCH");
         repair.setOnClickListener(v -> repairSchedule(repair));
         scheduler.addView(repair, fixedMargins(-1, 50, 0, 12, 0, 0));
+        scheduler.addView(meta("Live monitor: " + (ResearchMonitorScheduler.isActive(this) ? "ACTIVE (~15 min cadence)" : "NOT ACTIVE"), 
+                ResearchMonitorScheduler.isActive(this) ? GREEN : AMBER), margins(0, 8, 0, 0));
         scheduler.addView(meta("Historical scheduler errors remain in diagnostics even after a successful repair."), margins(0, 8, 0, 0));
         root.addView(scheduler, margins(0, 0, 0, 14));
 
@@ -470,7 +472,8 @@ public class DashboardActivity extends Activity {
         badges.setOrientation(LinearLayout.HORIZONTAL);
         badges.addView(badge("Groww", AppPrefs.isReadyForBuy(this)));
         badges.addView(badge("Univest", notificationAccessEnabled()), badgeLp());
-        badges.addView(badge("Research", AppPrefs.getResearchScheduleMethod(this).startsWith("JOB_")), badgeLp());
+        badges.addView(badge("Research", AppPrefs.getResearchScheduleMethod(this).startsWith("JOB_")
+                && ResearchMonitorScheduler.isActive(this)), badgeLp());
         c.addView(badges, margins(0, 14, 0, 0));
 
         c.addView(meta("Static IP " + (AppPrefs.isStaticIpMatch(this) ? "matched" : "not confirmed")
