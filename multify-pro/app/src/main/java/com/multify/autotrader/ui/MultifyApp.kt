@@ -2,6 +2,7 @@ package com.multify.autotrader.ui
 import android.content.Intent
 import android.provider.Settings
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -10,6 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -27,8 +29,8 @@ enum class Dest(val label:String,val icon:androidx.compose.ui.graphics.vector.Im
 @Composable fun MultifyApp(c:AppContainer,notificationAccess:Boolean,onRefreshAccess:()->Unit){
  var dest by rememberSaveable{mutableStateOf(Dest.OVERVIEW)};val f=remember(c){VmFactory(c)}
  BoxWithConstraints(Modifier.fillMaxSize()){val wide=maxWidth>=840.dp
-  if(wide)Row(Modifier.fillMaxSize()){NavigationRail(containerColor=MaterialTheme.colorScheme.surface){Spacer(Modifier.height(24.dp));Icon(Icons.Default.AutoGraph,null,tint=MaterialTheme.colorScheme.primary);Spacer(Modifier.height(20.dp));Dest.entries.forEach{NavigationRailItem(dest==it,{dest=it},{Icon(it.icon,it.label)},{Text(it.label)},alwaysShowLabel=false)}};VerticalDivider();Screen(dest,f,notificationAccess,onRefreshAccess,Modifier.weight(1f))}
-  else Scaffold(bottomBar={NavigationBar(containerColor=MaterialTheme.colorScheme.surface){Dest.entries.forEach{NavigationBarItem(dest==it,{dest=it},{Icon(it.icon,it.label)},{Text(it.label)})}}},containerColor=MaterialTheme.colorScheme.background){p->Screen(dest,f,notificationAccess,onRefreshAccess,Modifier.padding(p))}
+  if(wide)Row(Modifier.fillMaxSize()){NavigationRail(containerColor=MaterialTheme.colorScheme.surface){Spacer(Modifier.height(24.dp));Icon(Icons.Default.AutoGraph,null,tint=MaterialTheme.colorScheme.primary);Spacer(Modifier.height(20.dp));Dest.entries.forEach{NavigationRailItem(selected=dest==it,onClick={dest=it},icon={Icon(it.icon,it.label)},label={Text(it.label)},alwaysShowLabel=false)}};VerticalDivider();Screen(dest,f,notificationAccess,onRefreshAccess,Modifier.weight(1f))}
+  else Scaffold(bottomBar={NavigationBar(containerColor=MaterialTheme.colorScheme.surface){Dest.entries.forEach{NavigationBarItem(selected=dest==it,onClick={dest=it},icon={Icon(it.icon,it.label)},label={Text(it.label)})}}},containerColor=MaterialTheme.colorScheme.background){p->Screen(dest,f,notificationAccess,onRefreshAccess,Modifier.padding(p))}
  }
 }
 @Composable private fun Screen(d:Dest,f:VmFactory,access:Boolean,onRefresh:()->Unit,modifier:Modifier){Box(modifier.fillMaxSize()){when(d){Dest.OVERVIEW->Overview(access,onRefresh,viewModel(factory=f));Dest.SIGNALS->Signals(viewModel(factory=f));Dest.POSITIONS->Positions(viewModel(factory=f));Dest.ANALYTICS->Analytics(viewModel(factory=f));Dest.SETTINGS->SettingsScreen(access,onRefresh,viewModel(factory=f))}}}
