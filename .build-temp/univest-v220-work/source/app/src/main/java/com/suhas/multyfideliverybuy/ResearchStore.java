@@ -25,6 +25,7 @@ final class ResearchStore {
     private static final String SIGNALS = "recommendations.jsonl";
     private static final String FEATURES = "feature_snapshots.jsonl";
     private static final String PREDICTIONS = "predictions.json";
+    private static final String FORECAST_HISTORY = "forecast_history.jsonl";
     private static final String STRATEGIES = "strategies.json";
     private static final String INTELLIGENCE = "intelligence.json";
     private static final String POSITIONS = "research_positions.json";
@@ -64,6 +65,22 @@ final class ResearchStore {
 
     static synchronized void savePredictions(Context c, JSONArray a) { writeJson(c, PREDICTIONS, a == null ? new JSONArray().toString() : a.toString()); }
     static synchronized JSONArray predictions(Context c) { return readArray(c, PREDICTIONS); }
+
+    static synchronized void appendForecastSnapshot(Context c, JSONArray predictions, long frozenAt) {
+        try {
+            JSONObject row = new JSONObject();
+            row.put("frozenAt", frozenAt);
+            row.put("sessionKey", AppPrefs.istDayKey(frozenAt));
+            row.put("predictions", predictions == null ? new JSONArray() : predictions);
+            append(c, FORECAST_HISTORY, row);
+        } catch (Exception e) {
+            DiagnosticsStore.error(c, "FORECAST_HISTORY_SAVE_FAILED", "", "Unable to save frozen forecast snapshot.", e);
+        }
+    }
+
+    static synchronized List<JSONObject> forecastHistory(Context c, int limit) {
+        return readJsonLines(c, FORECAST_HISTORY, Math.max(1, limit));
+    }
     static synchronized void saveStrategies(Context c, JSONObject o) { writeJson(c, STRATEGIES, o == null ? new JSONObject().toString() : o.toString()); }
     static synchronized JSONObject strategies(Context c) { return readObject(c, STRATEGIES); }
     static synchronized void saveIntelligence(Context c, JSONArray a) { writeJson(c, INTELLIGENCE, a == null ? new JSONArray().toString() : a.toString()); }
