@@ -77,11 +77,19 @@ final class ResearchStore {
     static synchronized JSONArray predictions(Context c) { return readArray(c, PREDICTIONS); }
 
     static synchronized void appendForecastSnapshot(Context c, JSONArray predictions, long frozenAt) {
+        appendForecastSnapshot(c, predictions, frozenAt, "EOD_FROZEN", NseTradingCalendar.nextTradingDayKey(frozenAt));
+    }
+
+    static synchronized void appendForecastSnapshot(Context c, JSONArray predictions, long frozenAt,
+                                                    String freezeType, String targetSessionKey) {
         try {
             JSONObject row = new JSONObject();
+            row.put("schemaVersion", 2);
             row.put("frozenAt", frozenAt);
-            row.put("sessionKey", AppPrefs.istDayKey(frozenAt));
-            row.put("predictions", predictions == null ? new JSONArray() : predictions);
+            row.put("createdDayKey", AppPrefs.istDayKey(frozenAt));
+            row.put("targetSessionKey", targetSessionKey == null ? "" : targetSessionKey);
+            row.put("freezeType", freezeType == null ? "" : freezeType);
+            row.put("predictions", predictions == null ? new JSONArray() : new JSONArray(predictions.toString()));
             append(c, FORECAST_HISTORY, row);
         } catch (Exception e) {
             DiagnosticsStore.error(c, "FORECAST_HISTORY_SAVE_FAILED", "", "Unable to save frozen forecast snapshot.", e);
