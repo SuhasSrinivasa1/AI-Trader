@@ -58,7 +58,7 @@ jobs:
           grep -q 'MultifyNotificationService' app/src/main/AndroidManifest.xml
           grep -q 'NIGHTLY' app/src/main/java/com/suhas/ucsentinel/worker/NightlyLearningWorker.kt
           grep -q 'DEVELOPING' app/src/main/java/com/suhas/ucsentinel/ui/CompactMarketScreens.kt
-          grep -q 'withTimeout(5 \* 60_000L)' app/src/main/java/com/suhas/ucsentinel/service/MarketScanService.kt
+          grep -q 'withTimeout(5 \* 60_000L)' app/src/main/java/com/suhas/ucsentinel/worker/MarketScanService.kt
           test -s CHANGELOG-v1.6.3.txt
           echo 'v1.6.3 source verification passed'
 
