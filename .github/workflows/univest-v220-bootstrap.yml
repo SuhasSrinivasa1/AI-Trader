@@ -1,4 +1,4 @@
-name: Univest AutoTrade v2.4.1 Release Build Bootstrap
+name: Univest AutoTrade v2.5.0 Release Build Bootstrap
 on:
   push:
     branches: [main]
@@ -34,16 +34,22 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Validate v2.4.1 scheduler permission contract
+      - name: Validate v2.5.0 configurable budget contract
         shell: bash
         run: |
           set -euo pipefail
           SRC=.build-temp/univest-v220-work/source
-          grep -q "versionCode 241" "$SRC/app/build.gradle"
+          grep -q "versionCode 250" "$SRC/app/build.gradle"
           grep -q "versionName '2.4.1'" "$SRC/app/build.gradle"
           grep -R -q 'com.univest.capp' "$SRC/app/src/main/java"
           grep -R -q 'ENTRY_BUDGET = 20000' "$SRC/app/src/main/java"
           grep -R -q 'REENTRY_BUDGET = 5000' "$SRC/app/src/main/java"
+          grep -q 'UNIVEST_BUDGET_MAX = 100000' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/AppPrefs.java"
+          grep -q 'getUnivestAddBudget' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/AppPrefs.java"
+          grep -q 'RE-ENTRY + AVERAGING BUDGET' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/DashboardActivity.java"
+          grep -q 'SeekBar' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/DashboardActivity.java"
+          grep -q 'chooseBackInRangeBudget' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/UnivestManager.java"
+          grep -q 'averageBudget = AppPrefs.getUnivestAddBudget' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/UnivestManager.java"
           grep -R -q 'MAX_AVERAGE_LEVELS = 3' "$SRC/app/src/main/java"
           ! grep -R -q 'ANDROID_NOTIFICATION_DUPLICATE_SUPPRESSED' "$SRC/app/src/main/java"
           grep -R -q 'budgetForBackInRange' "$SRC/app/src/main/java"
@@ -75,7 +81,7 @@ jobs:
           set -euo pipefail
           mkdir -p release
           cd .build-temp/univest-v220-work/source
-          zip -qr ../../../release/Univest-AutoTrade-v2.4.1-source.zip . -x '*/build/*' '.gradle/*' '*.jks' '*.keystore' '*credentials.env'
+          zip -qr ../../../release/Univest-AutoTrade-v2.5.0-source.zip . -x '*/build/*' '.gradle/*' '*.jks' '*.keystore' '*credentials.env'
       - name: Generate new signing identity and sign APK
         shell: bash
         run: |
@@ -84,41 +90,44 @@ jobs:
           test -n "$APK" && test -s "$APK"
           PASS="$(openssl rand -hex 24)"
           KS="$RUNNER_TEMP/univest-v230-release.jks"
-          keytool -genkeypair -v             -keystore "$KS"             -storepass "$PASS"             -keypass "$PASS"             -alias univest-v220             -keyalg RSA -keysize 4096 -validity 10000             -dname 'CN=Univest AutoTrade v2.4.1, OU=Private Release, O=Univest AutoTrade, L=Bengaluru, ST=Karnataka, C=IN'
+          keytool -genkeypair -v             -keystore "$KS"             -storepass "$PASS"             -keypass "$PASS"             -alias univest-v220             -keyalg RSA -keysize 4096 -validity 10000             -dname 'CN=Univest AutoTrade v2.5.0, OU=Private Release, O=Univest AutoTrade, L=Bengaluru, ST=Karnataka, C=IN'
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$APK" "$RUNNER_TEMP/aligned.apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign             --ks "$KS"             --ks-pass "pass:$PASS"             --ks-key-alias univest-v220             --key-pass "pass:$PASS"             --v1-signing-enabled true             --v2-signing-enabled true             --v3-signing-enabled true             --out release/Univest-AutoTrade-v2.4.1-SIGNED.apk             "$RUNNER_TEMP/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign             --ks "$KS"             --ks-pass "pass:$PASS"             --ks-key-alias univest-v220             --key-pass "pass:$PASS"             --v1-signing-enabled true             --v2-signing-enabled true             --v3-signing-enabled true             --out release/Univest-AutoTrade-v2.5.0-SIGNED.apk             "$RUNNER_TEMP/aligned.apk"
           rm -f "$KS"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs release/Univest-AutoTrade-v2.4.1-SIGNED.apk | tee release/APK-SIGNATURE.txt
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging release/Univest-AutoTrade-v2.4.1-SIGNED.apk | tee release/APK-BADGING.txt
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs release/Univest-AutoTrade-v2.5.0-SIGNED.apk | tee release/APK-SIGNATURE.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging release/Univest-AutoTrade-v2.5.0-SIGNED.apk | tee release/APK-BADGING.txt
           grep -q "package: name='com.suhas.multyfideliverybuy'" release/APK-BADGING.txt
-          grep -q "versionCode='241'" release/APK-BADGING.txt
+          grep -q "versionCode='250'" release/APK-BADGING.txt
           grep -q "versionName='2.4.1'" release/APK-BADGING.txt
-          sha256sum release/Univest-AutoTrade-v2.4.1-SIGNED.apk | tee release/APK-SHA256.txt
+          sha256sum release/Univest-AutoTrade-v2.5.0-SIGNED.apk | tee release/APK-SHA256.txt
           cp .build-temp/test-results.txt release/test-results.txt
-          unzip -t release/Univest-AutoTrade-v2.4.1-source.zip >/dev/null
+          unzip -t release/Univest-AutoTrade-v2.5.0-source.zip >/dev/null
       - name: Build report
         shell: bash
         run: |
           set -euo pipefail
           CERT="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' release/APK-SIGNATURE.txt | head -1)"
           {
-            echo "Univest AutoTrade v2.4.1 build: SUCCESS"
+            echo "Univest AutoTrade v2.5.0 build: SUCCESS"
             echo "package=com.suhas.multyfideliverybuy"
-            echo "versionCode=241"
+            echo "versionCode=250"
             echo "versionName=2.4.1"
             echo "source=com.univest.capp only"
             echo "product=NSE CASH / CNC DELIVERY"
             echo "notification_duplicate_execution_gate=removed"
-            echo "back_in_range_flat=INR 20000 missed initial entry"
-            echo "back_in_range_held=INR 5000 add"
-            echo "averaging=INR 5000 at -2/-4/-6 percent, max 3, initial fill anchor"
+            echo "initial_entry_budget=user configurable INR 0-100000, default INR 20000"
+            echo "back_in_range_flat=uses configured initial-entry budget"
+            echo "back_in_range_held=uses configured shared re-entry/averaging budget"
+            echo "averaging=uses same configured shared budget at -2/-4/-6 percent, max 3, initial fill anchor"
+            echo "budget_step=INR 1000"
+            echo "budget_change_safety=AutoTrade disarms when slider value changes"
             echo "exit=cancel averaging then sell actual broker CNC holding"
             echo "signing_certificate_sha256=$CERT"
             echo "signing_identity=new ephemeral identity authorized by user"
-          } > release/Univest-AutoTrade-v2.4.1-build-report.txt
+          } > release/Univest-AutoTrade-v2.5.0-build-report.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: Univest-AutoTrade-v2.4.1-FINAL
+          name: Univest-AutoTrade-v2.5.0-FINAL
           retention-days: 14
           path: release/*
           if-no-files-found: error
