@@ -1,4 +1,4 @@
-name: Univest AutoTrade v2.5.0 Release Build Bootstrap
+name: Univest AutoTrade v2.6.0 Release Build Bootstrap
 on:
   push:
     branches: [main]
@@ -34,12 +34,12 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Validate v2.5.0 configurable budget contract
+      - name: Validate v2.6.0 Research lifecycle contract
         shell: bash
         run: |
           set -euo pipefail
           SRC=.build-temp/univest-v220-work/source
-          grep -q "versionCode 250" "$SRC/app/build.gradle"
+          grep -q "versionCode 260" "$SRC/app/build.gradle"
           grep -q "versionName '2.5.0'" "$SRC/app/build.gradle"
           grep -R -q 'com.univest.capp' "$SRC/app/src/main/java"
           grep -R -q 'ENTRY_BUDGET = 20000' "$SRC/app/src/main/java"
@@ -50,6 +50,15 @@ jobs:
           grep -q 'SeekBar' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/DashboardActivity.java"
           grep -q 'chooseBackInRangeBudget' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/UnivestManager.java"
           grep -q 'averageBudget = AppPrefs.getUnivestAddBudget' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/UnivestManager.java"
+          grep -q 'ResearchTradeEngine' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/DashboardActivity.java"
+          grep -q 'RESEARCH AUTOTRADE — REAL MONEY' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/DashboardActivity.java"
+          grep -q 'RESEARCH ACCURACY' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/DashboardActivity.java"
+          grep -q 'scanEntireNse' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/ResearchEngine.java"
+          ! grep -q 'SCAN_SIZE=60' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/ResearchEngine.java"
+          grep -q 'MIN_NET_WIN_PCT = 0.50' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/ResearchTradeEngine.java"
+          grep -q 'RESEARCH_PREENTRY_UNIVEST_CONFIRMED' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/UnivestManager.java"
+          grep -q 'ResearchMonitorJobService' "$SRC/app/src/main/AndroidManifest.xml"
+          grep -q 'appendForecastSnapshot' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/ResearchStore.java"
           grep -R -q 'MAX_AVERAGE_LEVELS = 3' "$SRC/app/src/main/java"
           ! grep -R -q 'ANDROID_NOTIFICATION_DUPLICATE_SUPPRESSED' "$SRC/app/src/main/java"
           grep -R -q 'budgetForBackInRange' "$SRC/app/src/main/java"
@@ -81,7 +90,7 @@ jobs:
           set -euo pipefail
           mkdir -p release
           cd .build-temp/univest-v220-work/source
-          zip -qr ../../../release/Univest-AutoTrade-v2.5.0-source.zip . -x '*/build/*' '.gradle/*' '*.jks' '*.keystore' '*credentials.env'
+          zip -qr ../../../release/Univest-AutoTrade-v2.6.0-source.zip . -x '*/build/*' '.gradle/*' '*.jks' '*.keystore' '*credentials.env'
       - name: Generate new signing identity and sign APK
         shell: bash
         run: |
@@ -90,27 +99,27 @@ jobs:
           test -n "$APK" && test -s "$APK"
           PASS="$(openssl rand -hex 24)"
           KS="$RUNNER_TEMP/univest-v230-release.jks"
-          keytool -genkeypair -v             -keystore "$KS"             -storepass "$PASS"             -keypass "$PASS"             -alias univest-v220             -keyalg RSA -keysize 4096 -validity 10000             -dname 'CN=Univest AutoTrade v2.5.0, OU=Private Release, O=Univest AutoTrade, L=Bengaluru, ST=Karnataka, C=IN'
+          keytool -genkeypair -v             -keystore "$KS"             -storepass "$PASS"             -keypass "$PASS"             -alias univest-v220             -keyalg RSA -keysize 4096 -validity 10000             -dname 'CN=Univest AutoTrade v2.6.0, OU=Private Release, O=Univest AutoTrade, L=Bengaluru, ST=Karnataka, C=IN'
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$APK" "$RUNNER_TEMP/aligned.apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign             --ks "$KS"             --ks-pass "pass:$PASS"             --ks-key-alias univest-v220             --key-pass "pass:$PASS"             --v1-signing-enabled true             --v2-signing-enabled true             --v3-signing-enabled true             --out release/Univest-AutoTrade-v2.5.0-SIGNED.apk             "$RUNNER_TEMP/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign             --ks "$KS"             --ks-pass "pass:$PASS"             --ks-key-alias univest-v220             --key-pass "pass:$PASS"             --v1-signing-enabled true             --v2-signing-enabled true             --v3-signing-enabled true             --out release/Univest-AutoTrade-v2.6.0-SIGNED.apk             "$RUNNER_TEMP/aligned.apk"
           rm -f "$KS"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs release/Univest-AutoTrade-v2.5.0-SIGNED.apk | tee release/APK-SIGNATURE.txt
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging release/Univest-AutoTrade-v2.5.0-SIGNED.apk | tee release/APK-BADGING.txt
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs release/Univest-AutoTrade-v2.6.0-SIGNED.apk | tee release/APK-SIGNATURE.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging release/Univest-AutoTrade-v2.6.0-SIGNED.apk | tee release/APK-BADGING.txt
           grep -q "package: name='com.suhas.multyfideliverybuy'" release/APK-BADGING.txt
-          grep -q "versionCode='250'" release/APK-BADGING.txt
+          grep -q "versionCode='260'" release/APK-BADGING.txt
           grep -q "versionName='2.5.0'" release/APK-BADGING.txt
-          sha256sum release/Univest-AutoTrade-v2.5.0-SIGNED.apk | tee release/APK-SHA256.txt
+          sha256sum release/Univest-AutoTrade-v2.6.0-SIGNED.apk | tee release/APK-SHA256.txt
           cp .build-temp/test-results.txt release/test-results.txt
-          unzip -t release/Univest-AutoTrade-v2.5.0-source.zip >/dev/null
+          unzip -t release/Univest-AutoTrade-v2.6.0-source.zip >/dev/null
       - name: Build report
         shell: bash
         run: |
           set -euo pipefail
           CERT="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' release/APK-SIGNATURE.txt | head -1)"
           {
-            echo "Univest AutoTrade v2.5.0 build: SUCCESS"
+            echo "Univest AutoTrade v2.6.0 build: SUCCESS"
             echo "package=com.suhas.multyfideliverybuy"
-            echo "versionCode=250"
+            echo "versionCode=260"
             echo "versionName=2.5.0"
             echo "source=com.univest.capp only"
             echo "product=NSE CASH / CNC DELIVERY"
@@ -122,12 +131,19 @@ jobs:
             echo "budget_step=INR 1000"
             echo "budget_change_safety=AutoTrade disarms when slider value changes"
             echo "exit=cancel averaging then sell actual broker CNC holding"
+            echo "research_scan=entire eligible NSE CASH universe off-market"
+            echo "research_forecast=frozen snapshots with live 15-minute monitoring"
+            echo "research_accuracy=daily and lifetime >=0.5 percent estimated net win accounting"
+            echo "research_entry=notification plus manual BUY or optional Research AutoTrade"
+            echo "research_exit=dynamic profitable weakening exit; negative positions are not panic-closed"
+            echo "research_dual_confirmation=Research pre-entry plus later Univest ENTRY is intentionally additive"
+            echo "research_fundamentals=current build marks unavailable fundamentals as UNKNOWN_NOT_CONNECTED, never fabricated"
             echo "signing_certificate_sha256=$CERT"
             echo "signing_identity=new ephemeral identity authorized by user"
-          } > release/Univest-AutoTrade-v2.5.0-build-report.txt
+          } > release/Univest-AutoTrade-v2.6.0-build-report.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: Univest-AutoTrade-v2.5.0-FINAL
+          name: Univest-AutoTrade-v2.6.0-FINAL
           retention-days: 14
           path: release/*
           if-no-files-found: error
