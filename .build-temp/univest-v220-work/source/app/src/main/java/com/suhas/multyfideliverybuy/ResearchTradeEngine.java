@@ -27,46 +27,67 @@ final class ResearchTradeEngine {
     private ResearchTradeEngine() {}
 
     static boolean isMarketHoursIst() {
-        Calendar c = Calendar.getInstance(TimeZone.getTimeZone("Asia/Kolkata"));
-        int d = c.get(Calendar.DAY_OF_WEEK);
-        if (d == Calendar.SATURDAY || d == Calendar.SUNDAY) return false;
-        int m = c.get(Calendar.HOUR_OF_DAY) * 60 + c.get(Calendar.MINUTE);
-        return m >= 555 && m < 930; // 09:15 <= now < 15:30 IST
+        return NseTradingCalendar.isRegularMarketOpen(System.currentTimeMillis());
     }
 
     static void evaluateLive(Context context) {
         Context c = context.getApplicationContext();
         if (!isMarketHoursIst()) return;
         try {
+            String today = NseTradingCalendar.dayKey(System.currentTimeMillis());
+            if (!today.equals(AppPrefs.getResearchForecastTargetKey(c))) {
+                DiagnosticsStore.runtime(c, "RESEARCH_STALE_FORECAST_SKIP", "",
+                        "No frozen Research forecast targets today's NSE session; no new Research entries evaluated.");
+                monitorOpenPositions(c);
+                return;
+            }
+
             monitorOpenPositions(c);
             JSONArray predictions = ResearchStore.predictions(c);
-            int maxPositions = AppPrefs.getResearchMaxPositions(c);
+            boolean auto = AppPrefs.isResearchAutoTradeEnabled(c);
+            int maxTracked = auto ? AppPrefs.getResearchMaxPositions(c) : 10;
             int active = activeCount(c);
-            for (int i = 0; i < predictions.length() && i < 20 && active < maxPositions; i++) {
+            for (int i = 0; i < predictions.length() && i < 20 && active < maxTracked; i++) {
                 JSONObject p = predictions.optJSONObject(i);
                 if (p == null) continue;
                 String symbol = p.optString("symbol", "").trim().toUpperCase(Locale.US);
                 if (symbol.isEmpty() || findOpen(c, symbol) != null) continue;
+
                 int score = p.optInt("similarity", p.optInt("bestScore", 0));
                 int consensus = p.optInt("consensus", 0);
-                if (score < ENTRY_SCORE_MIN || consensus < ENTRY_CONSENSUS_MIN) continue;
+                int confidence = p.optInt("dataConfidence", ResearchDataQuality.score(p));
+                if (score < ENTRY_SCORE_MIN) { logSkip(c, symbol, "LOW_STRATEGY_SCORE", "Score " + score + " < " + ENTRY_SCORE_MIN); continue; }
+                if (consensus < ENTRY_CONSENSUS_MIN) { logSkip(c, symbol, "LOW_CONSENSUS", "Consensus " + consensus + "/5"); continue; }
+                if (confidence < 60) { logSkip(c, symbol, "LOW_DATA_CONFIDENCE", "Data confidence " + confidence + "% • missing " + p.optString("missingData")); continue; }
 
                 double ltp;
                 try { ltp = GrowwClient.getLtpForAutomation(c, symbol); }
-                catch (Throwable t) { continue; }
-                if (!(ltp > 0)) continue;
+                catch (Throwable t) { logSkip(c, symbol, "QUOTE_UNAVAILABLE", safe(t)); continue; }
+                if (!(ltp > 0)) { logSkip(c, symbol, "INVALID_QUOTE", "LTP unavailable"); continue; }
 
                 double low = p.optDouble("buyLow", 0);
+                double high = p.optDouble("buyHigh", 0);
                 double chase = p.optDouble("chaseLimit", 0);
-                if (!(low > 0) || !(chase > 0) || ltp < low || ltp > chase) continue;
+                if (!(low > 0) || !(chase > 0)) { logSkip(c, symbol, "INVALID_ENTRY_ZONE", "Frozen entry zone unavailable"); continue; }
+                if (ltp < low) { logSkip(c, symbol, "WAIT_RETEST_LOW", "LTP ₹" + money(ltp) + " below buy zone"); continue; }
+                if (ltp > chase) { logSkip(c, symbol, "DO_NOT_CHASE", "LTP ₹" + money(ltp) + " above chase ceiling ₹" + money(chase)); continue; }
+
+                int shadowQty = Math.max(1, (int)Math.floor(Math.max(1, AppPrefs.getUnivestBudget(c)) / ltp));
+                double sellLow = p.optDouble("sellLow", 0);
+                if (sellLow > ltp) {
+                    double potentialNet = DeliveryNetTarget.estimatedNetProfit(ltp, shadowQty, sellLow);
+                    double potentialPct = potentialNet / Math.max(1.0, ltp * shadowQty) * 100.0;
+                    if (potentialPct < MIN_NET_WIN_PCT) {
+                        logSkip(c, symbol, "INSUFFICIENT_NET_EDGE", "Reference sell zone offers only " + one(potentialPct) + "% estimated net.");
+                        continue;
+                    }
+                }
 
                 JSONObject pos = openShadow(c, p, ltp, i + 1);
                 active++;
                 postEntryReady(c, pos);
 
-                if (AppPrefs.isResearchAutoTradeEnabled(c)
-                        && AppPrefs.isLiveMode(c)
-                        && AppPrefs.isReadyForBuy(c)) {
+                if (auto && AppPrefs.isLiveMode(c) && AppPrefs.isReadyForBuy(c)) {
                     executeBuy(c, symbol, true);
                 }
             }
@@ -82,8 +103,15 @@ final class ResearchTradeEngine {
         if (symbol.isEmpty()) return "No Research symbol selected.";
         if (!AppPrefs.isLiveMode(c)) return "Research broker BUY requires LIVE mode.";
         if (!AppPrefs.isReadyForBuy(c)) return "Groww/static-IP readiness is not current. Test connection first.";
+        if (!NseTradingCalendar.isRegularMarketOpen(System.currentTimeMillis())) return "Research BUY is allowed only during a regular NSE trading session.";
+        if (!NseTradingCalendar.dayKey(System.currentTimeMillis()).equals(AppPrefs.getResearchForecastTargetKey(c)))
+            return "Research BUY blocked: the frozen forecast does not target today's NSE session.";
         int budget = AppPrefs.getUnivestBudget(c);
         if (budget <= 0) return "Initial entry budget is ₹0.";
+        if (liveResearchPositionCount(c) >= AppPrefs.getResearchMaxPositions(c))
+            return "Research BUY blocked: maximum open Research positions reached.";
+        if (liveResearchCapital(c) + budget > AppPrefs.getResearchCapitalLimit(c))
+            return "Research BUY blocked: Research capital limit " + rupees(AppPrefs.getResearchCapitalLimit(c)) + " would be exceeded.";
 
         JSONObject p = findOpen(c, symbol);
         if (p != null && "LIVE_OPEN".equals(p.optString("state"))) return symbol + " already has an active Research LIVE lot.";
@@ -97,6 +125,14 @@ final class ResearchTradeEngine {
             } catch (Throwable t) {
                 return "Unable to establish Research entry price: " + safe(t);
             }
+        }
+
+        if (automatic) {
+            long minuteAt = p.optLong("lastMinuteCaptureAt", 0L);
+            if (minuteAt <= 0 || System.currentTimeMillis() - minuteAt > 20L * 60L * 1000L)
+                return "Research AutoTrade BUY blocked: one-minute market context is stale or unavailable.";
+            if (p.optInt("dataConfidence", 0) < 60)
+                return "Research AutoTrade BUY blocked: data confidence is below 60%.";
         }
 
         double current;
@@ -137,7 +173,9 @@ final class ResearchTradeEngine {
                 armResearchAveraging(c, p);
             }
             p.put("lastReason", automatic ? "Research AutoTrade entry executed." : "Manual Research BUY executed.");
+            p.put("exitState", "HOLD");
             replacePosition(c, p);
+            ResearchEventStore.appendDecisionSnapshot(c, automatic ? "RESEARCH_AUTO_BUY" : "RESEARCH_MANUAL_BUY", p);
         } catch (Exception ignored) {}
 
         DiagnosticsStore.trade(c, r.filled ? "RESEARCH_BUY_EXECUTED" : "RESEARCH_BUY_PENDING",
@@ -185,12 +223,17 @@ final class ResearchTradeEngine {
         try {
             ResearchStore.captureSignal(c, signal, at);
             String symbol = cleanSymbol(signal.symbol);
+            final long eventAt = at > 0 ? at : System.currentTimeMillis();
+            final String eventType = signal.type.name();
+            new Thread(() -> ResearchEventStore.capturePreEventWindow(c, symbol, eventAt, eventType),
+                    "research-official-event-window").start();
             JSONObject p = findOpen(c, symbol);
             if (p != null && signal.type == UnivestParser.Type.ENTRY) {
                 long entryAt = p.optLong("entryAt", p.optLong("predictionAt", 0));
                 p.put("univestConfirmedAt", at > 0 ? at : System.currentTimeMillis());
                 p.put("preUnivestHit", entryAt > 0 && entryAt <= (at > 0 ? at : System.currentTimeMillis()));
                 p.put("dualConfirmed", p.optBoolean("live", false));
+                p.put("signalAttribution", "RESEARCH_THEN_UNIVEST_CONFIRMED");
                 p.put("lastReason", "Official Univest ENTRY confirmed an earlier Research call.");
                 replacePosition(c, p);
                 DiagnosticsStore.runtime(c, "RESEARCH_PRE_UNIVEST_HIT", symbol,
@@ -255,16 +298,20 @@ final class ResearchTradeEngine {
             } catch (Exception ignored) {}
             changed = true;
 
-            boolean weakening = shouldExit(c, p, ltp, netPct, mfe);
-            if (weakening && netPct >= MIN_NET_WIN_PCT) {
-                String reason = "Net +" + one(netPct) + "% • move weakening after MFE +" + one(mfe)
-                        + "%. Minimum +0.5% net condition satisfied.";
+            String exitState = classifyExitState(c, p, ltp, netPct, mfe);
+            try {
+                p.put("exitState", exitState);
+                p.put("lastReason", exitStateReason(exitState, netPct, mfe));
+            } catch (Exception ignored) {}
+
+            if ("EXIT_READY".equals(exitState)) {
+                String reason = exitStateReason(exitState, netPct, mfe);
                 if (p.optBoolean("live", false)) {
                     if (AppPrefs.isResearchAutoTradeEnabled(c)) {
                         replaceInArray(a, i, p); ResearchStore.savePositions(c, a);
                         executeSell(c, symbol, true, reason);
                         a = ResearchStore.positions(c);
-                    } else {
+                    } else if (AppPrefs.claimRecent(c, "research_exit_ready_" + symbol, 30L * 60L * 1000L)) {
                         AppPrefs.setResearchAction(c, symbol, "SELL");
                         postExitReady(c, p, reason);
                     }
@@ -276,13 +323,12 @@ final class ResearchTradeEngine {
         if (changed) ResearchStore.savePositions(c, a);
     }
 
-    private static boolean shouldExit(Context c, JSONObject p, double ltp, double netPct, double mfe) {
-        if (netPct < MIN_NET_WIN_PCT) return false;
+    private static String classifyExitState(Context c, JSONObject p, double ltp, double netPct, double mfe) {
         double entry = p.optDouble("entryPrice", p.optDouble("shadowEntryPrice", 0));
-        if (!(entry > 0)) return false;
+        if (!(entry > 0)) return "HOLD";
         double max = p.optDouble("maxPrice", ltp);
         double retracePct = max > 0 ? (max - ltp) / max * 100.0 : 0.0;
-        boolean trailingWeakness = mfe >= 1.25 && retracePct >= Math.max(0.60, mfe * 0.28);
+
         boolean technicalWeakness = false;
         try {
             long now = System.currentTimeMillis();
@@ -294,7 +340,26 @@ final class ResearchTradeEngine {
             p.put("exitRsi14", f.rsi14);
             p.put("exitReturn5Pct", f.return5Pct);
         } catch (Throwable ignored) {}
-        return trailingWeakness || technicalWeakness;
+
+        if (netPct < 0) return "HOLD";
+        if (netPct < MIN_NET_WIN_PCT) return "HOLD_STRONG";
+        boolean strongGiveback = mfe >= 1.25 && retracePct >= Math.max(0.60, mfe * 0.28);
+        boolean moderateGiveback = mfe >= 0.75 && retracePct >= Math.max(0.35, mfe * 0.15);
+        if (technicalWeakness || strongGiveback) return "EXIT_READY";
+        if (moderateGiveback) return "EXIT_WATCH";
+        return "PROFIT_DEVELOPING";
+    }
+
+    private static String exitStateReason(String state, double netPct, double mfe) {
+        if ("EXIT_READY".equals(state))
+            return "EXIT READY • net " + one(netPct) + "% • weakening/exhaustion after MFE +" + one(mfe) + "%.";
+        if ("EXIT_WATCH".equals(state))
+            return "EXIT WATCH • net " + one(netPct) + "% • some giveback detected; continue monitoring.";
+        if ("PROFIT_DEVELOPING".equals(state))
+            return "PROFIT DEVELOPING • net " + one(netPct) + "% • trend has not met exit criteria.";
+        if ("HOLD_STRONG".equals(state))
+            return "HOLD STRONG • positive but below the +0.5% net win floor; no forced exit.";
+        return "HOLD • temporary drawdown/recovery phase; no panic exit.";
     }
 
     static void replayAndScore(Context c) {
@@ -316,6 +381,14 @@ final class ResearchTradeEngine {
                     else if (mae <= -2.0) replay = "ENTRY STRESS • material adverse excursion; compare repeated failure signatures.";
                     else replay = "UNRESOLVED EDGE • no >=0.5% net opportunity captured.";
                     p.put("replaySummary", replay);
+                    String failureBucket;
+                    if (net >= MIN_NET_WIN_PCT) failureBucket = "NONE_WIN";
+                    else if (p.optInt("dataConfidence", 100) < 60) failureBucket = "DATA_QUALITY";
+                    else if (p.optDouble("entryPrice", 0) > p.optDouble("buyHigh", Double.MAX_VALUE)) failureBucket = "LATE_OR_CHASING_ENTRY";
+                    else if (mfe >= MIN_NET_WIN_PCT) failureBucket = "POOR_EXIT";
+                    else if (mae <= -2.0) failureBucket = "ENTRY_STRESS";
+                    else failureBucket = "NO_ROBUST_EDGE";
+                    p.put("failureBucket", failureBucket);
                 } else {
                     p.put("replaySummary", "OPEN • not scored as win/loss until the trade closes.");
                 }
@@ -384,6 +457,8 @@ final class ResearchTradeEngine {
                     .append(" • Net ").append(one(p.optDouble("netPct", 0))).append("%")
                     .append("\nMAE ").append(one(p.optDouble("maePct", 0))).append("% • MFE +")
                     .append(one(p.optDouble("mfePct", 0))).append("%")
+                    .append("\nExit model: ").append(p.optString("exitState", "HOLD"))
+                    .append(" • attribution: ").append(p.optString("signalAttribution", "RESEARCH_ONLY"))
                     .append("\n").append(p.optString("lastReason", "Monitoring entry/exit conditions."));
         }
         return b.length() == 0 ? "No active Research trades. Entry-ready candidates will appear here." : b.toString();
@@ -416,6 +491,10 @@ final class ResearchTradeEngine {
             p.put("netPct", 0.0);
             p.put("rank", rank);
             p.put("strategy", prediction.optString("strategy"));
+            p.put("strategyVersion", prediction.optString("strategyVersion", ResearchEngine.STRATEGY_VERSION));
+            p.put("dataConfidence", prediction.optInt("dataConfidence", ResearchDataQuality.score(prediction)));
+            p.put("missingData", prediction.optString("missingData", ResearchDataQuality.missing(prediction)));
+            p.put("forecastSessionKey", prediction.optString("forecastSessionKey", AppPrefs.getResearchForecastTargetKey(c)));
             p.put("score", prediction.optInt("similarity"));
             p.put("consensus", prediction.optInt("consensus"));
             p.put("buyLow", prediction.optDouble("buyLow"));
@@ -425,12 +504,16 @@ final class ResearchTradeEngine {
             p.put("sellHigh", prediction.optDouble("sellHigh"));
             p.put("entryReasons", prediction.optString("reasons"));
             p.put("entryCounterSignals", prediction.optString("counterSignals"));
+            p.put("signalAttribution", hasOfficialEntryBefore(c, prediction.optString("symbol"), now)
+                    ? "UNIVEST_THEN_RESEARCH_CONFIRMED" : "RESEARCH_ONLY");
+            p.put("exitState", "HOLD");
             p.put("lastReason", "Entry trigger reached inside frozen Research buy/chase range.");
         } catch (Exception ignored) {}
         JSONArray a = ResearchStore.positions(c); a.put(p); ResearchStore.savePositions(c, a);
         AppPrefs.setResearchAction(c, p.optString("symbol"), "BUY");
         DiagnosticsStore.runtime(c, "RESEARCH_SHADOW_ENTRY", p.optString("symbol"),
                 "Frozen Research entry triggered at ₹" + money(ltp) + ".");
+        ResearchEventStore.appendDecisionSnapshot(c, "RESEARCH_SHADOW_ENTRY", p);
         return p;
     }
 
@@ -518,8 +601,77 @@ final class ResearchTradeEngine {
             replaceInArray(a, index, p);
             DiagnosticsStore.runtime(c, "RESEARCH_TRADE_CLOSED", p.optString("symbol"),
                     exitType + " • net " + one(net) + "% • " + reason);
+            ResearchEventStore.appendDecisionSnapshot(c, "RESEARCH_TRADE_CLOSED", p);
             AppPrefs.setResearchAction(c, "", "");
         } catch (Exception ignored) {}
+    }
+
+    static String failureClustersText(Context c) {
+        JSONArray a = ResearchStore.positions(c);
+        java.util.Map<String,Integer> counts = new java.util.LinkedHashMap<>();
+        for (int i = 0; i < a.length(); i++) {
+            JSONObject p = a.optJSONObject(i);
+            if (p == null || !"CLOSED".equals(p.optString("state"))) continue;
+            String bucket = p.optString("failureBucket", "");
+            if (bucket.isEmpty() || "NONE_WIN".equals(bucket)) continue;
+            counts.put(bucket, counts.containsKey(bucket) ? counts.get(bucket) + 1 : 1);
+        }
+        if (counts.isEmpty()) return "No repeated Research failure clusters yet.";
+        java.util.List<java.util.Map.Entry<String,Integer>> rows = new java.util.ArrayList<>(counts.entrySet());
+        rows.sort((x,y) -> Integer.compare(y.getValue(), x.getValue()));
+        StringBuilder b = new StringBuilder();
+        for (java.util.Map.Entry<String,Integer> e : rows) {
+            if (b.length() > 0) b.append("\n");
+            b.append(e.getKey()).append(" • ").append(e.getValue()).append(" occurrence");
+            if (e.getValue() != 1) b.append("s");
+            if (e.getValue() >= 3) b.append(" • CHALLENGER REVIEW");
+        }
+        return b.toString();
+    }
+
+    private static void logSkip(Context c, String symbol, String reason, String detail) {
+        if (!AppPrefs.claimRecent(c, "research_skip_" + symbol + "_" + reason, 60L * 60L * 1000L)) return;
+        String msg = reason + " • " + detail;
+        DiagnosticsStore.runtime(c, "RESEARCH_SKIP", symbol, msg);
+        JSONObject j = new JSONObject();
+        try {
+            j.put("symbol", symbol);
+            j.put("reason", reason);
+            j.put("detail", detail);
+            j.put("sessionKey", NseTradingCalendar.dayKey(System.currentTimeMillis()));
+        } catch (Exception ignored) {}
+        ResearchEventStore.appendDecisionSnapshot(c, "RESEARCH_SKIP", j);
+    }
+
+    private static int liveResearchPositionCount(Context c) {
+        JSONArray a = ResearchStore.positions(c); int n = 0;
+        for (int i = 0; i < a.length(); i++) {
+            JSONObject p = a.optJSONObject(i);
+            if (p != null && p.optBoolean("live", false) && !"CLOSED".equals(p.optString("state"))) n++;
+        }
+        return n;
+    }
+
+    private static int liveResearchCapital(Context c) {
+        JSONArray a = ResearchStore.positions(c); int total = 0;
+        for (int i = 0; i < a.length(); i++) {
+            JSONObject p = a.optJSONObject(i);
+            if (p != null && p.optBoolean("live", false) && !"CLOSED".equals(p.optString("state")))
+                total += Math.max(0, p.optInt("budget", 0));
+        }
+        return total;
+    }
+
+    private static boolean hasOfficialEntryBefore(Context c, String symbol, long beforeAt) {
+        java.util.List<JSONObject> signals = ResearchStore.signals(c);
+        for (int i = signals.size() - 1; i >= 0; i--) {
+            JSONObject j = signals.get(i);
+            if (!"ENTRY".equals(j.optString("type"))) continue;
+            if (!symbol.equalsIgnoreCase(j.optString("symbol"))) continue;
+            long at = j.optLong("signalAt", 0);
+            if (at > 0 && at <= beforeAt && NseTradingCalendar.dayKey(at).equals(NseTradingCalendar.dayKey(beforeAt))) return true;
+        }
+        return false;
     }
 
     private static JSONObject findOpen(Context c, String symbol) {
