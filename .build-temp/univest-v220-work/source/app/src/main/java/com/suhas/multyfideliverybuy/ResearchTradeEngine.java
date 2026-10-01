@@ -329,14 +329,21 @@ final class ResearchTradeEngine {
 
     static String accuracyText(Context c) {
         JSONArray a = ResearchStore.positions(c);
+        String todayKey = AppPrefs.istDayKey(System.currentTimeMillis());
         int closed = 0, wins = 0, sameDay = 0, sameDayWins = 0, pre = 0, open = 0;
+        int todayClosed = 0, todayWins = 0, todayOpened = 0;
         double mae = 0, mfe = 0, capture = 0;
         for (int i = 0; i < a.length(); i++) {
             JSONObject p = a.optJSONObject(i); if (p == null) continue;
+            if (todayKey.equals(AppPrefs.istDayKey(p.optLong("entryAt", 0)))) todayOpened++;
             if (!"CLOSED".equals(p.optString("state"))) { open++; continue; }
             closed++;
             double net = p.optDouble("netPct", 0);
             if (net >= MIN_NET_WIN_PCT) wins++;
+            if (todayKey.equals(AppPrefs.istDayKey(p.optLong("exitAt", 0)))) {
+                todayClosed++;
+                if (net >= MIN_NET_WIN_PCT) todayWins++;
+            }
             if ("SAME_DAY".equals(p.optString("horizon"))) {
                 sameDay++;
                 if (net >= MIN_NET_WIN_PCT) sameDayWins++;
@@ -346,14 +353,18 @@ final class ResearchTradeEngine {
             mfe += p.optDouble("mfePct", 0);
             capture += p.optDouble("mfeCapturePct", 0);
         }
+        double todayRate = todayClosed == 0 ? 0 : todayWins * 100.0 / todayClosed;
         double winRate = closed == 0 ? 0 : wins * 100.0 / closed;
         StringBuilder b = new StringBuilder();
-        b.append("Closed ").append(closed).append(" • Wins ≥0.5% net ").append(wins)
+        b.append("TODAY • Entries ").append(todayOpened)
+                .append(" • Closed ").append(todayClosed)
+                .append(" • Wins ≥0.5% net ").append(todayWins)
+                .append(" • Accuracy ").append(one(todayRate)).append("%");
+        b.append("\nLIFETIME • Closed ").append(closed).append(" • Wins ").append(wins)
                 .append(" • Win rate ").append(one(winRate)).append("%")
-                .append("\nOpen / unresolved ").append(open)
-                .append(" • Pre-Univest hits ").append(pre);
-        if (sameDay > 0) b.append("\nSame-day ").append(sameDayWins).append("/").append(sameDay)
-                .append(" • ").append(one(sameDayWins * 100.0 / sameDay)).append("%");
+                .append(" • Open/unresolved ").append(open)
+                .append("\nPre-Univest prediction hits ").append(pre);
+        if (sameDay > 0) b.append(" • Same-day ").append(sameDayWins).append("/").append(sameDay);
         if (closed > 0) b.append("\nAvg MAE ").append(one(mae / closed)).append("% • Avg MFE +")
                 .append(one(mfe / closed)).append("% • Avg MFE captured ").append(one(capture / closed)).append("%");
         return b.toString();
