@@ -405,6 +405,7 @@ final class ResearchTradeEngine {
         String todayKey = AppPrefs.istDayKey(System.currentTimeMillis());
         int closed = 0, wins = 0, sameDay = 0, sameDayWins = 0, pre = 0, open = 0;
         int todayClosed = 0, todayWins = 0, todayOpened = 0;
+        int entryOpportunities = 0, efficientExits = 0;
         double mae = 0, mfe = 0, capture = 0;
         for (int i = 0; i < a.length(); i++) {
             JSONObject p = a.optJSONObject(i); if (p == null) continue;
@@ -412,6 +413,10 @@ final class ResearchTradeEngine {
             if (!"CLOSED".equals(p.optString("state"))) { open++; continue; }
             closed++;
             double net = p.optDouble("netPct", 0);
+            double tradeMfe = p.optDouble("mfePct", 0);
+            double tradeCapture = p.optDouble("mfeCapturePct", 0);
+            if (tradeMfe >= MIN_NET_WIN_PCT) entryOpportunities++;
+            if (net >= MIN_NET_WIN_PCT && tradeCapture >= 55.0) efficientExits++;
             if (net >= MIN_NET_WIN_PCT) wins++;
             if (todayKey.equals(AppPrefs.istDayKey(p.optLong("exitAt", 0)))) {
                 todayClosed++;
@@ -423,11 +428,13 @@ final class ResearchTradeEngine {
             }
             if (p.optBoolean("preUnivestHit", false)) pre++;
             mae += p.optDouble("maePct", 0);
-            mfe += p.optDouble("mfePct", 0);
-            capture += p.optDouble("mfeCapturePct", 0);
+            mfe += tradeMfe;
+            capture += tradeCapture;
         }
         double todayRate = todayClosed == 0 ? 0 : todayWins * 100.0 / todayClosed;
         double winRate = closed == 0 ? 0 : wins * 100.0 / closed;
+        double entryAccuracy = closed == 0 ? 0 : entryOpportunities * 100.0 / closed;
+        double exitAccuracy = closed == 0 ? 0 : efficientExits * 100.0 / closed;
         StringBuilder b = new StringBuilder();
         b.append("TODAY • Entries ").append(todayOpened)
                 .append(" • Closed ").append(todayClosed)
@@ -436,11 +443,50 @@ final class ResearchTradeEngine {
         b.append("\nLIFETIME • Closed ").append(closed).append(" • Wins ").append(wins)
                 .append(" • Win rate ").append(one(winRate)).append("%")
                 .append(" • Open/unresolved ").append(open)
-                .append("\nPre-Univest prediction hits ").append(pre);
+                .append("\nEntry timing ").append(one(entryAccuracy)).append("%")
+                .append(" • Exit efficiency ").append(one(exitAccuracy)).append("%");
+        b.append("\n").append(selectionAccuracyText(c))
+                .append("\nPre-Univest trade hits ").append(pre);
         if (sameDay > 0) b.append(" • Same-day ").append(sameDayWins).append("/").append(sameDay);
         if (closed > 0) b.append("\nAvg MAE ").append(one(mae / closed)).append("% • Avg MFE +")
                 .append(one(mfe / closed)).append("% • Avg MFE captured ").append(one(capture / closed)).append("%");
         return b.toString();
+    }
+
+    private static String selectionAccuracyText(Context c) {
+        java.util.List<JSONObject> history = ResearchStore.forecastHistory(c, 250);
+        java.util.List<JSONObject> signals = ResearchStore.signals(c);
+        int eligible = 0, top10 = 0, top5 = 0;
+        for (JSONObject sig : signals) {
+            if (!"ENTRY".equals(sig.optString("type"))) continue;
+            long at = sig.optLong("signalAt", 0);
+            String symbol = sig.optString("symbol", "");
+            if (at <= 0 || symbol.isEmpty()) continue;
+            String session = NseTradingCalendar.dayKey(at);
+            JSONObject best = null; long bestAt = -1;
+            for (JSONObject snap : history) {
+                if (!session.equals(snap.optString("targetSessionKey"))) continue;
+                long frozen = snap.optLong("frozenAt", 0);
+                if (frozen <= 0 || frozen > at || frozen < bestAt) continue;
+                best = snap; bestAt = frozen;
+            }
+            if (best == null) continue;
+            eligible++;
+            JSONArray preds = best.optJSONArray("predictions");
+            int rank = 0;
+            if (preds != null) {
+                for (int i = 0; i < preds.length() && i < 10; i++) {
+                    JSONObject p = preds.optJSONObject(i);
+                    if (p != null && symbol.equalsIgnoreCase(p.optString("symbol"))) { rank = i + 1; break; }
+                }
+            }
+            if (rank > 0) top10++;
+            if (rank > 0 && rank <= 5) top5++;
+        }
+        if (eligible == 0) return "Univest prediction accuracy • awaiting comparable frozen sessions";
+        return "Univest prediction accuracy • Top-10 " + top10 + "/" + eligible + " ("
+                + one(top10 * 100.0 / eligible) + "%) • Top-5 " + top5 + "/" + eligible + " ("
+                + one(top5 * 100.0 / eligible) + "%)";
     }
 
     static String activePositionsText(Context c) {
