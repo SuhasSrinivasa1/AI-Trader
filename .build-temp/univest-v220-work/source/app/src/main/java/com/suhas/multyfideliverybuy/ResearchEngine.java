@@ -215,10 +215,12 @@ final class ResearchEngine {
         if (eligible.isEmpty()) return new JSONArray();
 
         final long now = System.currentTimeMillis();
+        final JSONObject marketContext = ResearchMarketContext.snapshot(c, now);
+        ResearchEventStore.appendDecisionSnapshot(c, "MARKET_REGIME_SNAPSHOT", marketContext);
         ExecutorService pool = Executors.newFixedThreadPool(SCAN_THREADS);
         List<Future<JSONObject>> futures = new ArrayList<>();
         for (InstrumentRepository.Instrument ins : eligible) {
-            futures.add(pool.submit(() -> scoreInstrument(c, ins, now)));
+            futures.add(pool.submit(() -> scoreInstrument(c, ins, now, marketContext)));
         }
         pool.shutdown();
 
@@ -285,7 +287,7 @@ final class ResearchEngine {
         }
     }
 
-    private static JSONObject scoreInstrument(Context c, InstrumentRepository.Instrument ins, long now) {
+    private static JSONObject scoreInstrument(Context c, InstrumentRepository.Instrument ins, long now, JSONObject marketContext) {
         try {
             throttleScanRequest();
             List<GrowwClient.Candle> candles = GrowwClient.getHistoricalCandles(
@@ -310,7 +312,9 @@ final class ResearchEngine {
             j.put("counterSignals", counter(f));
             j.put("scannedAt", now);
             j.put("fundamentalsStatus", "UNKNOWN_NOT_CONNECTED");
-            j.put("marketRegimeStatus", "NOT_CONNECTED");
+            j.put("marketRegimeStatus", ResearchMarketContext.label(marketContext));
+            j.put("marketRegimeText", ResearchMarketContext.text(marketContext));
+            j.put("sectorContextStatus", "NOT_CONNECTED");
             j.put("strategyVersion", STRATEGY_VERSION);
             ResearchDataQuality.annotate(j);
             return j;
@@ -393,6 +397,8 @@ final class ResearchEngine {
                     .append("\nMissing: ").append(j.optString("missingData", "not assessed"));
             if (!j.optString("newsSignal", "").isEmpty())
                 b.append("\nNews: ").append(j.optString("newsSignal"));
+            if (!j.optString("marketRegimeText", "").isEmpty())
+                b.append("\nMarket: ").append(j.optString("marketRegimeText"));
         }
         return b.toString();
     }
