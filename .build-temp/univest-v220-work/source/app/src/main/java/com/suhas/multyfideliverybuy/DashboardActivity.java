@@ -55,13 +55,17 @@ public class DashboardActivity extends Activity {
     private int selectedTab = 0;
     private File pendingExport;
     private long lastBrokerSyncAt = 0L;
+    private String selectedResearchSymbol = "";
+    private String selectedResearchAction = "";
 
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
         getWindow().setStatusBarColor(BG);
         getWindow().setNavigationBarColor(NAV_BG);
         ResearchScheduler.ensureScheduled(getApplicationContext());
+        ResearchMonitorScheduler.ensureScheduled(getApplicationContext());
         requestNotificationPermissionIfNeeded();
+        applyIntent(getIntent());
         setContentView(buildShell());
 
         new Thread(() -> {
@@ -83,7 +87,27 @@ public class DashboardActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         ResearchScheduler.ensureScheduled(getApplicationContext());
+        ResearchMonitorScheduler.ensureScheduled(getApplicationContext());
+        if (ResearchTradeEngine.isMarketHoursIst()) {
+            new Thread(() -> ResearchTradeEngine.evaluateLive(getApplicationContext()), "research-resume-monitor").start();
+        }
         render();
+    }
+
+    @Override protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        applyIntent(intent);
+        render();
+    }
+
+    private void applyIntent(Intent intent) {
+        if (intent == null) return;
+        selectedTab = intent.getIntExtra("open_tab", selectedTab);
+        String symbol = intent.getStringExtra("research_symbol");
+        String action = intent.getStringExtra("research_action");
+        if (symbol != null && !symbol.trim().isEmpty()) selectedResearchSymbol = symbol.trim().toUpperCase(Locale.US);
+        if (action != null && !action.trim().isEmpty()) selectedResearchAction = action.trim().toUpperCase(Locale.US);
     }
 
     private View buildShell() {
@@ -156,7 +180,13 @@ public class DashboardActivity extends Activity {
                 AppPrefs.getResearchScheduleMethod(this).startsWith("JOB_") ? GREEN : AMBER), margins(0, 8, 0, 0));
         root.addView(status, margins(0, 20, 0, 14));
 
-        Button scan = primaryButton("RUN OFF-MARKET RESEARCH");
+        LinearLayout accuracy = card();
+        accuracy.addView(sectionRow("RESEARCH ACCURACY", "Shadow + Live"));
+        accuracy.addView(body(ResearchTradeEngine.accuracyText(this)), margins(0, 12, 0, 0));
+        accuracy.addView(meta("Wins require ≥0.5% estimated net profit. Open trades are unresolved, not losses."), margins(0, 8, 0, 0));
+        root.addView(accuracy, margins(0, 0, 0, 14));
+
+        Button scan = primaryButton("RUN FULL NSE OFF-MARKET RESEARCH");
         scan.setOnClickListener(v -> runResearchNow(scan));
         root.addView(scan, fixedMargins(-1, 54, 0, 0, 0, 14));
 
@@ -175,6 +205,11 @@ public class DashboardActivity extends Activity {
         dna.addView(body("Compares candle structure, trend, ATR, volume, momentum and later official exit behaviour. Provisional volatility-normalized ranges are replaced as completed campaigns accumulate."), margins(0, 12, 0, 0));
         root.addView(dna, margins(0, 0, 0, 14));
 
+        LinearLayout lifecycle = card();
+        lifecycle.addView(sectionRow("OFFICIAL ENTRY → EXIT LIFECYCLES", "Reverse engineering"));
+        lifecycle.addView(body(ResearchEngine.officialLifecycleText(this, 8)), margins(0, 12, 0, 0));
+        root.addView(lifecycle, margins(0, 0, 0, 14));
+
         LinearLayout intel = card();
         intel.addView(sectionRow("MARKET INTELLIGENCE", "India + Global"));
         intel.addView(body(ResearchEngine.intelligenceText(this)), margins(0, 12, 0, 0));
@@ -189,9 +224,31 @@ public class DashboardActivity extends Activity {
 
         LinearLayout intro = card();
         intro.addView(sectionRow("FORECAST ENGINE", lastResearchTime()));
-        intro.addView(body("Ranks NSE candidates by similarity to historically observed Univest 1–3 month recommendations."), margins(0, 12, 0, 0));
-        intro.addView(meta("Research only • forecasts never enter the official broker execution lane"), margins(0, 8, 0, 0));
+        intro.addView(body("Scans the full eligible NSE CASH universe off-market, freezes the Top 10, then monitors those candidates live for entry/exit timing."), margins(0, 12, 0, 0));
+        intro.addView(meta(AppPrefs.isResearchAutoTradeEnabled(this)
+                ? "Research AutoTrade ON • qualified Research entries/exits may place real CNC orders"
+                : "Research AutoTrade OFF • entry/exit notifications require your confirmation"), margins(0, 8, 0, 0));
         root.addView(intro, margins(0, 20, 0, 14));
+
+        String actionSymbol = !selectedResearchSymbol.isEmpty() ? selectedResearchSymbol : ResearchTradeEngine.actionSymbol(this);
+        String actionType = !selectedResearchAction.isEmpty() ? selectedResearchAction : ResearchTradeEngine.actionType(this);
+        if (!actionSymbol.isEmpty() && ("BUY".equals(actionType) || "SELL".equals(actionType))) {
+            LinearLayout actionCard = card();
+            actionCard.addView(sectionRow("RESEARCH TRADE ACTION", actionType));
+            actionCard.addView(body(actionSymbol + " • " + ("BUY".equals(actionType)
+                    ? "Entry condition reached. Order uses your configured Initial Entry Budget."
+                    : "Exit model detected a profitable weakening condition.")), margins(0, 10, 0, 0));
+            Button actionButton = primaryButton(("BUY".equals(actionType) ? "BUY " + formatRupees(AppPrefs.getUnivestBudget(this))
+                    : "SELL RESEARCH LOT") + " • " + actionSymbol);
+            actionButton.setOnClickListener(v -> executeResearchAction(actionButton, actionSymbol, actionType));
+            actionCard.addView(actionButton, fixedMargins(-1, 54, 0, 12, 0, 0));
+            root.addView(actionCard, margins(0, 0, 0, 14));
+        }
+
+        LinearLayout activeResearch = card();
+        activeResearch.addView(sectionRow("ACTIVE RESEARCH TRADES", AppPrefs.isResearchAutoTradeEnabled(this) ? "AUTO" : "MANUAL"));
+        activeResearch.addView(body(ResearchTradeEngine.activePositionsText(this)), margins(0, 12, 0, 0));
+        root.addView(activeResearch, margins(0, 0, 0, 14));
 
         LinearLayout expected = card();
         expected.addView(sectionRow("NEXT EXPECTED RECOMMENDATIONS", "Top 10"));
@@ -200,7 +257,7 @@ public class DashboardActivity extends Activity {
 
         LinearLayout ranges = card();
         ranges.addView(sectionRow("ENTRY / EXIT RANGE", "Model"));
-        ranges.addView(body("Each candidate includes a buy-pattern zone, chase ceiling and sell-pattern zone normalized by volatility. Strategy-specific learned ranges replace provisional ATR ranges as evidence improves."), margins(0, 12, 0, 0));
+        ranges.addView(body("The frozen sell zone is a reference, not a forced target. After entry, the Exit Model waits for ≥0.5% estimated net profit and weakening/exhaustion evidence; temporary drawdowns are tracked as MAE rather than automatically treated as failures."), margins(0, 12, 0, 0));
         root.addView(ranges, margins(0, 0, 0, 14));
 
         Button scan = primaryButton("REFRESH FORECAST OFF-MARKET");
@@ -244,6 +301,7 @@ public class DashboardActivity extends Activity {
         Switch live = styledSwitch("LIVE MODE — REAL CNC ORDERS", AppPrefs.isLiveMode(this));
         Switch avg = styledSwitch("CONTROLLED DOWNWARD AVERAGING", AppPrefs.isAveragingEnabled(this));
         Switch arm = styledSwitch("ARM UNIVEST AUTOTRADE", AppPrefs.isUnivestEnabled(this));
+        Switch researchAuto = styledSwitch("RESEARCH AUTOTRADE — REAL MONEY", AppPrefs.isResearchAutoTradeEnabled(this));
 
         safety.addView(budgetSlider(
                 "INITIAL ENTRY BUDGET",
@@ -265,6 +323,7 @@ public class DashboardActivity extends Activity {
         safety.addView(live, margins(0, 2, 0, 0));
         safety.addView(avg, margins(0, 0, 0, 0));
         safety.addView(arm, margins(0, 0, 0, 0));
+        safety.addView(researchAuto, margins(0, 0, 0, 0));
 
         live.setOnCheckedChangeListener((b, checked) -> {
             AppPrefs.setExecutionMode(this, checked ? AppPrefs.MODE_LIVE : AppPrefs.MODE_PAPER);
@@ -285,6 +344,30 @@ public class DashboardActivity extends Activity {
         });
 
         arm.setOnCheckedChangeListener((b, checked) -> onArmRequested(checked));
+
+        researchAuto.setOnCheckedChangeListener((b, checked) -> {
+            if (!checked) {
+                AppPrefs.setResearchAutoTradeEnabled(this, false);
+                DiagnosticsStore.runtime(this, "RESEARCH_AUTOTRADE_OFF", "", "Research AutoTrade disabled.");
+                return;
+            }
+            if (!AppPrefs.isLiveMode(this) || !AppPrefs.isReadyForBuy(this)) {
+                AppPrefs.setResearchAutoTradeEnabled(this, false);
+                Toast.makeText(this, "Research AutoTrade requires LIVE mode plus current Groww/static-IP readiness.", Toast.LENGTH_LONG).show();
+                render();
+                return;
+            }
+            new AlertDialog.Builder(this)
+                    .setTitle("Enable Research AutoTrade?")
+                    .setMessage("Qualified Research entry/exit signals may place real NSE CASH/CNC orders using the same configured budgets. Official Univest AutoTrade remains a separate signal source.")
+                    .setNegativeButton("Cancel", (d, w) -> render())
+                    .setPositiveButton("Enable", (d, w) -> {
+                        AppPrefs.setResearchAutoTradeEnabled(this, true);
+                        DiagnosticsStore.runtime(this, "RESEARCH_AUTOTRADE_ON", "",
+                                "Research AutoTrade enabled with shared configured budgets.");
+                        render();
+                    }).show();
+        });
 
         safety.addView(meta("Official source only • NSE CASH • CNC delivery"), margins(0, 10, 0, 0));
         safety.addView(meta(formatRupees(AppPrefs.getUnivestBudget(this)) + " initial • "
@@ -329,9 +412,9 @@ public class DashboardActivity extends Activity {
 
         LinearLayout about = card();
         about.addView(sectionRow("ABOUT", "Final UI"));
-        about.addView(body("Univest AutoTrade v2.5.0"), margins(0, 10, 0, 0));
+        about.addView(body("Univest AutoTrade v2.6.0"), margins(0, 10, 0, 0));
         about.addView(meta("Package: com.suhas.multyfideliverybuy"), margins(0, 6, 0, 0));
-        about.addView(meta("Official execution and Research/Forecast remain isolated by design."), margins(0, 6, 0, 0));
+        about.addView(meta("Official Univest execution and Research decisions remain separately attributed; Research→Univest same-symbol confirmation is intentionally additive."), margins(0, 6, 0, 0));
         root.addView(about, margins(0, 0, 0, 22));
 
         return scroll;
@@ -348,7 +431,7 @@ public class DashboardActivity extends Activity {
         left.addView(text(subtitle, 12, SUBTEXT, false), margins(0, 3, 0, 0));
         row.addView(left, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        TextView version = text("v2.5.0", 11, TEAL, true);
+        TextView version = text("v2.6.0", 11, TEAL, true);
         version.setGravity(Gravity.CENTER);
         version.setPadding(dp(10), dp(6), dp(10), dp(6));
         GradientDrawable chip = new GradientDrawable();
@@ -529,6 +612,22 @@ public class DashboardActivity extends Activity {
                 render();
             });
         }, "research-manual").start();
+    }
+
+    private void executeResearchAction(Button button, String symbol, String action) {
+        button.setEnabled(false);
+        button.setText(("BUY".equals(action) ? "BUYING " : "SELLING ") + symbol + "…");
+        new Thread(() -> {
+            String result = "BUY".equals(action)
+                    ? ResearchTradeEngine.executeBuy(getApplicationContext(), symbol, false)
+                    : ResearchTradeEngine.executeSell(getApplicationContext(), symbol, false, "Manual confirmation from Research Exit Ready.");
+            runOnUiThread(() -> {
+                Toast.makeText(this, result, Toast.LENGTH_LONG).show();
+                selectedResearchSymbol = "";
+                selectedResearchAction = "";
+                render();
+            });
+        }, "research-manual-action").start();
     }
 
     private void renderBottomNav() {
