@@ -397,7 +397,7 @@ public class DashboardActivity extends Activity {
         boolean scheduleOk = AppPrefs.getResearchScheduleMethod(this).startsWith("JOB_");
         scheduler.addView(sectionRow("RESEARCH SCHEDULER", scheduleOk ? "ACTIVE" : "NEEDS ATTENTION"));
         scheduler.addView(meta(ResearchScheduler.statusText(this), scheduleOk ? GREEN : AMBER), margins(0, 10, 0, 0));
-        scheduler.addView(meta("Orchestrator: " + ResearchOrchestrator.statusText(this), margins(0, 8, 0, 0));
+        scheduler.addView(meta("Orchestrator: " + ResearchOrchestrator.statusText(this)), margins(0, 8, 0, 0));
         Button repair = secondaryButton("REPAIR / RESCHEDULE RESEARCH");
         repair.setOnClickListener(v -> repairSchedule(repair));
         scheduler.addView(repair, fixedMargins(-1, 50, 0, 12, 0, 0));
