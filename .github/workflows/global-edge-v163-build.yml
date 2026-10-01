@@ -47,6 +47,7 @@ jobs:
           gunzip -c /tmp/v163.patch.gz > /tmp/v163.patch
           cd "$SRC"
           patch -p1 --batch < /tmp/v163.patch
+          cp "$GITHUB_WORKSPACE/fresh-global-edge/v163/CHANGELOG-v1.6.3.txt" CHANGELOG-v1.6.3.txt
           git diff --check --no-index /dev/null CHANGELOG-v1.6.3.txt >/dev/null 2>&1 || true
           grep -q 'versionCode = 163' app/build.gradle.kts
           grep -q 'versionName = "1.6.3"' app/build.gradle.kts
