@@ -37,7 +37,9 @@ jobs:
         run: |
           set -euo pipefail
           SRC=/tmp/v162/Global-Edge-AI-Trader-v1.5.0-source
-          tr -d '\r\n ' < fresh-global-edge/v162/v161-to-v162.patch.gz.b64 | base64 -d > /tmp/v162.patch.gz
+          cat fresh-global-edge/v162/patch-parts/part-*.b64 | tr -d '\r\n ' | base64 -d > /tmp/v162.patch.gz
+          echo 'e0264e6c1bcd8e22cbbb570803cae75b5bb5a5afcf98ab340c6486b14cbbbea1  /tmp/v162.patch.gz' | sha256sum -c -
+          gzip -t /tmp/v162.patch.gz
           gunzip -c /tmp/v162.patch.gz > /tmp/v162.patch
           cd "$SRC"
           patch -p1 --batch < /tmp/v162.patch
