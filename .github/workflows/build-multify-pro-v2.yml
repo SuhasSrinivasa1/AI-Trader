@@ -25,7 +25,7 @@ jobs:
           tar -xzf /tmp/android_v2.tgz
           test -f android/app/build.gradle.kts
 
-      - name: Apply debug manifest merge fix
+      - name: Apply source fixes from validated v2 tree
         run: |
           cat > android/app/src/debug/AndroidManifest.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
@@ -37,6 +37,16 @@ jobs:
                   tools:replace="android:networkSecurityConfig,android:usesCleartextTraffic" />
           </manifest>
           EOF
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('android/app/build.gradle.kts')
+          s=p.read_text()
+          s=s.replace('buildFeatures { compose = true }', 'buildFeatures {\n        compose = true\n        buildConfig = true\n    }')
+          p.write_text(s)
+          p=Path('android/app/src/main/java/com/multify/traderpro/ui/screens/TraderApp.kt')
+          s=p.read_text().replace('import androidx.compose.foundation.layout.weight\n','')
+          p.write_text(s)
+          PY
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
