@@ -37,17 +37,27 @@ final class ResearchStore {
         if (signal == null) return;
         try {
             String symbol = signal.symbol == null ? "" : signal.symbol.trim().toUpperCase(Locale.US);
+            long at = postTime > 0 ? postTime : System.currentTimeMillis();
+            String raw = signal.rawText == null ? "" : signal.rawText.trim();
+            List<JSONObject> recent = readJsonLines(context, SIGNALS, 30);
+            for (int i = recent.size() - 1; i >= 0; i--) {
+                JSONObject prior = recent.get(i);
+                if (!signal.type.name().equals(prior.optString("type"))) continue;
+                if (!symbol.equalsIgnoreCase(prior.optString("symbol"))) continue;
+                long priorAt = prior.optLong("signalAt", 0L);
+                if (Math.abs(at - priorAt) <= 30000L && raw.equals(prior.optString("raw", "").trim())) return;
+            }
             try {
                 InstrumentRepository.Instrument i = InstrumentRepository.resolve(InstrumentRepository.load(context), signal.symbol);
                 if (i != null) symbol = i.symbol;
             } catch (Throwable ignored) {}
             JSONObject j = new JSONObject();
             j.put("capturedAt", System.currentTimeMillis());
-            j.put("signalAt", postTime > 0 ? postTime : System.currentTimeMillis());
+            j.put("signalAt", at);
             j.put("type", signal.type.name());
             j.put("symbol", symbol);
             j.put("durationMonths", durationMonths(signal.rawText));
-            j.put("raw", signal.rawText == null ? "" : signal.rawText);
+            j.put("raw", raw);
             append(context, SIGNALS, j);
         } catch (Exception e) {
             DiagnosticsStore.error(context, "RESEARCH_CAPTURE_FAILED", signal.symbol, "Unable to archive Research Lab signal.", e);
