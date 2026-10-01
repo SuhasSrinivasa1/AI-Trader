@@ -53,6 +53,32 @@ final class ResearchEventStore {
         }
     }
 
+    static void captureDeepShortlist(Context c, java.util.List<JSONObject> candidates, long now, int limit) {
+        if (candidates == null || candidates.isEmpty()) return;
+        int n = Math.min(Math.max(1, limit), candidates.size());
+        for (int i = 0; i < n; i++) {
+            JSONObject p = candidates.get(i);
+            if (p == null) continue;
+            String symbol = p.optString("symbol", "");
+            if (symbol.isEmpty()) continue;
+            try {
+                Thread.sleep(175L);
+                List<GrowwClient.Candle> candles = GrowwClient.getHistoricalCandles(
+                        c, symbol, now - 7L * 24L * 60L * 60L * 1000L, now, "15minute");
+                if (candles != null && !candles.isEmpty()) {
+                    ResearchMath.Features f = ResearchMath.fromCandles(candles);
+                    p.put("intraday15mPoints", candles.size());
+                    p.put("intraday15mRsi14", f.rsi14);
+                    p.put("intraday15mReturn5Pct", f.return5Pct);
+                    p.put("intraday15mRelativeVolume20", f.relativeVolume20);
+                    appendMinuteCandles(c, symbol, candles, "EOD_DEEP_15M_SHORTLIST", now);
+                }
+            } catch (Throwable t) {
+                try { p.put("intraday15mStatus", "UNAVAILABLE"); } catch (Exception ignored) {}
+            }
+        }
+    }
+
     static void captureTopCandidates(Context c, JSONArray predictions, long now, int limit) {
         if (predictions == null || predictions.length() == 0) return;
         int n = Math.min(Math.max(1, limit), predictions.length());
