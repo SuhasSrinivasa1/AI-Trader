@@ -368,6 +368,7 @@ final class ResearchTradeEngine {
             for (int i = 0; i < a.length(); i++) {
                 JSONObject p = a.optJSONObject(i);
                 if (p == null) continue;
+                replayMinutePath(c, p);
                 if ("CLOSED".equals(p.optString("state"))) {
                     double net = p.optDouble("netPct", 0);
                     double mae = p.optDouble("maePct", 0);
@@ -397,6 +398,62 @@ final class ResearchTradeEngine {
             AppPrefs.setResearchAccuracyText(c, accuracyText(c));
         } catch (Throwable t) {
             DiagnosticsStore.error(c, "RESEARCH_REPLAY_FAILED", "", "Post-market Research replay failed.", t);
+        }
+    }
+
+    private static void replayMinutePath(Context c, JSONObject p) {
+        try {
+            long now = System.currentTimeMillis();
+            String today = NseTradingCalendar.dayKey(now);
+            if (today.equals(p.optString("minuteReplayKey", ""))) return;
+            long entryAt = p.optLong("entryAt", 0L);
+            if (entryAt <= 0) return;
+            boolean closed = "CLOSED".equals(p.optString("state"));
+            long exitAt = p.optLong("exitAt", 0L);
+            boolean relevantToday = today.equals(NseTradingCalendar.dayKey(entryAt))
+                    || (exitAt > 0 && today.equals(NseTradingCalendar.dayKey(exitAt))) || !closed;
+            if (!relevantToday) return;
+
+            Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("Asia/Kolkata"));
+            cal.setTimeInMillis(now);
+            cal.set(Calendar.HOUR_OF_DAY, 9); cal.set(Calendar.MINUTE, 15);
+            cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0);
+            long sessionStart = cal.getTimeInMillis();
+            long start = Math.max(entryAt, sessionStart);
+            long end = closed && exitAt > 0 ? Math.min(exitAt, now) : now;
+            if (end <= start) return;
+
+            List<GrowwClient.Candle> candles = GrowwClient.getHistoricalCandles(
+                    c, p.optString("symbol"), start - 60_000L, end + 60_000L, "1minute");
+            if (candles == null || candles.isEmpty()) {
+                p.put("minuteReplayKey", today);
+                p.put("minuteReplayPoints", 0);
+                return;
+            }
+            ResearchEventStore.appendMinuteCandles(c, p.optString("symbol"), candles, "POST_CLOSE_REPLAY", now);
+
+            double entry = p.optDouble("entryPrice", p.optDouble("shadowEntryPrice", 0));
+            if (!(entry > 0)) return;
+            double min = p.optDouble("minPrice", entry);
+            double max = p.optDouble("maxPrice", entry);
+            long peakSec = 0L, troughSec = 0L;
+            for (GrowwClient.Candle x : candles) {
+                if (x.low > 0 && x.low < min) { min = x.low; troughSec = x.epochSeconds; }
+                if (x.high > 0 && x.high > max) { max = x.high; peakSec = x.epochSeconds; }
+            }
+            p.put("minPrice", min);
+            p.put("maxPrice", max);
+            p.put("maePct", (min / entry - 1.0) * 100.0);
+            p.put("mfePct", (max / entry - 1.0) * 100.0);
+            p.put("minuteReplayKey", today);
+            p.put("minuteReplayPoints", candles.size());
+            if (peakSec > 0) p.put("timeToPeakMinutes", Math.max(0L, (peakSec * 1000L - entryAt) / 60000L));
+            if (troughSec > 0) p.put("timeToTroughMinutes", Math.max(0L, (troughSec * 1000L - entryAt) / 60000L));
+        } catch (Throwable t) {
+            try {
+                p.put("minuteReplayError", safe(t));
+                p.put("minuteReplayKey", NseTradingCalendar.dayKey(System.currentTimeMillis()));
+            } catch (Exception ignored) {}
         }
     }
 
