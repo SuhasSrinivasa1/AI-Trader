@@ -41,10 +41,33 @@ final class AppPrefs {
     static int getAveragingLevels(Context c) { return Math.max(1, Math.min(3, p(c).getInt("downward_averaging_levels", 3))); }
     static void setAveragingLevels(Context c, int v) { p(c).edit().putInt("downward_averaging_levels", Math.max(1, Math.min(3, v))).apply(); }
     static double getAveragingStepPct(Context c) { return 2.0; }
-    static int getAveragingBudget(Context c) { return 5000; }
 
-    static int getUnivestBudget(Context c) { return 20000; }
-    static void setUnivestBudget(Context c, int v) { p(c).edit().putInt("univest_budget", 20000).apply(); }
+    static final int UNIVEST_BUDGET_MAX = 100000;
+    static final int UNIVEST_BUDGET_STEP = 1000;
+
+    static int normalizeUnivestBudget(int v) {
+        int clamped = Math.max(0, Math.min(UNIVEST_BUDGET_MAX, v));
+        int rounded = ((clamped + (UNIVEST_BUDGET_STEP / 2)) / UNIVEST_BUDGET_STEP) * UNIVEST_BUDGET_STEP;
+        return Math.max(0, Math.min(UNIVEST_BUDGET_MAX, rounded));
+    }
+
+    static int getUnivestBudget(Context c) {
+        return normalizeUnivestBudget(p(c).getInt("univest_budget", 20000));
+    }
+    static void setUnivestBudget(Context c, int v) {
+        p(c).edit().putInt("univest_budget", normalizeUnivestBudget(v)).apply();
+    }
+
+    static int getUnivestAddBudget(Context c) {
+        return normalizeUnivestBudget(p(c).getInt("univest_add_budget", 5000));
+    }
+    static void setUnivestAddBudget(Context c, int v) {
+        p(c).edit().putInt("univest_add_budget", normalizeUnivestBudget(v)).apply();
+    }
+
+    // Re-entry and controlled downward averaging deliberately share one user-configurable budget.
+    static int getReentryBudget(Context c) { return getUnivestAddBudget(c); }
+    static int getAveragingBudget(Context c) { return getUnivestAddBudget(c); }
 
     static String getUnivestStatus(Context c) { return p(c).getString("univest_status", "Univest automation is OFF."); }
     static long getUnivestStatusTime(Context c) { return p(c).getLong("univest_status_time", 0L); }
