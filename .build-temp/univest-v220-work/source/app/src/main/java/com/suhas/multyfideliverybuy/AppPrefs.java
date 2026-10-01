@@ -33,7 +33,9 @@ final class AppPrefs {
     static boolean isLiveMode(Context c) { return MODE_LIVE.equals(getExecutionMode(c)); }
     static void setExecutionMode(Context c, String mode) {
         String normalized = MODE_LIVE.equals(mode) ? MODE_LIVE : MODE_PAPER;
-        p(c).edit().putString("execution_mode", normalized).putBoolean("univest_enabled", false).apply();
+        p(c).edit().putString("execution_mode", normalized)
+                .putBoolean("univest_enabled", false)
+                .putBoolean("research_autotrade_enabled", false).apply();
     }
 
     static boolean isAveragingEnabled(Context c) { return p(c).getBoolean("downward_averaging_enabled", true); }
@@ -115,7 +117,8 @@ final class AppPrefs {
 
     static void invalidateConnectionReadiness(Context c) {
         p(c).edit().remove("access_token").putBoolean("auth_test_ok", false).putBoolean("static_ip_match", false)
-                .putBoolean("armed", false).putBoolean("univest_enabled", false).apply();
+                .putBoolean("armed", false).putBoolean("univest_enabled", false)
+                .putBoolean("research_autotrade_enabled", false).apply();
     }
 
     static boolean isAuthTestFresh(Context c) {
