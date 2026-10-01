@@ -239,6 +239,8 @@ final class ResearchEngine {
         }
 
         candidates.sort((a, b) -> Integer.compare(b.optInt("similarity"), a.optInt("similarity")));
+        AppPrefs.setResearchStatus(c, "Full NSE scan complete • deep-analyzing top shortlist with 15-minute context…");
+        ResearchEventStore.captureDeepShortlist(c, candidates, now, 50);
         int deepCount = Math.min(25, candidates.size());
         for (int i = 0; i < deepCount; i++) {
             JSONObject j = candidates.get(i);
