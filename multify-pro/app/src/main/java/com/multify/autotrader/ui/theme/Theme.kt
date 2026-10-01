@@ -12,7 +12,15 @@ private val Scheme=darkColorScheme(
  background=Color(0xFF07111F),onBackground=Color(0xFFF3F7FB),surface=Color(0xFF0E1A2B),onSurface=Color(0xFFF3F7FB),
  surfaceVariant=Color(0xFF17253A),onSurfaceVariant=Color(0xFFAAB7C7),outline=Color(0xFF3A4B61)
 )
-@Composable fun MultifyTheme(content:@Composable()->Unit){
- val view=LocalView.current;if(!view.isInEditMode){val w=(view.context as Activity).window;WindowCompat.getInsetsController(w,view).apply{isAppearanceLightStatusBars=false;isAppearanceLightNavigationBars=false}}
+@Composable
+fun MultifyTheme(content: @Composable () -> Unit){
+ val view=LocalView.current
+ if(!view.isInEditMode){
+  val window=(view.context as Activity).window
+  WindowCompat.getInsetsController(window,view).apply{
+   isAppearanceLightStatusBars=false
+   isAppearanceLightNavigationBars=false
+  }
+ }
  MaterialTheme(colorScheme=Scheme,content=content)
 }
