@@ -1,0 +1,3 @@
+-keepattributes Signature,*Annotation*
+-keep class com.multify.autotrader.data.network.** { *; }
+-keepclassmembers class * { @com.google.gson.annotations.SerializedName <fields>; }
