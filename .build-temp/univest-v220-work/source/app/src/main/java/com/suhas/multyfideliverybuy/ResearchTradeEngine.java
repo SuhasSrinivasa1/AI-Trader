@@ -598,6 +598,9 @@ final class ResearchTradeEngine {
             p.put("dataConfidence", prediction.optInt("dataConfidence", ResearchDataQuality.score(prediction)));
             p.put("missingData", prediction.optString("missingData", ResearchDataQuality.missing(prediction)));
             p.put("forecastSessionKey", prediction.optString("forecastSessionKey", AppPrefs.getResearchForecastTargetKey(c)));
+            p.put("lastMinuteCaptureAt", prediction.optLong("lastMinuteCaptureAt", 0L));
+            p.put("minuteDataPoints", prediction.optInt("minuteDataPoints", 0));
+            p.put("preopenFreezeAt", prediction.optLong("preopenFreezeAt", 0L));
             p.put("score", prediction.optInt("similarity"));
             p.put("consensus", prediction.optInt("consensus"));
             p.put("buyLow", prediction.optDouble("buyLow"));
