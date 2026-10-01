@@ -394,6 +394,9 @@ final class ResearchTradeEngine {
             p.put("entryAt", now);
             p.put("shadowEntryPrice", ltp);
             p.put("entryPrice", ltp);
+            int frozenBudget = AppPrefs.getUnivestBudget(c);
+            p.put("budget", frozenBudget);
+            p.put("shadowQuantity", ltp > 0 ? (int)Math.floor(frozenBudget / ltp) : 0);
             p.put("lastPrice", ltp);
             p.put("minPrice", ltp);
             p.put("maxPrice", ltp);
@@ -464,6 +467,7 @@ final class ResearchTradeEngine {
     private static double estimatedNetPct(JSONObject p, double sellPrice) {
         double entry = p.optDouble("entryPrice", p.optDouble("shadowEntryPrice", 0));
         int qty = p.optInt("quantity", 0);
+        if (qty <= 0) qty = p.optInt("shadowQuantity", 0);
         if (qty > 0 && entry > 0) {
             double net = DeliveryNetTarget.estimatedNetProfit(entry, qty, sellPrice);
             double buy = entry * qty;
