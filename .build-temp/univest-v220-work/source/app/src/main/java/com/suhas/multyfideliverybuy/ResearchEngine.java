@@ -27,20 +27,23 @@ final class ResearchEngine {
     private static final long DAY = TimeUnit.DAYS.toMillis(1);
     private static final int SCAN_THREADS = 4;
     private static final int FINAL_LIMIT = 10;
+    static final String STRATEGY_VERSION = "R2.7-1";
 
     private ResearchEngine() {}
 
     static boolean isOffMarketNowIst() {
-        Calendar c = Calendar.getInstance(TimeZone.getTimeZone("Asia/Kolkata"));
-        int d = c.get(Calendar.DAY_OF_WEEK);
-        if (d == Calendar.SATURDAY || d == Calendar.SUNDAY) return true;
-        int m = c.get(Calendar.HOUR_OF_DAY) * 60 + c.get(Calendar.MINUTE);
-        return m < 540 || m >= 960;
+        return !NseTradingCalendar.isRegularMarketOpen(System.currentTimeMillis());
     }
 
     static void runNightly(Context c) {
+        long now = System.currentTimeMillis();
+        if (!NseTradingCalendar.isTradingDay(now)) {
+            AppPrefs.setResearchStatus(c, "NSE closed • " + NseTradingCalendar.describe(now)
+                    + " • no new candle forecast generated; latest frozen forecast retained.");
+            return;
+        }
         if (!isOffMarketNowIst()) {
-            AppPrefs.setResearchStatus(c, "Research is locked during market hours.");
+            AppPrefs.setResearchStatus(c, "Research is locked during regular NSE market hours.");
             return;
         }
         try {
@@ -55,8 +58,27 @@ final class ResearchEngine {
             AppPrefs.setResearchStatus(c, "Scanning entire eligible NSE CASH universe…");
             JSONArray predictions = scanEntireNse(c, all);
             long frozenAt = System.currentTimeMillis();
+            String targetSession = NseTradingCalendar.nextTradingDayKey(frozenAt);
+            for (int i = 0; i < predictions.length(); i++) {
+                JSONObject p = predictions.optJSONObject(i);
+                if (p == null) continue;
+                try {
+                    p.put("forecastSessionKey", targetSession);
+                    p.put("freezeType", "EOD_FROZEN");
+                    ResearchDataQuality.annotate(p);
+                } catch (Exception ignored) {}
+            }
             ResearchStore.savePredictions(c, predictions);
-            ResearchStore.appendForecastSnapshot(c, predictions, frozenAt);
+            ResearchStore.appendForecastSnapshot(c, predictions, frozenAt, "EOD_FROZEN", targetSession);
+            AppPrefs.setResearchForecastTargetKey(c, targetSession);
+            JSONObject freeze = new JSONObject();
+            try {
+                freeze.put("frozenAt", frozenAt);
+                freeze.put("targetSessionKey", targetSession);
+                freeze.put("candidateCount", predictions.length());
+                freeze.put("strategyVersion", STRATEGY_VERSION);
+            } catch (Exception ignored) {}
+            ResearchEventStore.appendDecisionSnapshot(c, "EOD_FORECAST_FREEZE", freeze);
 
             ResearchTradeEngine.replayAndScore(c);
             ResearchMonitorScheduler.ensureScheduled(c);
@@ -139,6 +161,7 @@ final class ResearchEngine {
                 j.put("evidence", e);
                 j.put("avgMatch", avg);
                 j.put("status", e >= 8 ? "CHALLENGER" : e >= 3 ? "DEVELOPING" : "EXPERIMENTAL");
+                j.put("strategyVersion", STRATEGY_VERSION);
                 a.put(j);
             } catch (Exception ignored) {}
         }
@@ -220,7 +243,10 @@ final class ResearchEngine {
         ResearchStore.saveIntelligence(c, intel);
 
         JSONArray out = new JSONArray();
-        for (JSONObject j : candidates) out.put(j);
+        for (JSONObject j : candidates) {
+            ResearchDataQuality.annotate(j);
+            out.put(j);
+        }
         return out;
     }
 
@@ -238,6 +264,7 @@ final class ResearchEngine {
             j.put("strategy", sc.bestStrategy);
             j.put("similarity", sc.bestScore);
             j.put("consensus", sc.consensus);
+            j.put("strategyVersion", STRATEGY_VERSION);
             j.put("buyLow", z[0]);
             j.put("buyHigh", z[1]);
             j.put("chaseLimit", z[2]);
@@ -248,6 +275,8 @@ final class ResearchEngine {
             j.put("scannedAt", now);
             j.put("fundamentalsStatus", "UNKNOWN_NOT_CONNECTED");
             j.put("marketRegimeStatus", "NOT_CONNECTED");
+            j.put("strategyVersion", STRATEGY_VERSION);
+            ResearchDataQuality.annotate(j);
             return j;
         } catch (Throwable ignored) {
             return null;
@@ -318,12 +347,14 @@ final class ResearchEngine {
                     .append(" - ").append(j.optInt("similarity")).append("/100 - ")
                     .append(j.optString("strategy"))
                     .append("\nConsensus ").append(j.optInt("consensus")).append("/5 • FROZEN FORECAST")
+                    .append(" • data ").append(j.optInt("dataConfidence")).append("%")
                     .append(String.format(Locale.US,
                             "\nBuy %.2f-%.2f • chase %.2f\nReference sell zone %.2f-%.2f",
                             j.optDouble("buyLow"), j.optDouble("buyHigh"), j.optDouble("chaseLimit"),
                             j.optDouble("sellLow"), j.optDouble("sellHigh")))
                     .append("\nWhy: ").append(j.optString("reasons"))
-                    .append("\nCounter: ").append(j.optString("counterSignals"));
+                    .append("\nCounter: ").append(j.optString("counterSignals"))
+                    .append("\nMissing: ").append(j.optString("missingData", "not assessed"));
             if (!j.optString("newsSignal", "").isEmpty())
                 b.append("\nNews: ").append(j.optString("newsSignal"));
         }
@@ -340,6 +371,7 @@ final class ResearchEngine {
             if (j == null) continue;
             if (b.length() > 0) b.append("\n\n");
             b.append(j.optString("name")).append(" - ").append(j.optString("status"))
+                    .append(" • ").append(j.optString("strategyVersion", STRATEGY_VERSION))
                     .append("\nEvidence ").append(j.optInt("evidence"))
                     .append(" official entries • avg match ")
                     .append(String.format(Locale.US, "%.0f", j.optDouble("avgMatch"))).append("/100");
