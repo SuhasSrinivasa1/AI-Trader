@@ -8,9 +8,9 @@ import java.util.List;
 import java.util.Locale;
 
 final class UnivestManager {
-    static final int ENTRY_BUDGET = 20000;
-    static final int REENTRY_BUDGET = 5000;
-    static final int AVERAGE_BUDGET = 5000;
+    static final int ENTRY_BUDGET = 20000;   // legacy/default value; runtime uses AppPrefs
+    static final int REENTRY_BUDGET = 5000; // legacy/default value; runtime uses AppPrefs
+    static final int AVERAGE_BUDGET = 5000; // legacy/default value; runtime uses AppPrefs
     static final double AVERAGE_STEP_PCT = 2.0;
     static final int MAX_AVERAGE_LEVELS = 3;
     private static final long DUPLICATE_EXIT_GUARD_MS = 120000L;
@@ -28,11 +28,18 @@ final class UnivestManager {
         InstrumentRepository.Instrument instrument = resolve(context, signal, "ENTRY");
         if (instrument == null) return;
         String symbol = instrument.symbol;
+        final int entryBudget = AppPrefs.getUnivestBudget(context);
+        if (entryBudget <= 0) {
+            String msg = "UNIVEST ENTRY IGNORED • " + symbol + " • initial-entry budget is ₹0 (disabled).";
+            DiagnosticsStore.runtime(context, "ENTRY_BUDGET_DISABLED", symbol, msg);
+            status(context, msg);
+            return;
+        }
 
         if (AppPrefs.isPaperMode(context)) {
-            String msg = "PAPER BUY • ₹20,000 CNC delivery simulation • no Groww order sent.";
+            String msg = "PAPER BUY • " + rupees(entryBudget) + " CNC delivery simulation • no Groww order sent.";
             DiagnosticsStore.paperTrade(context, "PAPER_BUY", symbol, msg);
-            status(context, "PAPER MODE • UNIVEST ENTRY • " + symbol + " • simulated ₹20,000 CNC delivery buy. No Groww order sent.");
+            status(context, "PAPER MODE • UNIVEST ENTRY • " + symbol + " • simulated " + rupees(entryBudget) + " CNC delivery buy. No Groww order sent.");
             return; // PAPER never mutates the LIVE campaign state and therefore cannot block a later LIVE order.
         }
 
@@ -71,9 +78,9 @@ final class UnivestManager {
             fail(context, "ENTRY_RESERVATION_FAILED", symbol, "Unable to reserve new Univest entry after broker reconciliation.", null); return;
         }
 
-        DiagnosticsStore.runtime(context, "ENTRY_ACCEPTED", symbol, "Eligible <=3 month Univest recommendation • fixed ₹20,000 CNC delivery budget.");
+        DiagnosticsStore.runtime(context, "ENTRY_ACCEPTED", symbol, "Eligible <=3 month Univest recommendation • configured " + rupees(entryBudget) + " CNC delivery budget.");
         String orderRef = stableRef("UE", symbol, signal.rawText, notificationPostTime);
-        GrowwClient.ExecutionResult r = GrowwClient.placeUnivestCncMarketBuy(context, symbol, ENTRY_BUDGET, orderRef);
+        GrowwClient.ExecutionResult r = GrowwClient.placeUnivestCncMarketBuy(context, symbol, entryBudget, orderRef);
         if (!r.submitted) {
             UnivestStateStore.releasePendingEntry(context, symbol, "Groww CNC BUY not submitted: " + r.message);
             fail(context, "ENTRY_NOT_SUBMITTED", symbol, r.message, null);
@@ -91,7 +98,7 @@ final class UnivestManager {
         state.estimatedBuyCharges = state.principal > 0 ? DeliveryNetTarget.buyCharges(state.principal) : 0;
         state.averageLevel = 0; state.reentryUsed = false; state.exitOrderId = r.orderId;
         state.lastAction = r.filled
-                ? "Initial ₹20,000 CNC delivery BUY executed • qty " + r.filledQuantity + " • avg ₹" + money(r.averagePrice)
+                ? "Initial " + rupees(entryBudget) + " CNC delivery BUY executed • qty " + r.filledQuantity + " • avg ₹" + money(r.averagePrice)
                 : "CNC BUY submitted; fill not yet confirmed • order " + r.orderId;
         UnivestStateStore.put(context, state);
 
@@ -99,7 +106,7 @@ final class UnivestManager {
         DiagnosticsStore.trade(context, r.filled ? "BUY_EXECUTED" : "BUY_SUBMITTED_FILL_UNCONFIRMED", symbol, state.lastAction, r);
         long age = r.dispatchAtMillis > 0 && notificationPostTime > 0 ? Math.max(0, r.dispatchAtMillis - notificationPostTime) : -1;
         status(context, "UNIVEST CNC BUY " + (r.filled ? "EXECUTED" : "SUBMITTED") + " • " + symbol
-                + " • ₹20,000 budget" + (age >= 0 ? " • source age " + age + " ms" : "") + " • " + r.message);
+                + " • " + rupees(entryBudget) + " budget" + (age >= 0 ? " • source age " + age + " ms" : "") + " • " + r.message);
     }
 
     static void handleReentry(Context context, UnivestParser.Signal signal, long notificationPostTime) {
@@ -107,8 +114,13 @@ final class UnivestManager {
         if (instrument == null) return;
         String symbol = instrument.symbol;
 
+        final int initialBudget = AppPrefs.getUnivestBudget(context);
+        final int addBudget = AppPrefs.getUnivestAddBudget(context);
+
         if (AppPrefs.isPaperMode(context)) {
-            String msg = "PAPER BACK-IN-RANGE • broker-flat would mean ₹20,000 initial/missed entry; held would mean ₹5,000 add • no Groww order sent.";
+            String msg = "PAPER BACK-IN-RANGE • broker-flat would use " + rupees(initialBudget)
+                    + " initial/missed-entry budget; held would use " + rupees(addBudget)
+                    + " add budget • no Groww order sent.";
             DiagnosticsStore.paperTrade(context, "PAPER_REENTRY", symbol, msg);
             status(context, "PAPER MODE • UNIVEST BACK-IN-RANGE • " + symbol + " • simulated decision only. No Groww order sent.");
             return;
@@ -127,8 +139,15 @@ final class UnivestManager {
         }
 
         final boolean missedInitial = before.quantity <= 0;
-        final int budget = missedInitial ? ENTRY_BUDGET : REENTRY_BUDGET;
+        final int budget = chooseBackInRangeBudget(before.quantity, false, initialBudget, addBudget);
         final String kind = missedInitial ? "MISSED_INITIAL_ENTRY" : "HELD_BACK_IN_RANGE_ADD";
+        if (budget <= 0) {
+            String msg = "UNIVEST BACK-IN-RANGE IGNORED • " + symbol + " • "
+                    + (missedInitial ? "initial-entry" : "re-entry/averaging") + " budget is ₹0 (disabled).";
+            DiagnosticsStore.runtime(context, "REENTRY_BUDGET_DISABLED", symbol, msg);
+            status(context, msg);
+            return;
+        }
 
         if (missedInitial) {
             UnivestStateStore.State stale = UnivestStateStore.get(context, symbol);
@@ -166,8 +185,8 @@ final class UnivestManager {
             state.estimatedBuyCharges = state.principal > 0 ? DeliveryNetTarget.buyCharges(state.principal) : 0;
             state.averageLevel = 0; state.reentryUsed = false; state.exitOrderId = r.orderId;
             state.lastAction = r.filled
-                    ? "Missed initial ₹20,000 CNC entry recovered from back-in-range • qty " + r.filledQuantity + " • avg ₹" + money(r.averagePrice)
-                    : "Missed initial ₹20,000 CNC BUY submitted; fill not yet confirmed • order " + r.orderId;
+                    ? "Missed initial " + rupees(initialBudget) + " CNC entry recovered from back-in-range • qty " + r.filledQuantity + " • avg ₹" + money(r.averagePrice)
+                    : "Missed initial " + rupees(initialBudget) + " CNC BUY submitted; fill not yet confirmed • order " + r.orderId;
             UnivestStateStore.put(context, state);
             if (r.filled && r.averagePrice > 0) armAveragingLadder(context, state, r.orderId);
         } else {
@@ -177,8 +196,8 @@ final class UnivestManager {
                 state.quantity = before.quantity + r.filledQuantity;
                 state.principal = Math.max(0, state.principal) + Math.max(0, r.averagePrice) * Math.max(0, r.filledQuantity);
                 state.reentryUsed = true;
-                state.lastAction = "₹5,000 back-in-range CNC add executed • qty " + r.filledQuantity + " • avg ₹" + money(r.averagePrice);
-            } else state.lastAction = "₹5,000 CNC add submitted but fill not confirmed • order " + r.orderId;
+                state.lastAction = rupees(addBudget) + " back-in-range CNC add executed • qty " + r.filledQuantity + " • avg ₹" + money(r.averagePrice);
+            } else state.lastAction = rupees(addBudget) + " CNC add submitted but fill not confirmed • order " + r.orderId;
             UnivestStateStore.put(context, state);
         }
 
@@ -187,14 +206,24 @@ final class UnivestManager {
                               : (r.filled ? "REENTRY_BUY_EXECUTED" : "REENTRY_FILL_UNCONFIRMED"),
                 symbol, state.lastAction, r);
         long age = r.dispatchAtMillis > 0 && notificationPostTime > 0 ? Math.max(0, r.dispatchAtMillis - notificationPostTime) : -1;
-        status(context, "UNIVEST " + (missedInitial ? "₹20,000 MISSED INITIAL CNC ENTRY " : "₹5,000 CNC BACK-IN-RANGE ADD ")
+        status(context, "UNIVEST " + (missedInitial ? rupees(initialBudget) + " MISSED INITIAL CNC ENTRY " : rupees(addBudget) + " CNC BACK-IN-RANGE ADD ")
                 + (r.filled ? "EXECUTED" : "SUBMITTED") + " • " + symbol
                 + (age >= 0 ? " • source age " + age + " ms" : "") + " • " + r.message);
     }
 
-    static int budgetForBackInRange(int brokerQuantity, boolean pendingBuy) {
+    static int chooseBackInRangeBudget(int brokerQuantity, boolean pendingBuy, int entryBudget, int addBudget) {
         if (pendingBuy) return 0;
-        return brokerQuantity > 0 ? REENTRY_BUDGET : ENTRY_BUDGET;
+        return brokerQuantity > 0 ? Math.max(0, addBudget) : Math.max(0, entryBudget);
+    }
+
+    static int budgetForBackInRange(Context context, int brokerQuantity, boolean pendingBuy) {
+        return chooseBackInRangeBudget(brokerQuantity, pendingBuy,
+                AppPrefs.getUnivestBudget(context), AppPrefs.getUnivestAddBudget(context));
+    }
+
+    // Compatibility helper for older unit tests; represents the historical defaults only.
+    static int budgetForBackInRange(int brokerQuantity, boolean pendingBuy) {
+        return chooseBackInRangeBudget(brokerQuantity, pendingBuy, ENTRY_BUDGET, REENTRY_BUDGET);
     }
 
     static void handleExit(Context context, UnivestParser.Signal signal, long notificationPostTime) {
@@ -316,20 +345,26 @@ final class UnivestManager {
 
     private static void armAveragingLadder(Context context, UnivestStateStore.State state, String entrySeed) {
         if (state == null || !AppPrefs.isLiveMode(context) || !AppPrefs.isAveragingEnabled(context) || !(state.anchorPrice > 0)) return;
+        final int averageBudget = AppPrefs.getUnivestAddBudget(context);
+        if (averageBudget <= 0) {
+            DiagnosticsStore.runtime(context, "AVERAGING_BUDGET_DISABLED", state.symbol,
+                    "Controlled downward averaging is enabled, but the shared re-entry/averaging budget is ₹0.");
+            return;
+        }
         int levels = Math.min(MAX_AVERAGE_LEVELS, AppPrefs.getAveragingLevels(context));
         for (int level = 1; level <= levels; level++) {
             if (!getAvgId(state, level).isEmpty()) continue;
             double raw = state.anchorPrice * (1.0 - (AVERAGE_STEP_PCT * level / 100.0));
             double trigger = GrowwClient.roundTarget(raw, state.tickSize, false);
-            int qty = (int)Math.floor(AVERAGE_BUDGET / trigger);
+            int qty = (int)Math.floor(averageBudget / trigger);
             if (qty < 1) {
-                DiagnosticsStore.runtime(context, "AVERAGE_LEVEL_SKIPPED", state.symbol, "-" + (int)(AVERAGE_STEP_PCT * level) + "% level skipped because ₹5,000 cannot buy one share at trigger ₹" + money(trigger) + ".");
+                DiagnosticsStore.runtime(context, "AVERAGE_LEVEL_SKIPPED", state.symbol, "-" + (int)(AVERAGE_STEP_PCT * level) + "% level skipped because " + rupees(averageBudget) + " cannot buy one share at trigger ₹" + money(trigger) + ".");
                 continue;
             }
             String ref = stableRef("A" + level, state.symbol, entrySeed + "|" + level + "|" + money(state.anchorPrice), state.updatedAt);
             GrowwClient.GttResult gtt = GrowwClient.createUnivestCncBuyGtt(context, state.symbol, qty, trigger, ref);
             DiagnosticsStore.broker(context, "AVERAGE_GTT_LEVEL_" + level, state.symbol, gtt.success || gtt.unknown,
-                    "₹5,000 CNC averaging level " + level + " • trigger -" + (int)(AVERAGE_STEP_PCT * level) + "% at ₹" + money(trigger) + " • qty " + qty + " • " + gtt.message);
+                    rupees(averageBudget) + " CNC averaging level " + level + " • trigger -" + (int)(AVERAGE_STEP_PCT * level) + "% at ₹" + money(trigger) + " • qty " + qty + " • " + gtt.message);
             if (gtt.success) { setAvg(state, level, gtt.smartOrderId, trigger); UnivestStateStore.put(context, state); }
         }
     }
@@ -433,6 +468,11 @@ final class UnivestManager {
             String out = (prefix + AppPrefs.istDayKey(System.currentTimeMillis()) + Math.abs((symbol + seed).hashCode())).replaceAll("[^A-Za-z0-9]", "");
             return out.length() > 20 ? out.substring(0, 20) : out;
         }
+    }
+
+    private static String rupees(int v) {
+        java.text.NumberFormat f = java.text.NumberFormat.getIntegerInstance(new Locale("en", "IN"));
+        return "₹" + f.format(Math.max(0, v));
     }
 
     private static String money(double v) { return String.format(Locale.US, "%.2f", v); }
