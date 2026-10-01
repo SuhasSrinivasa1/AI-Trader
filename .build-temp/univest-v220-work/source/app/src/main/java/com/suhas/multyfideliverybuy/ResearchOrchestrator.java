@@ -69,6 +69,13 @@ final class ResearchOrchestrator {
             }
 
             if (NseTradingCalendar.isRegularMarketOpen(now)) {
+                if (today.equals(AppPrefs.getResearchForecastTargetKey(c))
+                        && !today.equals(AppPrefs.getResearchPreopenFreezeKey(c))) {
+                    preopenFreeze(c, now, today);
+                    AppPrefs.setResearchPreopenFreezeKey(c, today);
+                    DiagnosticsStore.runtime(c, "RESEARCH_LATE_PREOPEN_FREEZE", "",
+                            "Pre-open freeze window was missed; ranking frozen at first live orchestrator tick without re-ranking.");
+                }
                 AppPrefs.setResearchOrchestrator(c, STAGE_LIVE,
                         "Live Research monitor active • frozen forecast + one-minute path capture + entry/exit evaluation.");
                 JSONArray predictions = ResearchStore.predictions(c);
