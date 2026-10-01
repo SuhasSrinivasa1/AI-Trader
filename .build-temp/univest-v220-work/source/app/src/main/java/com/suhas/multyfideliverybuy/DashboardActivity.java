@@ -78,6 +78,7 @@ public class DashboardActivity extends Activity {
                 DiagnosticsStore.error(getApplicationContext(), "DASHBOARD_INITIAL_RECONCILE_FAILED", "",
                         "Initial broker reconciliation failed.", t);
             }
+            try { ResearchOrchestrator.tick(getApplicationContext()); } catch (Throwable ignored) {}
             runOnUiThread(this::render);
         }, "univest-final-init").start();
 
@@ -88,9 +89,11 @@ public class DashboardActivity extends Activity {
         super.onResume();
         ResearchScheduler.ensureScheduled(getApplicationContext());
         ResearchMonitorScheduler.ensureScheduled(getApplicationContext());
-        if (ResearchTradeEngine.isMarketHoursIst()) {
-            new Thread(() -> ResearchTradeEngine.evaluateLive(getApplicationContext()), "research-resume-monitor").start();
-        }
+        new Thread(() -> {
+            try { ResearchOrchestrator.tick(getApplicationContext()); }
+            catch (Throwable ignored) {}
+            runOnUiThread(this::render);
+        }, "research-orchestrator-resume").start();
         render();
     }
 
@@ -180,11 +183,23 @@ public class DashboardActivity extends Activity {
                 AppPrefs.getResearchScheduleMethod(this).startsWith("JOB_") ? GREEN : AMBER), margins(0, 8, 0, 0));
         root.addView(status, margins(0, 20, 0, 14));
 
+        LinearLayout orchestration = card();
+        orchestration.addView(sectionRow("RESEARCH ORCHESTRATION", AppPrefs.getResearchOrchestratorStage(this)));
+        orchestration.addView(body(AppPrefs.getResearchOrchestratorStatus(this)), margins(0, 12, 0, 0));
+        orchestration.addView(meta("17:30 full-NSE scan → 08:45+ pre-open freeze → live minute capture → post-close replay. NSE holidays retain the latest forecast."), margins(0, 8, 0, 0));
+        root.addView(orchestration, margins(0, 0, 0, 14));
+
         LinearLayout accuracy = card();
         accuracy.addView(sectionRow("RESEARCH ACCURACY", "Shadow + Live"));
         accuracy.addView(body(ResearchTradeEngine.accuracyText(this)), margins(0, 12, 0, 0));
         accuracy.addView(meta("Wins require ≥0.5% estimated net profit. Open trades are unresolved, not losses."), margins(0, 8, 0, 0));
         root.addView(accuracy, margins(0, 0, 0, 14));
+
+        LinearLayout failures = card();
+        failures.addView(sectionRow("REPEATED FAILURE CLUSTERS", "Replay"));
+        failures.addView(body(ResearchTradeEngine.failureClustersText(this)), margins(0, 12, 0, 0));
+        failures.addView(meta("A repeated bucket becomes a Challenger-review candidate; one bad trade never rewrites the Champion."), margins(0, 8, 0, 0));
+        root.addView(failures, margins(0, 0, 0, 14));
 
         Button scan = primaryButton("RUN FULL NSE OFF-MARKET RESEARCH");
         scan.setOnClickListener(v -> runResearchNow(scan));
@@ -369,6 +384,9 @@ public class DashboardActivity extends Activity {
                     }).show();
         });
 
+        safety.addView(researchCapitalGovernor(), margins(0, 12, 0, 0));
+        safety.addView(meta("Research capital governor applies only to Research-originated live entries. Official Univest confirmation remains separately attributed and follows the proven official execution path."), margins(0, 8, 0, 0));
+
         safety.addView(meta("Official source only • NSE CASH • CNC delivery"), margins(0, 10, 0, 0));
         safety.addView(meta(formatRupees(AppPrefs.getUnivestBudget(this)) + " initial • "
                 + formatRupees(AppPrefs.getUnivestAddBudget(this)) + " re-entry / each averaging level • -2% / -4% / -6% ladder"),
@@ -379,6 +397,7 @@ public class DashboardActivity extends Activity {
         boolean scheduleOk = AppPrefs.getResearchScheduleMethod(this).startsWith("JOB_");
         scheduler.addView(sectionRow("RESEARCH SCHEDULER", scheduleOk ? "ACTIVE" : "NEEDS ATTENTION"));
         scheduler.addView(meta(ResearchScheduler.statusText(this), scheduleOk ? GREEN : AMBER), margins(0, 10, 0, 0));
+        scheduler.addView(meta("Orchestrator: " + ResearchOrchestrator.statusText(this), margins(0, 8, 0, 0));
         Button repair = secondaryButton("REPAIR / RESCHEDULE RESEARCH");
         repair.setOnClickListener(v -> repairSchedule(repair));
         scheduler.addView(repair, fixedMargins(-1, 50, 0, 12, 0, 0));
@@ -411,8 +430,8 @@ public class DashboardActivity extends Activity {
         root.addView(data, margins(0, 0, 0, 14));
 
         LinearLayout about = card();
-        about.addView(sectionRow("ABOUT", "Final UI"));
-        about.addView(body("Univest AutoTrade v2.6.0"), margins(0, 10, 0, 0));
+        about.addView(sectionRow("ABOUT", "Orchestrated Research"));
+        about.addView(body("Univest AutoTrade v2.7.0"), margins(0, 10, 0, 0));
         about.addView(meta("Package: com.suhas.multyfideliverybuy"), margins(0, 6, 0, 0));
         about.addView(meta("Official Univest execution and Research decisions remain separately attributed; Research→Univest same-symbol confirmation is intentionally additive."), margins(0, 6, 0, 0));
         root.addView(about, margins(0, 0, 0, 22));
@@ -431,7 +450,7 @@ public class DashboardActivity extends Activity {
         left.addView(text(subtitle, 12, SUBTEXT, false), margins(0, 3, 0, 0));
         row.addView(left, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        TextView version = text("v2.6.0", 11, TEAL, true);
+        TextView version = text("v2.7.0", 11, TEAL, true);
         version.setGravity(Gravity.CENTER);
         version.setPadding(dp(10), dp(6), dp(10), dp(6));
         GradientDrawable chip = new GradientDrawable();
@@ -509,6 +528,8 @@ public class DashboardActivity extends Activity {
         button.setText("SCHEDULING…");
         new Thread(() -> {
             ResearchScheduler.ensureScheduled(getApplicationContext());
+            ResearchMonitorScheduler.ensureScheduled(getApplicationContext());
+            ResearchOrchestrator.tick(getApplicationContext());
             runOnUiThread(() -> {
                 Toast.makeText(this, ResearchScheduler.statusText(this), Toast.LENGTH_LONG).show();
                 render();
@@ -599,16 +620,23 @@ public class DashboardActivity extends Activity {
     }
 
     private void runResearchNow(Button button) {
+        long now = System.currentTimeMillis();
+        if (!NseTradingCalendar.isTradingDay(now)) {
+            Toast.makeText(this, "NSE closed: " + NseTradingCalendar.describe(now)
+                    + ". Latest frozen forecast is retained for the next trading session.", Toast.LENGTH_LONG).show();
+            return;
+        }
         if (!ResearchEngine.isOffMarketNowIst()) {
-            Toast.makeText(this, "Research is locked during NSE market hours.", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "Research is locked during regular NSE market hours.", Toast.LENGTH_LONG).show();
             return;
         }
         button.setEnabled(false);
         button.setText("RUNNING…");
         new Thread(() -> {
             ResearchEngine.runNightly(getApplicationContext());
+            AppPrefs.setResearchEodScanKey(getApplicationContext(), NseTradingCalendar.dayKey(System.currentTimeMillis()));
             runOnUiThread(() -> {
-                Toast.makeText(this, "Off-market research completed.", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "Full-NSE off-market research completed.", Toast.LENGTH_SHORT).show();
                 render();
             });
         }, "research-manual").start();
@@ -848,6 +876,62 @@ public class DashboardActivity extends Activity {
 
     private TextView meta(String s, int color) {
         return text(s, 12, color, false);
+    }
+
+    private View researchCapitalGovernor() {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(12), dp(12), dp(12), dp(10));
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(SURFACE_2);
+        bg.setCornerRadius(dp(14));
+        bg.setStroke(dp(1), BORDER);
+        box.setBackground(bg);
+
+        box.addView(text("RESEARCH CAPITAL GOVERNOR", 13, TEXT, true));
+        box.addView(meta("Caps Research-originated live exposure and simultaneous Research positions. Changing either setting disables Research AutoTrade."), margins(0, 6, 0, 8));
+
+        TextView capValue = text(formatRupees(AppPrefs.getResearchCapitalLimit(this)), 14, TEAL, true);
+        box.addView(capValue);
+        SeekBar cap = new SeekBar(this);
+        cap.setMax(49); // ₹10,000 to ₹5,00,000 in ₹10,000 steps
+        cap.setProgress(Math.max(0, AppPrefs.getResearchCapitalLimit(this) / 10000 - 1));
+        box.addView(cap, new LinearLayout.LayoutParams(-1, dp(44)));
+        box.addView(meta("Capital limit • ₹10,000–₹5,00,000"), margins(0, 0, 0, 8));
+
+        TextView posValue = text("Max open Research positions: " + AppPrefs.getResearchMaxPositions(this), 13, TEAL, true);
+        box.addView(posValue);
+        SeekBar positions = new SeekBar(this);
+        positions.setMax(4); // 1..5
+        positions.setProgress(AppPrefs.getResearchMaxPositions(this) - 1);
+        box.addView(positions, new LinearLayout.LayoutParams(-1, dp(44)));
+
+        cap.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
+                capValue.setText(formatRupees((progress + 1) * 10000));
+            }
+            @Override public void onStartTrackingTouch(SeekBar bar) {}
+            @Override public void onStopTrackingTouch(SeekBar bar) {
+                int value = (bar.getProgress() + 1) * 10000;
+                AppPrefs.setResearchCapitalLimit(DashboardActivity.this, value);
+                Toast.makeText(DashboardActivity.this, "Research capital limit saved. Research AutoTrade disabled for review.", Toast.LENGTH_LONG).show();
+                render();
+            }
+        });
+
+        positions.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
+                posValue.setText("Max open Research positions: " + (progress + 1));
+            }
+            @Override public void onStartTrackingTouch(SeekBar bar) {}
+            @Override public void onStopTrackingTouch(SeekBar bar) {
+                AppPrefs.setResearchMaxPositions(DashboardActivity.this, bar.getProgress() + 1);
+                AppPrefs.setResearchAutoTradeEnabled(DashboardActivity.this, false);
+                Toast.makeText(DashboardActivity.this, "Research position limit saved. Research AutoTrade disabled for review.", Toast.LENGTH_LONG).show();
+                render();
+            }
+        });
+        return box;
     }
 
     private View budgetSlider(String title, String description, int currentBudget,
