@@ -50,10 +50,17 @@ final class UnivestManager {
         GrowwClient.PositionSnapshot before = GrowwClient.getCncPosition(context, symbol);
         if (!before.success) { fail(context, "ENTRY_HOLDING_CHECK_FAILED", symbol, before.message, null); return; }
         if (before.quantity > 0) {
-            syncExistingHolding(context, symbol, before, instrument);
-            status(context, "UNIVEST ENTRY IGNORED • " + symbol + " • broker already shows CNC holding qty " + before.quantity + ".");
-            DiagnosticsStore.runtime(context, "ENTRY_ALREADY_HELD", symbol, before.message);
-            return;
+            UnivestStateStore.State official = UnivestStateStore.get(context, symbol);
+            boolean officialAlreadyActive = official != null && !UnivestStateStore.EXITED.equals(official.phase);
+            boolean researchPreEntry = ResearchTradeEngine.hasResearchLivePosition(context, symbol);
+            if (!(researchPreEntry && !officialAlreadyActive)) {
+                syncExistingHolding(context, symbol, before, instrument);
+                status(context, "UNIVEST ENTRY IGNORED • " + symbol + " • broker already shows CNC holding qty " + before.quantity + ".");
+                DiagnosticsStore.runtime(context, "ENTRY_ALREADY_HELD", symbol, before.message);
+                return;
+            }
+            DiagnosticsStore.runtime(context, "RESEARCH_PREENTRY_UNIVEST_CONFIRMED", symbol,
+                    "Research LIVE lot exists first; official Univest ENTRY is intentionally allowed as an additional configured initial lot.");
         }
 
         GrowwClient.Result pending = GrowwClient.checkForActiveCncBuyOrder(context, symbol);
@@ -271,6 +278,7 @@ final class UnivestManager {
         GrowwClient.PositionSnapshot after = GrowwClient.getCncPosition(context, symbol);
         if (r.filled || (after.success && after.quantity == 0)) {
             markExited(context, state, symbol, "Official Univest exit executed • sold full CNC holding.");
+            ResearchTradeEngine.onOfficialExitExecuted(context, symbol, r.averagePrice);
             long age = r.dispatchAtMillis > 0 && notificationPostTime > 0 ? Math.max(0, r.dispatchAtMillis - notificationPostTime) : -1;
             status(context, "UNIVEST CNC SELL EXECUTED • " + symbol + " • qty " + holding.quantity
                     + (age >= 0 ? " • source age " + age + " ms" : "") + " • " + r.message);
