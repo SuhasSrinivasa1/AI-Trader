@@ -222,6 +222,40 @@ final class AppPrefs {
         p(c).edit().putString("research_accuracy_text", v == null ? "" : v).apply();
     }
 
+    static String getResearchOrchestratorStage(Context c) { return p(c).getString("research_orch_stage", "NOT_STARTED"); }
+    static String getResearchOrchestratorStatus(Context c) { return p(c).getString("research_orch_status", "Research orchestration has not started."); }
+    static long getResearchOrchestratorUpdatedAt(Context c) { return p(c).getLong("research_orch_updated_at", 0L); }
+    static void setResearchOrchestrator(Context c, String stage, String status) {
+        p(c).edit().putString("research_orch_stage", clean(stage))
+                .putString("research_orch_status", status == null ? "" : status)
+                .putLong("research_orch_updated_at", System.currentTimeMillis()).apply();
+    }
+    static String getResearchEodScanKey(Context c) { return p(c).getString("research_eod_scan_key", ""); }
+    static void setResearchEodScanKey(Context c, String v) { p(c).edit().putString("research_eod_scan_key", clean(v)).apply(); }
+    static String getResearchPreopenFreezeKey(Context c) { return p(c).getString("research_preopen_freeze_key", ""); }
+    static void setResearchPreopenFreezeKey(Context c, String v) { p(c).edit().putString("research_preopen_freeze_key", clean(v)).apply(); }
+    static String getResearchReplayKey(Context c) { return p(c).getString("research_replay_key", ""); }
+    static void setResearchReplayKey(Context c, String v) { p(c).edit().putString("research_replay_key", clean(v)).apply(); }
+    static String getResearchForecastTargetKey(Context c) { return p(c).getString("research_forecast_target_key", ""); }
+    static void setResearchForecastTargetKey(Context c, String v) { p(c).edit().putString("research_forecast_target_key", clean(v)).apply(); }
+
+    static int getResearchCapitalLimit(Context c) {
+        int v = p(c).getInt("research_capital_limit", 100000);
+        return Math.max(10000, Math.min(500000, v));
+    }
+    static void setResearchCapitalLimit(Context c, int v) {
+        int clamped = Math.max(10000, Math.min(500000, (v / 10000) * 10000));
+        p(c).edit().putInt("research_capital_limit", clamped)
+                .putBoolean("research_autotrade_enabled", false).apply();
+    }
+
+    static String getResearchFailureSummary(Context c) {
+        return p(c).getString("research_failure_summary", "No repeated Research failure clusters yet.");
+    }
+    static void setResearchFailureSummary(Context c, String v) {
+        p(c).edit().putString("research_failure_summary", v == null ? "" : v).apply();
+    }
+
     static String getResearchScheduleMethod(Context c) { return p(c).getString("research_schedule_method", "NOT_SCHEDULED"); }
     static long getResearchNextScheduledAt(Context c) { return p(c).getLong("research_next_scheduled_at", 0L); }
     static String getResearchScheduleError(Context c) { return p(c).getString("research_schedule_error", ""); }
