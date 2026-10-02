@@ -1,0 +1,439 @@
+package com.suhas.multyfideliverybuy;
+
+import android.content.Context;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.List;
+import java.util.Locale;
+
+final class UnivestManager {
+    static final int ENTRY_BUDGET = 20000;
+    static final int REENTRY_BUDGET = 5000;
+    static final int AVERAGE_BUDGET = 5000;
+    static final double AVERAGE_STEP_PCT = 2.0;
+    static final int MAX_AVERAGE_LEVELS = 3;
+    private static final long DUPLICATE_EXIT_GUARD_MS = 120000L;
+
+    private UnivestManager() {}
+
+    static void handle(Context context, UnivestParser.Signal signal, long notificationPostTime) {
+        if (signal == null) return;
+        if (signal.type == UnivestParser.Type.ENTRY) handleEntry(context, signal, notificationPostTime);
+        else if (signal.type == UnivestParser.Type.REENTRY) handleReentry(context, signal, notificationPostTime);
+        else handleExit(context, signal, notificationPostTime);
+    }
+
+    static void handleEntry(Context context, UnivestParser.Signal signal, long notificationPostTime) {
+        InstrumentRepository.Instrument instrument = resolve(context, signal, "ENTRY");
+        if (instrument == null) return;
+        String symbol = instrument.symbol;
+
+        if (AppPrefs.isPaperMode(context)) {
+            String msg = "PAPER BUY • ₹20,000 CNC delivery simulation • no Groww order sent.";
+            DiagnosticsStore.paperTrade(context, "PAPER_BUY", symbol, msg);
+            status(context, "PAPER MODE • UNIVEST ENTRY • " + symbol + " • simulated ₹20,000 CNC delivery buy. No Groww order sent.");
+            return; // PAPER never mutates the LIVE campaign state and therefore cannot block a later LIVE order.
+        }
+
+        if (!instrument.buyAllowed) { fail(context, "ENTRY_BUY_BLOCKED", symbol, "Groww instrument master marks buy_allowed=0.", null); return; }
+
+        // Broker truth is authoritative. A stale local ACTIVE state must never block an order when there is no
+        // holding/position and no open BUY at Groww.
+        GrowwClient.PositionSnapshot before = GrowwClient.getCncPosition(context, symbol);
+        if (!before.success) { fail(context, "ENTRY_HOLDING_CHECK_FAILED", symbol, before.message, null); return; }
+        if (before.quantity > 0) {
+            syncExistingHolding(context, symbol, before, instrument);
+            status(context, "UNIVEST ENTRY IGNORED • " + symbol + " • broker already shows CNC holding qty " + before.quantity + ".");
+            DiagnosticsStore.runtime(context, "ENTRY_ALREADY_HELD", symbol, before.message);
+            return;
+        }
+
+        GrowwClient.Result pending = GrowwClient.checkForActiveCncBuyOrder(context, symbol);
+        if (pending.unknown) { fail(context, "ENTRY_PENDING_ORDER_CHECK_UNKNOWN", symbol, pending.message, null); return; }
+        if (pending.success) {
+            status(context, "UNIVEST ENTRY IGNORED • " + symbol + " • " + pending.message);
+            DiagnosticsStore.runtime(context, "ENTRY_PENDING_BROKER_ORDER", symbol, pending.message);
+            return;
+        }
+
+        // If local state says ACTIVE/PENDING but broker says flat with no BUY pending, repair it automatically.
+        UnivestStateStore.State stale = UnivestStateStore.get(context, symbol);
+        if (stale != null && !UnivestStateStore.EXITED.equals(stale.phase)) {
+            cancelAveragingLadder(context, stale);
+            stale.phase = UnivestStateStore.EXITED; stale.quantity = 0; stale.principal = 0;
+            stale.lastAction = "State repaired from broker truth: no CNC holding and no open CNC BUY.";
+            UnivestStateStore.put(context, stale);
+            DiagnosticsStore.runtime(context, "STALE_STATE_REPAIRED", symbol, stale.lastAction);
+        }
+
+        if (!UnivestStateStore.reserveNewEntry(context, symbol)) {
+            fail(context, "ENTRY_RESERVATION_FAILED", symbol, "Unable to reserve new Univest entry after broker reconciliation.", null); return;
+        }
+
+        DiagnosticsStore.runtime(context, "ENTRY_ACCEPTED", symbol, "Eligible <=3 month Univest recommendation • fixed ₹20,000 CNC delivery budget.");
+        String orderRef = stableRef("UE", symbol, signal.rawText, notificationPostTime);
+        GrowwClient.ExecutionResult r = GrowwClient.placeUnivestCncMarketBuy(context, symbol, ENTRY_BUDGET, orderRef);
+        if (!r.submitted) {
+            UnivestStateStore.releasePendingEntry(context, symbol, "Groww CNC BUY not submitted: " + r.message);
+            fail(context, "ENTRY_NOT_SUBMITTED", symbol, r.message, null);
+            DiagnosticsStore.trade(context, "BUY_FAILED", symbol, r.message, r);
+            return;
+        }
+
+        UnivestStateStore.State state = new UnivestStateStore.State();
+        state.symbol = symbol;
+        state.phase = r.filled && r.filledQuantity > 0 ? UnivestStateStore.ACTIVE : UnivestStateStore.ENTRY_PENDING;
+        state.anchorPrice = r.averagePrice;
+        state.tickSize = instrument.tickSize;
+        state.quantity = Math.max(0, r.filledQuantity);
+        state.principal = Math.max(0, r.averagePrice) * Math.max(0, r.filledQuantity);
+        state.estimatedBuyCharges = state.principal > 0 ? DeliveryNetTarget.buyCharges(state.principal) : 0;
+        state.averageLevel = 0; state.reentryUsed = false; state.exitOrderId = r.orderId;
+        state.lastAction = r.filled
+                ? "Initial ₹20,000 CNC delivery BUY executed • qty " + r.filledQuantity + " • avg ₹" + money(r.averagePrice)
+                : "CNC BUY submitted; fill not yet confirmed • order " + r.orderId;
+        UnivestStateStore.put(context, state);
+
+        if (r.filled && r.averagePrice > 0) armAveragingLadder(context, state, r.orderId);
+        DiagnosticsStore.trade(context, r.filled ? "BUY_EXECUTED" : "BUY_SUBMITTED_FILL_UNCONFIRMED", symbol, state.lastAction, r);
+        long age = r.dispatchAtMillis > 0 && notificationPostTime > 0 ? Math.max(0, r.dispatchAtMillis - notificationPostTime) : -1;
+        status(context, "UNIVEST CNC BUY " + (r.filled ? "EXECUTED" : "SUBMITTED") + " • " + symbol
+                + " • ₹20,000 budget" + (age >= 0 ? " • source age " + age + " ms" : "") + " • " + r.message);
+    }
+
+    static void handleReentry(Context context, UnivestParser.Signal signal, long notificationPostTime) {
+        InstrumentRepository.Instrument instrument = resolve(context, signal, "REENTRY");
+        if (instrument == null) return;
+        String symbol = instrument.symbol;
+
+        if (AppPrefs.isPaperMode(context)) {
+            String msg = "PAPER BACK-IN-RANGE • broker-flat would mean ₹20,000 initial/missed entry; held would mean ₹5,000 add • no Groww order sent.";
+            DiagnosticsStore.paperTrade(context, "PAPER_REENTRY", symbol, msg);
+            status(context, "PAPER MODE • UNIVEST BACK-IN-RANGE • " + symbol + " • simulated decision only. No Groww order sent.");
+            return;
+        }
+
+        if (!instrument.buyAllowed) { fail(context, "REENTRY_BUY_BLOCKED", symbol, "Groww instrument master marks buy_allowed=0.", null); return; }
+        GrowwClient.PositionSnapshot before = GrowwClient.getCncPosition(context, symbol);
+        if (!before.success) { fail(context, "REENTRY_HOLDING_CHECK_FAILED", symbol, before.message, null); return; }
+
+        GrowwClient.Result pending = GrowwClient.checkForActiveCncBuyOrder(context, symbol);
+        if (pending.unknown) { fail(context, "REENTRY_PENDING_ORDER_CHECK_UNKNOWN", symbol, pending.message, null); return; }
+        if (pending.success) {
+            DiagnosticsStore.runtime(context, "REENTRY_PENDING_BROKER_ORDER", symbol, pending.message);
+            status(context, "UNIVEST BACK-IN-RANGE • " + symbol + " • no second BUY: broker already has an open CNC BUY.");
+            return;
+        }
+
+        final boolean missedInitial = before.quantity <= 0;
+        final int budget = missedInitial ? ENTRY_BUDGET : REENTRY_BUDGET;
+        final String kind = missedInitial ? "MISSED_INITIAL_ENTRY" : "HELD_BACK_IN_RANGE_ADD";
+
+        if (missedInitial) {
+            UnivestStateStore.State stale = UnivestStateStore.get(context, symbol);
+            if (stale != null && !UnivestStateStore.EXITED.equals(stale.phase)) {
+                cancelAveragingLadder(context, stale);
+                stale.phase = UnivestStateStore.EXITED; stale.quantity = 0; stale.principal = 0;
+                stale.lastAction = "State repaired from broker truth before back-in-range: no CNC holding and no open CNC BUY.";
+                UnivestStateStore.put(context, stale);
+                DiagnosticsStore.runtime(context, "STALE_STATE_REPAIRED", symbol, stale.lastAction);
+            }
+            if (!UnivestStateStore.reserveNewEntry(context, symbol)) {
+                fail(context, "REENTRY_RESERVATION_FAILED", symbol, "Unable to reserve missed initial entry after broker reconciliation.", null); return;
+            }
+        }
+
+        DiagnosticsStore.runtime(context, "REENTRY_ACCEPTED", symbol,
+                kind + " • broker qty " + before.quantity + " • selected budget ₹" + budget + " CNC delivery.");
+        String orderRef = stableRef(missedInitial ? "UM" : "UR", symbol, signal.rawText, notificationPostTime);
+        GrowwClient.ExecutionResult r = GrowwClient.placeUnivestCncMarketBuy(context, symbol, budget, orderRef);
+        if (!r.submitted) {
+            if (missedInitial) UnivestStateStore.releasePendingEntry(context, symbol, "Missed-entry CNC BUY not submitted: " + r.message);
+            fail(context, "REENTRY_NOT_SUBMITTED", symbol, r.message, null);
+            DiagnosticsStore.trade(context, missedInitial ? "MISSED_ENTRY_BUY_FAILED" : "REENTRY_BUY_FAILED", symbol, r.message, r);
+            return;
+        }
+
+        UnivestStateStore.State state = UnivestStateStore.get(context, symbol);
+        if (state == null) { state = new UnivestStateStore.State(); state.symbol = symbol; }
+        state.tickSize = instrument.tickSize;
+        if (missedInitial) {
+            state.phase = r.filled && r.filledQuantity > 0 ? UnivestStateStore.ACTIVE : UnivestStateStore.ENTRY_PENDING;
+            state.quantity = Math.max(0, r.filledQuantity);
+            state.anchorPrice = r.filled ? r.averagePrice : 0;
+            state.principal = Math.max(0, r.averagePrice) * Math.max(0, r.filledQuantity);
+            state.estimatedBuyCharges = state.principal > 0 ? DeliveryNetTarget.buyCharges(state.principal) : 0;
+            state.averageLevel = 0; state.reentryUsed = false; state.exitOrderId = r.orderId;
+            state.lastAction = r.filled
+                    ? "Missed initial ₹20,000 CNC entry recovered from back-in-range • qty " + r.filledQuantity + " • avg ₹" + money(r.averagePrice)
+                    : "Missed initial ₹20,000 CNC BUY submitted; fill not yet confirmed • order " + r.orderId;
+            UnivestStateStore.put(context, state);
+            if (r.filled && r.averagePrice > 0) armAveragingLadder(context, state, r.orderId);
+        } else {
+            state.phase = r.filled ? UnivestStateStore.ACTIVE : state.phase;
+            if (state.anchorPrice <= 0 && before.netPrice > 0) state.anchorPrice = before.netPrice;
+            if (r.filled) {
+                state.quantity = before.quantity + r.filledQuantity;
+                state.principal = Math.max(0, state.principal) + Math.max(0, r.averagePrice) * Math.max(0, r.filledQuantity);
+                state.reentryUsed = true;
+                state.lastAction = "₹5,000 back-in-range CNC add executed • qty " + r.filledQuantity + " • avg ₹" + money(r.averagePrice);
+            } else state.lastAction = "₹5,000 CNC add submitted but fill not confirmed • order " + r.orderId;
+            UnivestStateStore.put(context, state);
+        }
+
+        DiagnosticsStore.trade(context,
+                missedInitial ? (r.filled ? "MISSED_ENTRY_BUY_EXECUTED" : "MISSED_ENTRY_FILL_UNCONFIRMED")
+                              : (r.filled ? "REENTRY_BUY_EXECUTED" : "REENTRY_FILL_UNCONFIRMED"),
+                symbol, state.lastAction, r);
+        long age = r.dispatchAtMillis > 0 && notificationPostTime > 0 ? Math.max(0, r.dispatchAtMillis - notificationPostTime) : -1;
+        status(context, "UNIVEST " + (missedInitial ? "₹20,000 MISSED INITIAL CNC ENTRY " : "₹5,000 CNC BACK-IN-RANGE ADD ")
+                + (r.filled ? "EXECUTED" : "SUBMITTED") + " • " + symbol
+                + (age >= 0 ? " • source age " + age + " ms" : "") + " • " + r.message);
+    }
+
+    static int budgetForBackInRange(int brokerQuantity, boolean pendingBuy) {
+        if (pendingBuy) return 0;
+        return brokerQuantity > 0 ? REENTRY_BUDGET : ENTRY_BUDGET;
+    }
+
+    static void handleExit(Context context, UnivestParser.Signal signal, long notificationPostTime) {
+        InstrumentRepository.Instrument instrument = resolve(context, signal, "EXIT");
+        if (instrument == null) return;
+        String symbol = instrument.symbol;
+
+        if (AppPrefs.isPaperMode(context)) {
+            String msg = "PAPER SELL • official Univest book-profit/exit simulation • no Groww order sent.";
+            DiagnosticsStore.paperTrade(context, "PAPER_EXIT", symbol, msg);
+            status(context, "PAPER MODE • UNIVEST EXIT • " + symbol + " • simulated full CNC holding sell. No Groww order sent.");
+            return;
+        }
+
+        UnivestStateStore.State state = UnivestStateStore.get(context, symbol);
+        if (state != null && UnivestStateStore.EXITING_OFFICIAL.equals(state.phase)
+                && System.currentTimeMillis() - state.updatedAt < DUPLICATE_EXIT_GUARD_MS) {
+            DiagnosticsStore.runtime(context, "EXIT_DUPLICATE_GUARDED", symbol, "Recent official exit is already being processed."); return;
+        }
+
+        cancelAveragingLadder(context, state);
+        cancelLegacyTrackedOrders(context, state);
+        GrowwClient.Result conflicts = GrowwClient.cancelOpenCncSellOrdersForSymbol(context, symbol);
+        DiagnosticsStore.broker(context, "CANCEL_CONFLICTING_CNC_SELLS", symbol, conflicts.success || conflicts.unknown, conflicts.message);
+
+        GrowwClient.PositionSnapshot holding = GrowwClient.getCncPosition(context, symbol);
+        if (!holding.success) { fail(context, "EXIT_HOLDING_CHECK_FAILED", symbol, holding.message, null); return; }
+        if (holding.quantity <= 0) {
+            markExited(context, state, symbol, "Official Univest exit received; broker shows no CNC holding.");
+            status(context, "UNIVEST BOOK PROFIT / EXIT • " + symbol + " • no holding found; nothing to sell.");
+            DiagnosticsStore.runtime(context, "EXIT_NO_HOLDING", symbol, holding.message); return;
+        }
+        if (!instrument.sellAllowed) { fail(context, "EXIT_SELL_BLOCKED", symbol, "Groww instrument master marks sell_allowed=0.", null); return; }
+
+        if (state == null) { state = new UnivestStateStore.State(); state.symbol = symbol; }
+        state.phase = UnivestStateStore.EXITING_OFFICIAL; state.exitRequestedQty = holding.quantity;
+        state.lastAction = "Official Univest book-profit/exit • CNC MARKET SELL requested for full broker holding qty " + holding.quantity;
+        UnivestStateStore.put(context, state);
+
+        String orderRef = stableRef("UX", symbol, signal.rawText, notificationPostTime);
+        GrowwClient.ExecutionResult r = GrowwClient.placeUnivestCncMarketSell(context, symbol, holding.quantity, orderRef);
+        DiagnosticsStore.trade(context, r.submitted ? "SELL_SUBMITTED" : "SELL_FAILED", symbol, state.lastAction, r);
+        if (!r.submitted) { fail(context, "EXIT_NOT_SUBMITTED", symbol, r.message, null); return; }
+
+        GrowwClient.PositionSnapshot after = GrowwClient.getCncPosition(context, symbol);
+        if (r.filled || (after.success && after.quantity == 0)) {
+            markExited(context, state, symbol, "Official Univest exit executed • sold full CNC holding.");
+            long age = r.dispatchAtMillis > 0 && notificationPostTime > 0 ? Math.max(0, r.dispatchAtMillis - notificationPostTime) : -1;
+            status(context, "UNIVEST CNC SELL EXECUTED • " + symbol + " • qty " + holding.quantity
+                    + (age >= 0 ? " • source age " + age + " ms" : "") + " • " + r.message);
+        } else {
+            state.phase = UnivestStateStore.EXITING_OFFICIAL; state.exitOrderId = r.orderId;
+            state.lastAction = "CNC SELL accepted; fill/position-zero not yet confirmed. " + r.message;
+            UnivestStateStore.put(context, state); status(context, "UNIVEST SELL ACCEPTED — VERIFYING • " + symbol + " • " + r.message);
+        }
+    }
+
+    static void migrateLegacyRules(Context context) {
+        if (AppPrefs.isUnivestV2Migrated(context)) return;
+        boolean allClean = true;
+        for (UnivestStateStore.State state : UnivestStateStore.all(context)) {
+            if (state.activeGttId != null && !state.activeGttId.isEmpty()) {
+                GrowwClient.Result r = GrowwClient.cancelCashGtt(context, state.activeGttId);
+                DiagnosticsStore.broker(context, "CANCEL_LEGACY_AVERAGE_GTT", state.symbol, r.success || r.unknown, r.message);
+                if (r.success) { state.activeGttId = ""; state.activeGttKind = ""; state.activeGttQty = 0; state.activeGttPrice = 0; }
+                else allClean = false;
+            }
+            if (state.protectiveStopGttId != null && !state.protectiveStopGttId.isEmpty()) {
+                GrowwClient.Result r = GrowwClient.cancelCashGtt(context, state.protectiveStopGttId);
+                DiagnosticsStore.broker(context, "CANCEL_LEGACY_STOP_GTT", state.symbol, r.success || r.unknown, r.message);
+                if (r.success) { state.protectiveStopGttId = ""; state.protectiveStopPrice = 0; state.protectiveStopQty = 0; }
+                else allClean = false;
+            }
+            UnivestStateStore.put(context, state);
+        }
+        if (allClean) {
+            AppPrefs.setUnivestV2Migrated(context, true);
+            DiagnosticsStore.runtime(context, "V2_RULE_MIGRATION_COMPLETE", "", "Legacy pre-v2 GTT stop/average rules cleaned. v2.1 controlled downward averaging uses dedicated CNC GTT ladder only.");
+        }
+    }
+
+    static void reconcileAll(Context context) {
+        migrateLegacyRules(context);
+        if (!AppPrefs.isLiveMode(context) || !AppPrefs.isReadyForBuy(context)) return;
+        for (UnivestStateStore.State state : UnivestStateStore.all(context)) {
+            if (state == null || state.symbol == null || state.symbol.isEmpty() || UnivestStateStore.EXITED.equals(state.phase)) continue;
+            try {
+                GrowwClient.PositionSnapshot broker = GrowwClient.getCncPosition(context, state.symbol);
+                if (!broker.success) continue;
+                if (broker.quantity <= 0) {
+                    cancelAveragingLadder(context, state);
+                    state.phase = UnivestStateStore.EXITED; state.quantity = 0; state.principal = 0;
+                    state.lastAction = "Broker reconciliation found no CNC holding; campaign reset to EXITED.";
+                    UnivestStateStore.put(context, state);
+                    DiagnosticsStore.runtime(context, "CAMPAIGN_RESET_BROKER_FLAT", state.symbol, state.lastAction);
+                    continue;
+                }
+                state.phase = UnivestStateStore.ACTIVE; state.quantity = broker.quantity;
+                if (!(state.anchorPrice > 0) && broker.netPrice > 0) state.anchorPrice = broker.netPrice;
+                if (broker.netPrice > 0) state.principal = broker.netPrice * broker.quantity;
+                updateAverageLevelFromGtts(context, state);
+                UnivestStateStore.put(context, state);
+                if (state.anchorPrice > 0 && AppPrefs.isAveragingEnabled(context)) armAveragingLadder(context, state, state.exitOrderId);
+            } catch (Throwable t) {
+                DiagnosticsStore.error(context, "RECONCILIATION_ERROR", state.symbol, "Campaign reconciliation failed.", t);
+            }
+        }
+    }
+
+    private static void syncExistingHolding(Context context, String symbol, GrowwClient.PositionSnapshot before, InstrumentRepository.Instrument instrument) {
+        UnivestStateStore.State s = UnivestStateStore.get(context, symbol);
+        if (s == null) { s = new UnivestStateStore.State(); s.symbol = symbol; }
+        s.phase = UnivestStateStore.ACTIVE; s.quantity = before.quantity;
+        if (s.anchorPrice <= 0 && before.netPrice > 0) s.anchorPrice = before.netPrice;
+        if (before.netPrice > 0) s.principal = before.netPrice * before.quantity;
+        s.tickSize = instrument.tickSize; s.lastAction = "Broker already holds this symbol; no duplicate initial entry was placed.";
+        UnivestStateStore.put(context, s);
+    }
+
+    private static void armAveragingLadder(Context context, UnivestStateStore.State state, String entrySeed) {
+        if (state == null || !AppPrefs.isLiveMode(context) || !AppPrefs.isAveragingEnabled(context) || !(state.anchorPrice > 0)) return;
+        int levels = Math.min(MAX_AVERAGE_LEVELS, AppPrefs.getAveragingLevels(context));
+        for (int level = 1; level <= levels; level++) {
+            if (!getAvgId(state, level).isEmpty()) continue;
+            double raw = state.anchorPrice * (1.0 - (AVERAGE_STEP_PCT * level / 100.0));
+            double trigger = GrowwClient.roundTarget(raw, state.tickSize, false);
+            int qty = (int)Math.floor(AVERAGE_BUDGET / trigger);
+            if (qty < 1) {
+                DiagnosticsStore.runtime(context, "AVERAGE_LEVEL_SKIPPED", state.symbol, "-" + (int)(AVERAGE_STEP_PCT * level) + "% level skipped because ₹5,000 cannot buy one share at trigger ₹" + money(trigger) + ".");
+                continue;
+            }
+            String ref = stableRef("A" + level, state.symbol, entrySeed + "|" + level + "|" + money(state.anchorPrice), state.updatedAt);
+            GrowwClient.GttResult gtt = GrowwClient.createUnivestCncBuyGtt(context, state.symbol, qty, trigger, ref);
+            DiagnosticsStore.broker(context, "AVERAGE_GTT_LEVEL_" + level, state.symbol, gtt.success || gtt.unknown,
+                    "₹5,000 CNC averaging level " + level + " • trigger -" + (int)(AVERAGE_STEP_PCT * level) + "% at ₹" + money(trigger) + " • qty " + qty + " • " + gtt.message);
+            if (gtt.success) { setAvg(state, level, gtt.smartOrderId, trigger); UnivestStateStore.put(context, state); }
+        }
+    }
+
+    private static void updateAverageLevelFromGtts(Context context, UnivestStateStore.State state) {
+        int filled = 0;
+        for (int level = 1; level <= MAX_AVERAGE_LEVELS; level++) {
+            String id = getAvgId(state, level); if (id.isEmpty()) continue;
+            GrowwClient.GttStatusResult st = GrowwClient.getCashGttStatus(context, id);
+            if (!st.success) continue;
+            String v = st.status == null ? "" : st.status.toUpperCase(Locale.US);
+            if (v.contains("COMPLET") || v.contains("EXECUT") || v.contains("TRIGGER")) filled++;
+        }
+        if (filled > state.averageLevel) {
+            state.averageLevel = filled;
+            DiagnosticsStore.runtime(context, "AVERAGE_LEVEL_RECONCILED", state.symbol, "Broker smart-order status indicates " + filled + " downward averaging level(s) triggered/completed.");
+        }
+    }
+
+    private static void cancelAveragingLadder(Context context, UnivestStateStore.State s) {
+        if (s == null) return;
+        for (int level = 1; level <= MAX_AVERAGE_LEVELS; level++) {
+            String id = getAvgId(s, level); if (id.isEmpty()) continue;
+            GrowwClient.Result r = GrowwClient.cancelCashGtt(context, id);
+            DiagnosticsStore.broker(context, "CANCEL_AVERAGE_GTT_LEVEL_" + level, s.symbol, r.success || r.unknown, r.message);
+            if (r.success) setAvg(s, level, "", 0.0);
+        }
+        UnivestStateStore.put(context, s);
+    }
+
+    private static String getAvgId(UnivestStateStore.State s, int level) {
+        if (level == 1) return s.averageGtt1Id == null ? "" : s.averageGtt1Id;
+        if (level == 2) return s.averageGtt2Id == null ? "" : s.averageGtt2Id;
+        return s.averageGtt3Id == null ? "" : s.averageGtt3Id;
+    }
+
+    private static void setAvg(UnivestStateStore.State s, int level, String id, double price) {
+        if (level == 1) { s.averageGtt1Id = id; s.averageGtt1Price = price; }
+        else if (level == 2) { s.averageGtt2Id = id; s.averageGtt2Price = price; }
+        else { s.averageGtt3Id = id; s.averageGtt3Price = price; }
+    }
+
+    private static InstrumentRepository.Instrument resolve(Context context, UnivestParser.Signal signal, String action) {
+        try { InstrumentRepository.refreshIfStale(context); } catch (Throwable ignored) {}
+        List<InstrumentRepository.Instrument> instruments = InstrumentRepository.load(context);
+        InstrumentRepository.Instrument i = InstrumentRepository.resolve(instruments, signal.symbol);
+        if (i != null) {
+            if (!i.symbol.equalsIgnoreCase(signal.symbol)) DiagnosticsStore.runtime(context, "SYMBOL_MAPPED", i.symbol,
+                    "Univest stock text '" + signal.symbol + "' mapped to NSE symbol " + i.symbol + " (" + i.name + ").");
+            return i;
+        }
+        List<String> suggestions = InstrumentRepository.suggestions(instruments, signal.symbol, 5);
+        String msg = action + " symbol mapping failed for Univest stock text '" + signal.symbol + "'. Candidates: " + suggestions;
+        fail(context, "SYMBOL_MAPPING_FAILED", signal.symbol, msg, null); return null;
+    }
+
+    private static void cancelLegacyTrackedOrders(Context context, UnivestStateStore.State s) {
+        if (s == null) return;
+        if (s.activeGttId != null && !s.activeGttId.isEmpty()) {
+            GrowwClient.Result r = GrowwClient.cancelCashGtt(context, s.activeGttId);
+            DiagnosticsStore.broker(context, "CANCEL_TRACKED_GTT_BEFORE_EXIT", s.symbol, r.success || r.unknown, r.message);
+            if (r.success) s.activeGttId = "";
+        }
+        if (s.protectiveStopGttId != null && !s.protectiveStopGttId.isEmpty()) {
+            GrowwClient.Result r = GrowwClient.cancelCashGtt(context, s.protectiveStopGttId);
+            DiagnosticsStore.broker(context, "CANCEL_TRACKED_STOP_BEFORE_EXIT", s.symbol, r.success || r.unknown, r.message);
+            if (r.success) s.protectiveStopGttId = "";
+        }
+        UnivestStateStore.put(context, s);
+    }
+
+    private static void markExited(Context c, UnivestStateStore.State s, String symbol, String message) {
+        if (s == null) { s = new UnivestStateStore.State(); s.symbol = symbol; }
+        s.phase = UnivestStateStore.EXITED; s.quantity = 0; s.principal = 0; s.estimatedBuyCharges = 0; s.averageLevel = 0;
+        s.exitRequestedQty = 0; s.activeGttId = ""; s.protectiveStopGttId = "";
+        s.averageGtt1Id = ""; s.averageGtt2Id = ""; s.averageGtt3Id = "";
+        s.averageGtt1Price = 0; s.averageGtt2Price = 0; s.averageGtt3Price = 0; s.lastAction = message;
+        UnivestStateStore.put(c, s);
+    }
+
+    private static void fail(Context c, String event, String symbol, String message, Throwable t) {
+        DiagnosticsStore.error(c, event, symbol, message, t); status(c, "UNIVEST ERROR • " + symbol + " • " + message);
+    }
+
+    private static void status(Context c, String text) {
+        AppPrefs.setUnivestStatus(c, text); DiagnosticsStore.runtime(c, "STATUS", "", text);
+    }
+
+    static String stableRef(String prefix, String symbol, String seed, long postTime) {
+        try {
+            long bucket = postTime > 0 ? postTime / 300000L : System.currentTimeMillis() / 300000L;
+            String raw = prefix + "|" + symbol + "|" + seed + "|" + bucket;
+            byte[] d = MessageDigest.getInstance("SHA-256").digest(raw.getBytes(StandardCharsets.UTF_8));
+            StringBuilder h = new StringBuilder(); for (int i = 0; i < 4; i++) h.append(String.format(Locale.US, "%02X", d[i]));
+            String day = AppPrefs.istDayKey(postTime > 0 ? postTime : System.currentTimeMillis());
+            String p = (prefix == null ? "UV" : prefix.toUpperCase(Locale.US).replaceAll("[^A-Z0-9]", ""));
+            if (p.length() > 3) p = p.substring(0, 3);
+            String out = p + day + h;
+            return out.length() > 20 ? out.substring(0, 20) : out;
+        } catch (Exception e) {
+            String out = (prefix + AppPrefs.istDayKey(System.currentTimeMillis()) + Math.abs((symbol + seed).hashCode())).replaceAll("[^A-Za-z0-9]", "");
+            return out.length() > 20 ? out.substring(0, 20) : out;
+        }
+    }
+
+    private static String money(double v) { return String.format(Locale.US, "%.2f", v); }
+}
