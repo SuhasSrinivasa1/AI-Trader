@@ -1,5 +1,5 @@
 from pathlib import Path
-root = Path('/mnt/data/v23work/android')
+root = Path('android')
 
 # Version 2.3
 p=root/'app/build.gradle.kts'; s=p.read_text(); s=s.replace('versionCode = 220','versionCode = 230').replace('versionName = "2.2.0"','versionName = "2.3.0"'); p.write_text(s)
