@@ -1,0 +1,28 @@
+diff --git a/app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt b/app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+index 6818a82..ff356e0 100644
+--- a/app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
++++ b/app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+@@ -1462,7 +1462,7 @@ class GlobalEdgeAITraderRepository(context:Context){
+     }
+ 
+     private fun buildMultifyStockProfile(symbol:String):MultifyStockProfile{
+-        if(symbol.isBlank())return MultifyStockProfile("")
++        if(symbol.isBlank())return MultifyStockProfile("",0,0,0,0.0)
+         val rows=multifyTrading.loadTrades(2500).filter{it.symbol==symbol&&it.status==MultifyShadowStatus.CLOSED}
+         fun stats(side:MultifyShadowSide):List<MultifyStrategyStat> = rows.filter{it.side==side}.groupBy{it.strategyTag}.map{(tag,list)->
+             val wins=list.count{it.netPnl>0.0};val losses=list.count{it.netPnl<=0.0};val avg=list.map{multifyEngine.directionalReturn(it.side,it.entryPrice,it.exitPrice)}.average().takeIf{it.isFinite()}?:0.0
+diff --git a/app/src/main/java/com/suhas/ucsentinel/notifications/AppNotifier.kt b/app/src/main/java/com/suhas/ucsentinel/notifications/AppNotifier.kt
+index e4a1713..46c8b14 100644
+--- a/app/src/main/java/com/suhas/ucsentinel/notifications/AppNotifier.kt
++++ b/app/src/main/java/com/suhas/ucsentinel/notifications/AppNotifier.kt
+@@ -179,9 +179,7 @@ object AppNotifier {
+             .setSmallIcon(android.R.drawable.stat_notify_more)
+             .setContentTitle("Multify → Global Edge: $direction ${d.symbol}")
+             .setContentText(text)
+-            .setStyle(NotificationCompat.BigTextStyle().bigText(text+"
+-"+d.reason+"
+-Shadow lane tracks the same decision automatically; real Groww orders still require manual confirmation."))
++            .setStyle(NotificationCompat.BigTextStyle().bigText(text+"\n"+d.reason+"\nShadow lane tracks the same decision automatically; real Groww orders still require manual confirmation."))
+             .setPriority(NotificationCompat.PRIORITY_HIGH).setCategory(NotificationCompat.CATEGORY_RECOMMENDATION)
+             .setAutoCancel(true).setContentIntent(pending(context,2701)).build()
+         runCatching{NotificationManagerCompat.from(context).notify((System.currentTimeMillis()%100000).toInt()+2700,n)}
