@@ -1,0 +1,187 @@
+name: Global Edge AI Trader v1.6.4 Multify Intraday Lab Build
+
+on:
+  push:
+    paths:
+      - '.github/workflows/global-edge-v164-build.yml'
+      - 'fresh-global-edge/v164/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Recover exact v1.6.3 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRCZIP=fresh-global-edge/v163/release/Global-Edge-AI-Trader-v1.6.3-source.zip
+          test -s "$SRCZIP"
+          rm -rf /tmp/v164 && mkdir -p /tmp/v164
+          unzip -q "$SRCZIP" -d /tmp/v164
+          test -f /tmp/v164/Global-Edge-AI-Trader-v1.5.0-source/app/build.gradle.kts
+
+      - name: Apply v1.6.4 Multify Intraday Lab patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC=/tmp/v164/Global-Edge-AI-Trader-v1.5.0-source
+          echo '7f4a448e20ecf4c643786717d22e484ab3ba6ff2dc7a44df43981d93fe6281cd  fresh-global-edge/v164/patch-parts/part-00.b64' | sha256sum -c -
+          echo '4e25713d53500e41afba44d91d8981332fa97f0c26a0a7d975c333099a4f6063  fresh-global-edge/v164/patch-parts/part-01.b64' | sha256sum -c -
+          echo 'da2ff2eee28a878fb5cc21effe7bdad5d99eaa6a7fadd75f693c833dac676dd3  fresh-global-edge/v164/patch-parts/part-02.b64' | sha256sum -c -
+          echo '17c8c7809f80a23ea4b3d6d684a9f1b948666f58b5dbb9b8ebca37f038b41caf  fresh-global-edge/v164/patch-parts/part-03.b64' | sha256sum -c -
+          cat fresh-global-edge/v164/patch-parts/part-*.b64 | tr -d '\r\n ' | base64 -d > /tmp/v164.patch.gz
+          echo '930bd76f99eadf924b6be549a9fd43fd93b1ddaf6bf385ee525fcde538e86ab7  /tmp/v164.patch.gz' | sha256sum -c -
+          gzip -t /tmp/v164.patch.gz
+          gunzip -c /tmp/v164.patch.gz > /tmp/v164.patch
+          cd "$SRC"
+          patch -p1 --batch < /tmp/v164.patch
+          grep -q 'versionCode = 164' app/build.gradle.kts
+          grep -q 'versionName = "1.6.4"' app/build.gradle.kts
+          grep -q 'MULTIFY_CAPITAL_BUDGET=200_000.0' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'MULTIFY_DAILY_NET_TARGET=5_000.0' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'processMultifyEvent' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'monitorMultifyShadowLane' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'EXIT_FALL_EDGE' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'writeCentralizedBundle' app/src/main/java/com/suhas/ucsentinel/diagnostics/DiagnosticLog.kt
+          grep -q 'Export all logs' app/src/main/java/com/suhas/ucsentinel/ui/MoreScreen.kt
+          grep -q 'class MultifySignalWorker' app/src/main/java/com/suhas/ucsentinel/worker/MultifySignalWorker.kt
+          grep -q 'SQUARE\\s\*OFF' app/src/main/java/com/suhas/ucsentinel/notifications/MultifyNotificationService.kt
+          test -s CHANGELOG-v1.6.4.txt
+          echo 'v1.6.4 source verification passed'
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Unit tests and release APK
+        working-directory: /tmp/v164/Global-Edge-AI-Trader-v1.5.0-source
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p out
+          gradle --no-daemon --console=plain clean testDebugUnitTest assembleRelease 2>&1 | tee out/GRADLE-BUILD-TEST.log
+          echo 'Unit tests + assembleRelease: PASS' > out/TEST-RESULT-SUMMARY.txt
+
+      - name: Recover preserved signing material
+        uses: actions/download-artifact@v4
+        with:
+          name: Global-Edge-AI-Trader-v1.5.0-FINAL
+          repository: SuhasSrinivasa1/AI-Trader
+          run-id: 36146076154
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: /tmp/v150-artifact
+
+      - name: Sign and verify preserved update certificate
+        working-directory: /tmp/v164/Global-Edge-AI-Trader-v1.5.0-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out /tmp/signing
+          BACKUP=$(find /tmp/v150-artifact -type f -name 'Global-Edge-AI-Trader-v1.5.0-SIGNING-BACKUP.zip' | head -n1)
+          test -n "$BACKUP" && test -s "$BACKUP"
+          unzip -q "$BACKUP" -d /tmp/signing
+          KEYSTORE=/tmp/signing/global-edge-v1.5.0.keystore
+          INFO=/tmp/signing/SIGNING-INFO.txt
+          STORE_PASS=$(grep '^store_password=' "$INFO" | cut -d= -f2-)
+          KEY_PASS=$(grep '^key_password=' "$INFO" | cut -d= -f2-)
+          UNSIGNED=$(find app/build/outputs/apk/release -maxdepth 1 -type f -name '*release*.apk' | head -n1)
+          OUT=out/Global-Edge-AI-Trader-v1.6.4.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KEYSTORE" --ks-pass pass:"$STORE_PASS" --key-pass pass:"$KEY_PASS" --ks-key-alias globaledge --out "$OUT" "$UNSIGNED"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$OUT" | tee out/APK-SIGNATURE-VERIFY.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$OUT" | tee out/APK-BADGING.txt
+          grep -q "package: name='com.suhas.globaledgeai'" out/APK-BADGING.txt
+          grep -q "versionCode='164'" out/APK-BADGING.txt
+          grep -q "versionName='1.6.4'" out/APK-BADGING.txt
+          CERT_SHA=$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$OUT" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n1)
+          test "$CERT_SHA" = '31ffa51c23b76f450cf099d00b254870bf8eacc5ce79aee4458070a0fab783d7'
+          sha256sum "$OUT" | tee out/SHA256.txt
+          {
+            echo 'build=SUCCESS'
+            echo 'package=com.suhas.globaledgeai'
+            echo 'versionCode=164'
+            echo 'versionName=1.6.4'
+            echo "signer_sha256=$CERT_SHA"
+            echo 'update_certificate_preserved=true'
+            echo 'manual_order_only=true'
+            echo 'multify_equity_only=true'
+            echo 'multify_immediate_priority_analysis=true'
+            echo 'multify_entry_exit_parsing=true'
+            echo 'multify_exit_decay_learning=true'
+            echo 'multify_wave_shadow_monitor=1_minute'
+            echo 'multify_shadow_capital=200000'
+            echo 'multify_daily_net_target=5000'
+            echo 'multify_stock_specific_strategy_memory=true'
+            echo 'multify_1_3_5_15m_replay=true'
+            echo 'multify_real_order_auto_execution=false'
+            echo 'centralized_log_export=true'
+            echo 'diagnostic_log_archives=6'
+            echo 'runtime_log_archive_bytes=5000000'
+            echo 'groww_healthy_live_budget=285_per_minute'
+            echo 'groww_429_cooldown_budget=220_per_minute'
+            echo 'v163_signal_visibility_preserved=true'
+            echo 'v159_ledger_integrity_preserved=true'
+          } > out/BUILD-STATUS.txt
+
+      - name: Package source and logs
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC=/tmp/v164/Global-Edge-AI-Trader-v1.5.0-source
+          cd /tmp/v164
+          zip -qr "$SRC/out/Global-Edge-AI-Trader-v1.6.4-source.zip" Global-Edge-AI-Trader-v1.5.0-source -x '*/.gradle/*' '*/build/*' '*/out/*' '*.keystore' '*.jks'
+          cd "$SRC/out"
+          zip -q Global-Edge-AI-Trader-v1.6.4-build-logs.zip APK-SIGNATURE-VERIFY.txt APK-BADGING.txt SHA256.txt BUILD-STATUS.txt TEST-RESULT-SUMMARY.txt GRADLE-BUILD-TEST.log
+
+      - name: Upload final v1.6.4 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Global-Edge-AI-Trader-v1.6.4-FINAL
+          retention-days: 90
+          if-no-files-found: error
+          path: |
+            /tmp/v164/Global-Edge-AI-Trader-v1.5.0-source/out/Global-Edge-AI-Trader-v1.6.4.apk
+            /tmp/v164/Global-Edge-AI-Trader-v1.5.0-source/out/Global-Edge-AI-Trader-v1.6.4-source.zip
+            /tmp/v164/Global-Edge-AI-Trader-v1.5.0-source/out/Global-Edge-AI-Trader-v1.6.4-build-logs.zip
+            /tmp/v164/Global-Edge-AI-Trader-v1.5.0-source/out/BUILD-STATUS.txt
+
+      - name: Publish v1.6.4 release files
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC=/tmp/v164/Global-Edge-AI-Trader-v1.5.0-source/out
+          DEST=fresh-global-edge/v164/release
+          mkdir -p "$DEST"
+          cp "$SRC/Global-Edge-AI-Trader-v1.6.4.apk" "$DEST/"
+          cp "$SRC/Global-Edge-AI-Trader-v1.6.4-source.zip" "$DEST/"
+          cp "$SRC/Global-Edge-AI-Trader-v1.6.4-build-logs.zip" "$DEST/"
+          cp "$SRC/BUILD-STATUS.txt" "$DEST/"
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add "$DEST"
+          git commit -m 'Publish Global Edge AI Trader v1.6.4 Multify Intraday Lab release [skip ci]'
+          git push
