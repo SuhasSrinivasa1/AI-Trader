@@ -29,9 +29,7 @@ jobs:
         run: python multify-pro-v22-build/patch_v22.py
 
       - name: Apply v2.3 shadow engine
-        run: |
-          cat multify-pro-v23-build/patch_v23.part00 multify-pro-v23-build/patch_v23.part01 | base64 -d | gunzip > /tmp/patch_v23.py
-          python /tmp/patch_v23.py
+        run: python multify-pro-v23-build/patch_v23.py
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
