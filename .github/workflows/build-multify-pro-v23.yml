@@ -30,7 +30,7 @@ jobs:
 
       - name: Apply v2.3 shadow engine
         run: |
-          base64 -d multify-pro-v23-build/patch_v23.py.gz.b64 | gunzip > /tmp/patch_v23.py
+          cat multify-pro-v23-build/patch_v23.part00 multify-pro-v23-build/patch_v23.part01 | base64 -d | gunzip > /tmp/patch_v23.py
           python /tmp/patch_v23.py
 
       - name: Set up Java 17
