@@ -1,0 +1,4 @@
+canonical_repo=SuhasSrinivasa1/Global-Edge-AI-Trader
+canonical_commit=aebe70df7e014e6edde4e52b81ab67d22b86cfd0
+version=1.6.8
+versionCode=168
