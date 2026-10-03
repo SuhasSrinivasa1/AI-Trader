@@ -374,7 +374,7 @@ public class DashboardActivity extends Activity {
             }
             new AlertDialog.Builder(this)
                     .setTitle("Enable Research AutoTrade?")
-                    .setMessage("Qualified Research entry/exit signals may place real NSE CASH/CNC orders using the same configured budgets. Official Univest AutoTrade remains a separate signal source.")
+                    .setMessage("Qualified Research entry/exit signals may place real NSE CASH/CNC orders using the same configured budgets. Research execution now reconciles broker fills/GTTs and committed capital, but timing still depends on the Android market-session monitor. Official Univest AutoTrade remains a separate signal source.")
                     .setNegativeButton("Cancel", (d, w) -> render())
                     .setPositiveButton("Enable", (d, w) -> {
                         AppPrefs.setResearchAutoTradeEnabled(this, true);
@@ -892,7 +892,10 @@ public class DashboardActivity extends Activity {
         box.setBackground(bg);
 
         box.addView(text("RESEARCH CAPITAL GOVERNOR", 13, TEXT, true));
-        box.addView(meta("Caps Research-originated live exposure and simultaneous Research positions. Changing either setting disables Research AutoTrade."), margins(0, 6, 0, 8));
+        box.addView(meta("Caps Research-originated live exposure and simultaneous Research positions. Filled entries plus active/filled Research averaging commitments count toward the ceiling. Changing either setting disables Research AutoTrade."), margins(0, 6, 0, 8));
+        box.addView(meta("Currently committed: " + formatRupees(ResearchTradeEngine.committedCapital(this)),
+                ResearchTradeEngine.committedCapital(this) > AppPrefs.getResearchCapitalLimit(this) ? RED : GREEN),
+                margins(0, 0, 0, 8));
 
         TextView capValue = text(formatRupees(AppPrefs.getResearchCapitalLimit(this)), 14, TEAL, true);
         box.addView(capValue);
