@@ -37,7 +37,7 @@ jobs:
       - name: Validate v2.8.0 execution hardening and Research contract
         shell: bash
         run: |
-          set -euo pipefail
+          set -euxo pipefail
           SRC=.build-temp/univest-v220-work/source
           grep -q "versionCode 280" "$SRC/app/build.gradle"
           grep -q "versionName '2.8.0'" "$SRC/app/build.gradle"
