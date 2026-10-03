@@ -17,12 +17,11 @@ import java.util.concurrent.Executors;
  */
 public class MultyfiNotificationService extends NotificationListenerService {
     static final String UNIVEST_PACKAGE = "com.univest.capp";
-    private final ExecutorService buyExecutor = Executors.newSingleThreadExecutor();
-    private final ExecutorService exitExecutor = Executors.newSingleThreadExecutor();
+    private final PerSymbolSerialExecutor signalExecutor = new PerSymbolSerialExecutor(4);
 
     @Override public void onCreate() {
         super.onCreate();
-        buyExecutor.execute(() -> {
+        signalExecutor.execute("__STARTUP__", () -> {
             try { UnivestManager.reconcileAll(getApplicationContext()); }
             catch (Throwable t) { DiagnosticsStore.error(getApplicationContext(), "STARTUP_RECONCILIATION_ERROR", "", "Campaign reconciliation failed.", t); }
         });
@@ -73,7 +72,7 @@ public class MultyfiNotificationService extends NotificationListenerService {
             AppPrefs.setUnivestStatus(getApplicationContext(), "UNIVEST " + signal.type + " DETECTED • " + signal.symbol
                     + " • ₹" + java.text.NumberFormat.getIntegerInstance(new java.util.Locale("en", "IN")).format(configuredBudget)
                     + " CNC " + AppPrefs.getExecutionMode(getApplicationContext()) + " path queued.");
-            buyExecutor.execute(() -> {
+            signalExecutor.execute(signal.symbol, () -> {
                 UnivestManager.handle(getApplicationContext(), signal, postTime);
                 showLocalStatus("UNIVEST " + signal.type, AppPrefs.getUnivestStatus(getApplicationContext()));
             });
@@ -87,13 +86,13 @@ public class MultyfiNotificationService extends NotificationListenerService {
         }
         AppPrefs.setUnivestStatus(getApplicationContext(), "UNIVEST BOOK PROFIT / EXIT DETECTED • " + signal.symbol
                 + " • " + AppPrefs.getExecutionMode(getApplicationContext()) + " full CNC holding sell path queued.");
-        exitExecutor.execute(() -> {
+        signalExecutor.execute(signal.symbol, () -> {
             UnivestManager.handle(getApplicationContext(), signal, postTime);
             showLocalStatus("UNIVEST EXIT", AppPrefs.getUnivestStatus(getApplicationContext()));
         });
     }
 
-    @Override public void onDestroy() { buyExecutor.shutdown(); exitExecutor.shutdown(); super.onDestroy(); }
+    @Override public void onDestroy() { signalExecutor.shutdown(); super.onDestroy(); }
 
     private String collectText(Notification n) {
         StringBuilder sb = new StringBuilder();
