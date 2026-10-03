@@ -83,17 +83,18 @@ final class AppPrefs {
         p(c).edit().putInt("intraday_budget", clamped).apply();
     }
 
-    // Historical preference key name kept for upgrade compatibility. This stores the Groww TOTP token in v2.1+.
-    static String getApiKey(Context c) { return p(c).getString("api_key", ""); }
-    static void setApiKey(Context c, String v) { p(c).edit().putString("api_key", clean(v)).apply(); }
-    static String getTotpSecret(Context c) { return p(c).getString("totp_secret", ""); }
-    static void setTotpSecret(Context c, String v) { p(c).edit().putString("totp_secret", clean(v)).apply(); }
+    // Broker credentials are encrypted with an Android-Keystore-backed key. Legacy plaintext values
+    // are migrated lazily and deleted after the encrypted write succeeds.
+    static String getApiKey(Context c) { return secureGet(c, "api_key"); }
+    static void setApiKey(Context c, String v) { securePut(c, "api_key", v); }
+    static String getTotpSecret(Context c) { return secureGet(c, "totp_secret"); }
+    static void setTotpSecret(Context c, String v) { securePut(c, "totp_secret", v); }
     static String getExpectedStaticIp(Context c) { return p(c).getString("expected_static_ip", ""); }
     static void setExpectedStaticIp(Context c, String v) { p(c).edit().putString("expected_static_ip", clean(v)).apply(); }
 
-    static String getAccessToken(Context c) { return p(c).getString("access_token", ""); }
-    static void setAccessToken(Context c, String v) { p(c).edit().putString("access_token", clean(v)).apply(); }
-    static void clearAccessToken(Context c) { p(c).edit().remove("access_token").apply(); }
+    static String getAccessToken(Context c) { return secureGet(c, "access_token"); }
+    static void setAccessToken(Context c, String v) { securePut(c, "access_token", v); }
+    static void clearAccessToken(Context c) { SecurePrefs.remove(c, "access_token"); p(c).edit().remove("access_token").apply(); }
 
     static String getLastDetectedIp(Context c) { return p(c).getString("last_detected_ip", ""); }
     static boolean isStaticIpMatch(Context c) { return p(c).getBoolean("static_ip_match", false); }
@@ -271,6 +272,25 @@ final class AppPrefs {
 
     static boolean isUnivestV2Migrated(Context c) { return p(c).getBoolean("univest_v2_migrated", false); }
     static void setUnivestV2Migrated(Context c, boolean v) { p(c).edit().putBoolean("univest_v2_migrated", v).apply(); }
+
+    private static String secureGet(Context c, String key) {
+        String legacy = p(c).getString(key, "");
+        String value = SecurePrefs.get(c, key, legacy);
+        if (!legacy.isEmpty() && legacy.equals(value) && SecurePrefs.put(c, key, legacy)) {
+            p(c).edit().remove(key).apply();
+        }
+        return value;
+    }
+
+    private static void securePut(Context c, String key, String value) {
+        String v = clean(value);
+        if (SecurePrefs.put(c, key, v)) {
+            p(c).edit().remove(key).apply();
+        } else {
+            // Keystore failure must not silently destroy a user's broker configuration.
+            p(c).edit().putString(key, v).apply();
+        }
+    }
 
     private static String safeKey(String key) { return key == null ? "" : key.replaceAll("[^A-Za-z0-9_.-]", "_"); }
     private static String clean(String v) { return v == null ? "" : v.trim(); }
