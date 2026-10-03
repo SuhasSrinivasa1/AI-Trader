@@ -111,7 +111,7 @@ final class ResearchTradeEngine {
         if (liveResearchPositionCount(c) >= AppPrefs.getResearchMaxPositions(c))
             return "Research BUY blocked: maximum open Research positions reached.";
         if (liveResearchCapital(c) + budget > AppPrefs.getResearchCapitalLimit(c))
-            return "Research BUY blocked: Research capital limit " + rupees(AppPrefs.getResearchCapitalLimit(c)) + " would be exceeded.";
+            return "Research BUY blocked: Research committed-capital limit " + rupees(AppPrefs.getResearchCapitalLimit(c)) + " would be exceeded.";
 
         JSONObject p = findOpen(c, symbol);
         if (p != null && "LIVE_OPEN".equals(p.optString("state"))) return symbol + " already has an active Research LIVE lot.";
@@ -127,16 +127,36 @@ final class ResearchTradeEngine {
             }
         }
 
+        GrowwClient.QuoteSnapshot liveQuote = null;
         if (automatic) {
             long minuteAt = p.optLong("lastMinuteCaptureAt", 0L);
             if (minuteAt <= 0 || System.currentTimeMillis() - minuteAt > 20L * 60L * 1000L)
                 return "Research AutoTrade BUY blocked: one-minute market context is stale or unavailable.";
             if (p.optInt("dataConfidence", 0) < 60)
                 return "Research AutoTrade BUY blocked: data confidence is below 60%.";
+            liveQuote = GrowwClient.getQuoteForAutomation(c, symbol);
+            if (!liveQuote.success || !(liveQuote.lastPrice > 0))
+                return "Research AutoTrade BUY blocked: live quote/depth unavailable.";
+            double spread = liveQuote.spreadPct();
+            if (spread < 0 || spread > 0.75)
+                return "Research AutoTrade BUY blocked: bid/offer spread " + one(spread) + "% is outside the 0.75% liquidity gate.";
+            if (liveQuote.offerQuantity <= 0)
+                return "Research AutoTrade BUY blocked: no executable offer quantity is visible.";
+            if (liveQuote.distanceToUpperCircuitPct() < 0.50)
+                return "Research AutoTrade BUY blocked: price is too close to the upper circuit.";
+            double minuteVwap = p.optDouble("minuteVwap", 0);
+            double minuteRsi = p.optDouble("minuteRsi14", 0);
+            double minuteRet = p.optDouble("minuteReturn5Pct", 0);
+            if (minuteVwap > 0 && liveQuote.lastPrice < minuteVwap * 0.985)
+                return "Research AutoTrade BUY blocked: live price is materially below one-minute VWAP.";
+            if (minuteRsi > 84)
+                return "Research AutoTrade BUY blocked: one-minute RSI is extended.";
+            if (minuteRet < -1.0)
+                return "Research AutoTrade BUY blocked: short-term price path is still falling.";
         }
 
         double current;
-        try { current = GrowwClient.getLtpForAutomation(c, symbol); }
+        try { current = liveQuote != null && liveQuote.lastPrice > 0 ? liveQuote.lastPrice : GrowwClient.getLtpForAutomation(c, symbol); }
         catch (Throwable t) { return "Unable to refresh LTP before BUY: " + safe(t); }
         double chase = p.optDouble("chaseLimit", 0);
         if (chase > 0 && current > chase) {
@@ -147,9 +167,16 @@ final class ResearchTradeEngine {
         if (pending.unknown) return "BUY blocked because open-order status is unknown: " + pending.message;
         if (pending.success) return "BUY blocked: broker already has an active CNC BUY for " + symbol + ".";
 
+        GrowwClient.PositionSnapshot beforeBroker = GrowwClient.getCncPosition(c, symbol);
+        if (!beforeBroker.success)
+            return "Research BUY blocked because broker holding attribution is unknown: " + beforeBroker.message;
+        if (beforeBroker.quantity > 0)
+            return "Research LIVE BUY blocked: broker already holds " + symbol
+                    + ". Research remains shadow-only so official/manual holdings are never mixed into Research attribution.";
+
         String ref = UnivestManager.stableRef("RB", symbol,
                 p.optString("strategy") + "|" + p.optLong("predictionAt"), System.currentTimeMillis());
-        GrowwClient.ExecutionResult r = GrowwClient.placeUnivestCncMarketBuy(c, symbol, budget, ref);
+        GrowwClient.ExecutionResult r = GrowwClient.placeResearchCncMarketBuy(c, symbol, budget, ref);
         if (!r.submitted) {
             DiagnosticsStore.trade(c, "RESEARCH_BUY_FAILED", symbol, r.message, r);
             return "Research BUY not submitted: " + r.message;
@@ -161,6 +188,7 @@ final class ResearchTradeEngine {
             p.put("automaticEntry", automatic);
             p.put("budget", budget);
             p.put("orderId", r.orderId);
+            p.put("brokerQtyBeforeResearch", beforeBroker.quantity);
             p.put("entryAt", System.currentTimeMillis());
             if (r.filled && r.averagePrice > 0) {
                 p.put("entryPrice", r.averagePrice);
@@ -168,13 +196,15 @@ final class ResearchTradeEngine {
                 p.put("minPrice", r.averagePrice);
                 p.put("maxPrice", r.averagePrice);
                 p.put("quantity", r.filledQuantity);
+                p.put("initialFilledQty", r.filledQuantity);
+                p.put("initialPrincipal", r.averagePrice * r.filledQuantity);
                 p.put("mfePct", 0.0);
                 p.put("maePct", 0.0);
-                armResearchAveraging(c, p);
-            }
+             }
             p.put("lastReason", automatic ? "Research AutoTrade entry executed." : "Manual Research BUY executed.");
             p.put("exitState", "HOLD");
             replacePosition(c, p);
+            if (r.filled && r.averagePrice > 0) armResearchAveraging(c, p);
             ResearchEventStore.appendDecisionSnapshot(c, automatic ? "RESEARCH_AUTO_BUY" : "RESEARCH_MANUAL_BUY", p);
         } catch (Exception ignored) {}
 
@@ -192,6 +222,12 @@ final class ResearchTradeEngine {
         if (p == null) return "No open Research trade for " + symbol + ".";
 
         boolean live = p.optBoolean("live", false);
+        if (live) {
+            reconcileResearchLivePosition(c, p);
+            p = findOpen(c, symbol);
+            if (p == null) return "Research trade already closed during broker reconciliation.";
+            live = p.optBoolean("live", false);
+        }
         if (!live) {
             double exit = p.optDouble("lastPrice", p.optDouble("entryPrice", 0));
             closePosition(c, p, exit, automatic ? "SHADOW_MODEL_EXIT" : "SHADOW_MANUAL_EXIT", reason);
@@ -210,10 +246,21 @@ final class ResearchTradeEngine {
             return "Research SELL not submitted: " + r.message;
         }
         double exit = r.averagePrice > 0 ? r.averagePrice : p.optDouble("lastPrice", p.optDouble("entryPrice", 0));
-        closePosition(c, p, exit, automatic ? "MODEL_AUTO_EXIT" : "MANUAL_RESEARCH_EXIT", reason);
+        if (r.filled && r.filledQuantity >= qty) {
+            closePosition(c, p, exit, automatic ? "MODEL_AUTO_EXIT" : "MANUAL_RESEARCH_EXIT", reason);
+        } else {
+            try {
+                p.put("state", "LIVE_EXIT_PENDING");
+                p.put("exitOrderId", r.orderId);
+                p.put("exitRequestedQty", qty);
+                p.put("exitReasonPending", reason);
+                p.put("lastReason", "Research SELL accepted; waiting for broker fill reconciliation.");
+                replacePosition(c, p);
+            } catch (Exception ignored) {}
+        }
         DiagnosticsStore.trade(c, r.filled ? "RESEARCH_SELL_EXECUTED" : "RESEARCH_SELL_SUBMITTED",
                 symbol, reason + " • " + r.message, r);
-        return "Research SELL " + (r.filled ? "executed" : "submitted") + " • " + symbol
+        return "Research SELL " + (r.filled ? "executed" : "submitted/verification pending") + " • " + symbol
                 + " • qty " + qty + " • " + r.message;
     }
 
@@ -272,6 +319,11 @@ final class ResearchTradeEngine {
             if (p == null || "CLOSED".equals(p.optString("state"))) continue;
             String symbol = p.optString("symbol", "");
             if (symbol.isEmpty()) continue;
+            if (p.optBoolean("live", false)) {
+                reconcileResearchLivePosition(c, p);
+                if ("CLOSED".equals(p.optString("state"))) { changed = true; continue; }
+                if ("LIVE_EXIT_PENDING".equals(p.optString("state"))) { changed = true; continue; }
+            }
             double ltp;
             try { ltp = GrowwClient.getLtpForAutomation(c, symbol); }
             catch (Throwable t) { continue; }
@@ -613,6 +665,8 @@ final class ResearchTradeEngine {
             p.put("signalAttribution", hasOfficialEntryBefore(c, prediction.optString("symbol"), now)
                     ? "UNIVEST_THEN_RESEARCH_CONFIRMED" : "RESEARCH_ONLY");
             p.put("exitState", "HOLD");
+            p.put("evaluationHorizonSessions", evaluationHorizonSessions(prediction.optString("strategy")));
+            p.put("evaluationState", "OPEN");
             p.put("lastReason", "Entry trigger reached inside frozen Research buy/chase range.");
         } catch (Exception ignored) {}
         JSONArray a = ResearchStore.positions(c); a.put(p); ResearchStore.savePositions(c, a);
@@ -634,9 +688,16 @@ final class ResearchTradeEngine {
         double tick = ins == null ? 0.05 : ins.tickSize;
         for (int level = 1; level <= 3; level++) {
             try {
+                if (!p.optString("avgGtt" + level + "Id", "").isEmpty()) continue;
                 double trigger = GrowwClient.roundTarget(anchor * (1.0 - level * 0.02), tick, false);
                 int qty = (int)Math.floor(budget / trigger);
                 if (qty < 1) continue;
+                int projected = committedOtherResearchCapital(c, p.optString("id")) + committedExposure(p) + budget;
+                if (projected > AppPrefs.getResearchCapitalLimit(c)) {
+                    DiagnosticsStore.runtime(c, "RESEARCH_AVERAGING_CAP_BLOCK", p.optString("symbol"),
+                            "Research averaging level " + level + " not armed: committed-capital ceiling would be exceeded.");
+                    continue;
+                }
                 String ref = UnivestManager.stableRef("RA" + level, p.optString("symbol"),
                         p.optString("id") + "|" + level, p.optLong("entryAt"));
                 GrowwClient.GttResult g = GrowwClient.createUnivestCncBuyGtt(c, p.optString("symbol"), qty, trigger, ref);
@@ -644,6 +705,8 @@ final class ResearchTradeEngine {
                     p.put("avgGtt" + level + "Id", g.smartOrderId);
                     p.put("avgGtt" + level + "Price", trigger);
                     p.put("avgGtt" + level + "Budget", budget);
+                    p.put("avgGtt" + level + "Qty", qty);
+                    p.put("avgGtt" + level + "Confirmed", false);
                 }
                 DiagnosticsStore.broker(c, "RESEARCH_AVERAGING_LEVEL_" + level, p.optString("symbol"),
                         g.success || g.unknown, g.message);
@@ -662,6 +725,120 @@ final class ResearchTradeEngine {
             if (r.success) try { p.put("avgGtt" + level + "Id", ""); } catch (Exception ignored) {}
         }
         replacePosition(c, p);
+    }
+
+    private static void reconcileResearchLivePosition(Context c, JSONObject p) {
+        if (p == null || !p.optBoolean("live", false) || "CLOSED".equals(p.optString("state"))) return;
+        String symbol = p.optString("symbol", "");
+        if (symbol.isEmpty()) return;
+        try {
+            if ("LIVE_EXIT_PENDING".equals(p.optString("state"))) {
+                String exitId = p.optString("exitOrderId", "");
+                int requested = p.optInt("exitRequestedQty", 0);
+                GrowwClient.ExecutionResult ex = GrowwClient.checkCashOrderExecution(c, exitId, requested);
+                if (ex.filledQuantity >= requested && requested > 0 && ex.averagePrice > 0) {
+                    double exit = ex.averagePrice;
+                    String reason = p.optString("exitReasonPending", "Research broker exit reconciled.");
+                    markClosedAfterReconcile(c, p, exit, "RECONCILED_RESEARCH_EXIT", reason);
+                } else if (ex.filledQuantity > 0) {
+                    p.put("quantity", Math.max(0, requested - ex.filledQuantity));
+                    p.put("exitFilledQuantity", ex.filledQuantity);
+                    p.put("lastReason", "Research SELL partially filled; waiting for remaining broker quantity.");
+                }
+                replacePosition(c, p);
+                return;
+            }
+
+            if ("LIVE_PENDING".equals(p.optString("state"))) {
+                GrowwClient.ExecutionResult entry = GrowwClient.checkCashOrderExecution(
+                        c, p.optString("orderId", ""), Math.max(1, p.optInt("requestedQuantity", 1)));
+                if (entry.filledQuantity > 0 && entry.averagePrice > 0) {
+                    p.put("state", "LIVE_OPEN");
+                    p.put("quantity", entry.filledQuantity);
+                    p.put("initialFilledQty", entry.filledQuantity);
+                    p.put("entryPrice", entry.averagePrice);
+                    p.put("initialPrincipal", entry.averagePrice * entry.filledQuantity);
+                    p.put("lastPrice", entry.averagePrice);
+                    p.put("minPrice", entry.averagePrice);
+                    p.put("maxPrice", entry.averagePrice);
+                    p.put("lastReason", "Research pending BUY reconciled from Groww order detail.");
+                    replacePosition(c, p);
+                    armResearchAveraging(c, p);
+                } else {
+                    replacePosition(c, p);
+                    return;
+                }
+            }
+
+            int initialQty = Math.max(0, p.optInt("initialFilledQty", p.optInt("quantity", 0)));
+            double initialPrincipal = p.optDouble("initialPrincipal",
+                    p.optDouble("entryPrice", 0) * initialQty);
+            int intendedQty = initialQty;
+            double principal = initialPrincipal;
+            for (int level = 1; level <= 3; level++) {
+                String id = p.optString("avgGtt" + level + "Id", "");
+                if (id.isEmpty() && !p.optBoolean("avgGtt" + level + "Confirmed", false)) continue;
+                if (!p.optBoolean("avgGtt" + level + "Confirmed", false) && !id.isEmpty()) {
+                    GrowwClient.GttStatusResult st = GrowwClient.getCashGttStatus(c, id);
+                    String status = st.status == null ? "" : st.status.toUpperCase(Locale.US);
+                    if (st.success && (status.contains("COMPLET") || status.contains("EXECUT"))) {
+                        p.put("avgGtt" + level + "Confirmed", true);
+                        p.put("avgGtt" + level + "ConfirmedAt", System.currentTimeMillis());
+                    }
+                }
+                if (p.optBoolean("avgGtt" + level + "Confirmed", false)) {
+                    int q = Math.max(0, p.optInt("avgGtt" + level + "Qty", 0));
+                    double px = p.optDouble("avgGtt" + level + "Price", 0);
+                    intendedQty += q;
+                    if (px > 0) principal += px * q;
+                }
+            }
+
+            GrowwClient.PositionSnapshot broker = GrowwClient.getCncPosition(c, symbol);
+            if (broker.success) {
+                int baseline = Math.max(0, p.optInt("brokerQtyBeforeResearch", 0));
+                int attributableAtBroker = Math.max(0, broker.quantity - baseline);
+                int reconciledQty = intendedQty > 0 ? Math.min(intendedQty, attributableAtBroker) : 0;
+                p.put("quantity", reconciledQty);
+                p.put("brokerResearchAttributableQty", attributableAtBroker);
+                p.put("reconciledAt", System.currentTimeMillis());
+                if (intendedQty > 0 && principal > 0) p.put("entryPrice", principal / intendedQty);
+                p.put("researchPrincipalEstimate", principal);
+            }
+            replacePosition(c, p);
+        } catch (Throwable t) {
+            DiagnosticsStore.error(c, "RESEARCH_BROKER_RECONCILIATION_FAILED", symbol,
+                    "Research order/GTT attribution reconciliation failed.", t);
+        }
+    }
+
+    private static void markClosedAfterReconcile(Context c, JSONObject p, double exitPrice, String exitType, String reason) {
+        try {
+            long now = System.currentTimeMillis();
+            double net = estimatedNetPct(p, exitPrice);
+            p.put("state", "CLOSED");
+            p.put("exitAt", now);
+            p.put("exitPrice", exitPrice);
+            p.put("netPct", net);
+            p.put("exitType", exitType);
+            p.put("exitReason", reason);
+            p.put("outcome", net >= MIN_NET_WIN_PCT ? "WIN" : "BELOW_0_5_NET");
+            p.put("evaluationState", net >= MIN_NET_WIN_PCT ? "WIN" : "CLOSED_BELOW_EDGE");
+            p.put("horizon", AppPrefs.istDayKey(p.optLong("entryAt", now)).equals(AppPrefs.istDayKey(now))
+                    ? "SAME_DAY" : "MULTI_DAY");
+            double mfe = p.optDouble("mfePct", 0);
+            p.put("mfeCapturePct", mfe > 0 ? Math.max(0, Math.min(100, net / mfe * 100.0)) : 0);
+            DiagnosticsStore.runtime(c, "RESEARCH_TRADE_CLOSED_RECONCILED", p.optString("symbol"),
+                    exitType + " • net " + one(net) + "% • " + reason);
+            ResearchEventStore.appendDecisionSnapshot(c, "RESEARCH_TRADE_CLOSED_RECONCILED", p);
+            AppPrefs.setResearchAction(c, "", "");
+        } catch (Exception ignored) {}
+    }
+
+    private static int evaluationHorizonSessions(String strategy) {
+        if ("VOLUME_BREAKOUT".equals(strategy) || "MOMENTUM_CONTINUATION".equals(strategy)) return 3;
+        if ("TREND_PULLBACK".equals(strategy)) return 5;
+        return 10;
     }
 
     private static double estimatedNetPct(JSONObject p, double sellPrice) {
@@ -763,7 +940,28 @@ final class ResearchTradeEngine {
         for (int i = 0; i < a.length(); i++) {
             JSONObject p = a.optJSONObject(i);
             if (p != null && p.optBoolean("live", false) && !"CLOSED".equals(p.optString("state")))
-                total += Math.max(0, p.optInt("budget", 0));
+                total += committedExposure(p);
+        }
+        return total;
+    }
+
+    private static int committedOtherResearchCapital(Context c, String excludeId) {
+        JSONArray a = ResearchStore.positions(c); int total = 0;
+        for (int i = 0; i < a.length(); i++) {
+            JSONObject p = a.optJSONObject(i);
+            if (p == null || !p.optBoolean("live", false) || "CLOSED".equals(p.optString("state"))) continue;
+            if (excludeId != null && excludeId.equals(p.optString("id"))) continue;
+            total += committedExposure(p);
+        }
+        return total;
+    }
+
+    static int committedExposure(JSONObject p) {
+        if (p == null || !p.optBoolean("live", false) || "CLOSED".equals(p.optString("state"))) return 0;
+        int total = Math.max(0, p.optInt("budget", 0));
+        for (int level = 1; level <= 3; level++) {
+            if (!p.optString("avgGtt" + level + "Id", "").isEmpty() || p.optBoolean("avgGtt" + level + "Confirmed", false))
+                total += Math.max(0, p.optInt("avgGtt" + level + "Budget", 0));
         }
         return total;
     }
