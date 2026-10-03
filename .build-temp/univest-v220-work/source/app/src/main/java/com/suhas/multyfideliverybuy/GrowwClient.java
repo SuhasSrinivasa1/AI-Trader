@@ -427,7 +427,7 @@ final class GrowwClient {
                     p.optInt("bid_quantity", 0), p.optInt("offer_quantity", 0),
                     p.optDouble("upper_circuit_limit", 0), p.optDouble("lower_circuit_limit", 0),
                     p.optLong("volume", 0), "Quote OK");
-        } catch (Throwable t) {
+        } catch (Exception t) {
             return new QuoteSnapshot(false, 0, 0, 0, 0, 0, 0, 0, 0, safeMessage(t));
         }
     }
@@ -462,7 +462,7 @@ final class GrowwClient {
                     fill.quantity > 0 && fill.averagePrice > 0
                             ? "Research CNC MARKET BUY executed • qty " + fill.quantity + " • avg ₹" + money(fill.averagePrice)
                             : "Research CNC MARKET BUY accepted • fill not confirmed in time.");
-        } catch (Throwable t) {
+        } catch (Exception t) {
             return new ExecutionResult(true, false, true, entry.orderId, quantity, 0, 0, q.lastPrice, dispatch,
                     "Research CNC MARKET BUY accepted; fill confirmation uncertain: " + safeMessage(t));
         }
