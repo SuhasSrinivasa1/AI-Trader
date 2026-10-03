@@ -537,10 +537,18 @@ final class ResearchTradeEngine {
         int closed = 0, wins = 0, sameDay = 0, sameDayWins = 0, pre = 0, open = 0;
         int todayClosed = 0, todayWins = 0, todayOpened = 0;
         int entryOpportunities = 0, efficientExits = 0;
+        int horizonEvaluated = 0, horizonEdges = 0, horizonTimeouts = 0;
         double mae = 0, mfe = 0, capture = 0;
         for (int i = 0; i < a.length(); i++) {
             JSONObject p = a.optJSONObject(i); if (p == null) continue;
             if (todayKey.equals(AppPrefs.istDayKey(p.optLong("entryAt", 0)))) todayOpened++;
+            String eval = p.optString("evaluationState", "");
+            if ("EDGE_SEEN_WITHIN_HORIZON".equals(eval) || "TIMEOUT_NO_EDGE".equals(eval)
+                    || "WIN".equals(eval) || "CLOSED_BELOW_EDGE".equals(eval)) {
+                horizonEvaluated++;
+                if ("EDGE_SEEN_WITHIN_HORIZON".equals(eval) || "WIN".equals(eval)) horizonEdges++;
+                if ("TIMEOUT_NO_EDGE".equals(eval)) horizonTimeouts++;
+            }
             if (!"CLOSED".equals(p.optString("state"))) { open++; continue; }
             closed++;
             double net = p.optDouble("netPct", 0);
@@ -576,6 +584,11 @@ final class ResearchTradeEngine {
                 .append(" • Open/unresolved ").append(open)
                 .append("\nEntry timing ").append(one(entryAccuracy)).append("%")
                 .append(" • Exit efficiency ").append(one(exitAccuracy)).append("%");
+        if (horizonEvaluated > 0) {
+            b.append("\nFixed-horizon evidence • edge ").append(horizonEdges).append("/").append(horizonEvaluated)
+                    .append(" (").append(one(horizonEdges * 100.0 / horizonEvaluated)).append("%)")
+                    .append(" • timeouts ").append(horizonTimeouts);
+        }
         b.append("\n").append(selectionAccuracyText(c))
                 .append("\nPre-Univest trade hits ").append(pre);
         if (sameDay > 0) b.append(" • Same-day ").append(sameDayWins).append("/").append(sameDay);
@@ -585,39 +598,87 @@ final class ResearchTradeEngine {
     }
 
     private static String selectionAccuracyText(Context c) {
-        java.util.List<JSONObject> history = ResearchStore.forecastHistory(c, 250);
+        java.util.List<JSONObject> history = ResearchStore.forecastHistory(c, 500);
         java.util.List<JSONObject> signals = ResearchStore.signals(c);
-        int eligible = 0, top10 = 0, top5 = 0;
+
+        java.util.Map<String, JSONObject> snapshotBySession = new java.util.LinkedHashMap<>();
+        for (JSONObject snap : history) {
+            String session = snap.optString("targetSessionKey", "");
+            if (session.isEmpty()) continue;
+            JSONObject prior = snapshotBySession.get(session);
+            if (prior == null) {
+                snapshotBySession.put(session, snap);
+                continue;
+            }
+            boolean snapPre = "PREOPEN_FROZEN".equals(snap.optString("freezeType"));
+            boolean priorPre = "PREOPEN_FROZEN".equals(prior.optString("freezeType"));
+            if ((snapPre && !priorPre) || (snapPre == priorPre && snap.optLong("frozenAt") > prior.optLong("frozenAt")))
+                snapshotBySession.put(session, snap);
+        }
+
+        java.util.Map<String, java.util.Set<String>> officialBySession = new java.util.LinkedHashMap<>();
         for (JSONObject sig : signals) {
             if (!"ENTRY".equals(sig.optString("type"))) continue;
             long at = sig.optLong("signalAt", 0);
-            String symbol = sig.optString("symbol", "");
+            String symbol = sig.optString("symbol", "").toUpperCase(Locale.US);
             if (at <= 0 || symbol.isEmpty()) continue;
             String session = NseTradingCalendar.dayKey(at);
-            JSONObject best = null; long bestAt = -1;
-            for (JSONObject snap : history) {
-                if (!session.equals(snap.optString("targetSessionKey"))) continue;
-                long frozen = snap.optLong("frozenAt", 0);
-                if (frozen <= 0 || frozen > at || frozen < bestAt) continue;
-                best = snap; bestAt = frozen;
+            officialBySession.computeIfAbsent(session, k -> new java.util.HashSet<>()).add(symbol);
+        }
+
+        int eligibleOfficial = 0, recalled10 = 0, recalled5 = 0;
+        for (java.util.Map.Entry<String, java.util.Set<String>> row : officialBySession.entrySet()) {
+            JSONObject snap = snapshotBySession.get(row.getKey());
+            if (snap == null) continue;
+            JSONArray preds = snap.optJSONArray("predictions");
+            for (String official : row.getValue()) {
+                eligibleOfficial++;
+                int rank = rankIn(preds, official, 10);
+                if (rank > 0) recalled10++;
+                if (rank > 0 && rank <= 5) recalled5++;
             }
-            if (best == null) continue;
-            eligible++;
-            JSONArray preds = best.optJSONArray("predictions");
-            int rank = 0;
-            if (preds != null) {
-                for (int i = 0; i < preds.length() && i < 10; i++) {
-                    JSONObject p = preds.optJSONObject(i);
-                    if (p != null && symbol.equalsIgnoreCase(p.optString("symbol"))) { rank = i + 1; break; }
+        }
+
+        int forecast10 = 0, hits10 = 0, forecast5 = 0, hits5 = 0;
+        for (java.util.Map.Entry<String, JSONObject> row : snapshotBySession.entrySet()) {
+            JSONArray preds = row.getValue().optJSONArray("predictions");
+            java.util.Set<String> official = officialBySession.get(row.getKey());
+            if (preds == null) continue;
+            for (int i = 0; i < preds.length() && i < 10; i++) {
+                JSONObject p = preds.optJSONObject(i);
+                if (p == null) continue;
+                String symbol = p.optString("symbol", "").toUpperCase(Locale.US);
+                if (symbol.isEmpty()) continue;
+                forecast10++;
+                if (i < 5) forecast5++;
+                if (official != null && official.contains(symbol)) {
+                    hits10++;
+                    if (i < 5) hits5++;
                 }
             }
-            if (rank > 0) top10++;
-            if (rank > 0 && rank <= 5) top5++;
         }
-        if (eligible == 0) return "Univest prediction accuracy • awaiting comparable frozen sessions";
-        return "Univest prediction accuracy • Top-10 " + top10 + "/" + eligible + " ("
-                + one(top10 * 100.0 / eligible) + "%) • Top-5 " + top5 + "/" + eligible + " ("
-                + one(top5 * 100.0 / eligible) + "%)";
+
+        if (eligibleOfficial == 0 && forecast10 == 0)
+            return "Univest prediction evidence • awaiting comparable frozen sessions";
+
+        double recall10 = eligibleOfficial == 0 ? 0 : recalled10 * 100.0 / eligibleOfficial;
+        double recall5 = eligibleOfficial == 0 ? 0 : recalled5 * 100.0 / eligibleOfficial;
+        double precision10 = forecast10 == 0 ? 0 : hits10 * 100.0 / forecast10;
+        double precision5 = forecast5 == 0 ? 0 : hits5 * 100.0 / forecast5;
+
+        return "Univest forecast evidence • Recall@10 " + recalled10 + "/" + eligibleOfficial + " ("
+                + one(recall10) + "%) • Recall@5 " + recalled5 + "/" + eligibleOfficial + " (" + one(recall5) + "%)"
+                + "\nForecast precision • P@10 " + hits10 + "/" + forecast10 + " (" + one(precision10)
+                + "%) • P@5 " + hits5 + "/" + forecast5 + " (" + one(precision5) + "%)";
+    }
+
+    private static int rankIn(JSONArray predictions, String symbol, int limit) {
+        if (predictions == null || symbol == null) return 0;
+        for (int i = 0; i < predictions.length() && i < limit; i++) {
+            JSONObject p = predictions.optJSONObject(i);
+            if (p != null && symbol.equalsIgnoreCase(p.optString("symbol"))) return i + 1;
+        }
+        return 0;
     }
 
     static String activePositionsText(Context c) {
