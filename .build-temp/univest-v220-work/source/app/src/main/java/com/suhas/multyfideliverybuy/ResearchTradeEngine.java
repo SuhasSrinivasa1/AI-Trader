@@ -51,7 +51,16 @@ final class ResearchTradeEngine {
                 JSONObject p = predictions.optJSONObject(i);
                 if (p == null) continue;
                 String symbol = p.optString("symbol", "").trim().toUpperCase(Locale.US);
-                if (symbol.isEmpty() || findOpen(c, symbol) != null) continue;
+                if (symbol.isEmpty()) continue;
+                JSONObject existing = findOpen(c, symbol);
+                if (existing != null) {
+                    if (auto && "SHADOW_OPEN".equals(existing.optString("state"))
+                            && AppPrefs.isLiveMode(c) && AppPrefs.isReadyForBuy(c)) {
+                        String retry = executeBuy(c, symbol, true);
+                        DiagnosticsStore.runtime(c, "RESEARCH_AUTO_RETRY", symbol, retry);
+                    }
+                    continue;
+                }
 
                 int score = p.optInt("similarity", p.optInt("bestScore", 0));
                 int consensus = p.optInt("consensus", 0);
