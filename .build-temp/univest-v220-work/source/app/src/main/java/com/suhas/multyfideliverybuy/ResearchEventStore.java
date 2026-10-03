@@ -93,10 +93,15 @@ final class ResearchEventStore {
                 appendMinuteCandles(c, symbol, candles, "LIVE_TOP_CANDIDATE", now);
                 if (candles != null && !candles.isEmpty()) {
                     GrowwClient.Candle last = candles.get(candles.size() - 1);
+                    ResearchMath.Features live = ResearchMath.fromCandles(candles);
                     p.put("lastMinuteCaptureAt", now);
                     p.put("lastMinuteClose", last.close);
                     p.put("lastMinuteVolume", last.volume);
                     p.put("minuteDataPoints", candles.size());
+                    p.put("minuteRsi14", live.rsi14);
+                    p.put("minuteReturn5Pct", live.return5Pct);
+                    p.put("minuteRelativeVolume20", live.relativeVolume20);
+                    p.put("minuteVwap", vwap(candles));
                 }
             } catch (Throwable t) {
                 try {
@@ -116,8 +121,11 @@ final class ResearchEventStore {
                 File dir = dir(c);
                 if (!dir.exists()) dir.mkdirs();
                 File file = new File(dir, "minute-" + day + ".jsonl");
+                Set<String> seen = seenKeys(file, day);
                 try (Writer w = new OutputStreamWriter(new FileOutputStream(file, true), StandardCharsets.UTF_8)) {
                     for (GrowwClient.Candle x : candles) {
+                        String key = symbol.toUpperCase(Locale.US) + "|" + x.epochSeconds + "|" + (source == null ? "" : source);
+                        if (!seen.add(key)) continue;
                         JSONObject row = new JSONObject();
                         row.put("schemaVersion", SCHEMA_VERSION);
                         row.put("symbol", symbol.toUpperCase(Locale.US));
@@ -138,6 +146,39 @@ final class ResearchEventStore {
                         "Unable to persist one-minute Research candles.", e);
             }
         }
+    }
+
+    private static double vwap(List<GrowwClient.Candle> candles) {
+        double pv = 0.0, vol = 0.0;
+        if (candles == null) return 0.0;
+        for (GrowwClient.Candle x : candles) {
+            if (x == null || x.volume <= 0 || x.close <= 0) continue;
+            double typical = (x.high > 0 && x.low > 0) ? (x.high + x.low + x.close) / 3.0 : x.close;
+            pv += typical * x.volume;
+            vol += x.volume;
+        }
+        return vol > 0 ? pv / vol : 0.0;
+    }
+
+    private static Set<String> seenKeys(File file, String day) {
+        Set<String> cached = MINUTE_SEEN.get(day);
+        if (cached != null) return cached;
+        Set<String> out = new HashSet<>();
+        if (file != null && file.exists()) {
+            try (java.io.BufferedReader r = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(new java.io.FileInputStream(file), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = r.readLine()) != null) {
+                    try {
+                        JSONObject j = new JSONObject(line);
+                        out.add(j.optString("symbol").toUpperCase(Locale.US) + "|"
+                                + j.optLong("epochSeconds") + "|" + j.optString("source"));
+                    } catch (Throwable ignored) {}
+                }
+            } catch (Throwable ignored) {}
+        }
+        MINUTE_SEEN.put(day, out);
+        return out;
     }
 
     private static void append(Context c, String name, JSONObject row) throws Exception {
