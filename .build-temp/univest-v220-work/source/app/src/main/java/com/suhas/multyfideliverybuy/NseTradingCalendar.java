@@ -106,6 +106,23 @@ final class NseTradingCalendar {
         return dayKey(nextTradingDay(fromMs));
     }
 
+    static int tradingSessionsElapsed(long startMs, long endMs) {
+        if (startMs <= 0 || endMs <= startMs) return 0;
+        Calendar c = Calendar.getInstance(IST);
+        c.setTimeInMillis(startMs);
+        c.set(Calendar.HOUR_OF_DAY, 12);
+        c.set(Calendar.MINUTE, 0);
+        c.set(Calendar.SECOND, 0);
+        c.set(Calendar.MILLISECOND, 0);
+        String startKey = dayKey(startMs);
+        int sessions = 0;
+        while (c.getTimeInMillis() <= endMs && sessions < 400) {
+            if (!dayKey(c.getTimeInMillis()).equals(startKey) && isTradingDay(c.getTimeInMillis())) sessions++;
+            c.add(Calendar.DAY_OF_MONTH, 1);
+        }
+        return sessions;
+    }
+
     static String describe(long ms) {
         if (isTradingDay(ms)) return calendarCoverageKnown(ms) ? "NSE trading day" : "Weekday (holiday calendar not embedded for this year)";
         return holidayName(ms);
