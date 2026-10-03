@@ -1,0 +1,1 @@
+Fresh rebuild requested 2026-10-03 for Upper Circuit handoff. Baseline: Global Edge AI Trader v1.6.7. Preserve v1.6.0 Groww API hygiene, v1.6.1 recall/fast-lane improvements, five-minute foreground automation, update certificate, and v1.6.7 reliability fixes.
