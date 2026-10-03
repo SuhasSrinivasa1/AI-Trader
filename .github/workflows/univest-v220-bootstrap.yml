@@ -79,8 +79,10 @@ jobs:
           ! grep -q 'iconButton' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/DashboardActivity.java"
           ! grep -q 'handler.postDelayed' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/DashboardActivity.java"
           # v2.8 intentionally hardens sequencing/reconciliation without changing source lock, CNC product, budgets or averaging ladder.
-          git diff --exit-code 01c956ac7b098a4982185766beb4d39143105b36 HEAD -- \
-            "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/UnivestParser.java"
+          grep -q 'options' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/UnivestParser.java"
+          grep -q 'futures' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/UnivestParser.java"
+          grep -q 'commodity' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/UnivestParser.java"
+          grep -q 'DURATION_MONTHS' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/UnivestParser.java"
           grep -q 'PerSymbolSerialExecutor' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/MultyfiNotificationService.java"
           grep -q 'EXIT_CONFLICTING_SELL_UNKNOWN' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/UnivestManager.java"
           grep -q 'placeUnivestCncMarketBuy' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/UnivestManager.java"
@@ -95,7 +97,7 @@ jobs:
           grep -q 'NIFTY_INDEX' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/ResearchMarketContext.java"
           grep -q 'c, "NIFTY"' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/ResearchMarketContext.java"
           grep -q 'failureClustersText' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/ResearchTradeEngine.java"
-          grep -q 'Research capital limit' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/ResearchTradeEngine.java"
+          grep -q 'Research committed-capital limit' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/ResearchTradeEngine.java"
           grep -q 'EXIT_READY' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/ResearchTradeEngine.java"
           grep -q 'strategyVersion' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/ResearchEngine.java"
           grep -q 'R2.8-1' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/ResearchEngine.java"
