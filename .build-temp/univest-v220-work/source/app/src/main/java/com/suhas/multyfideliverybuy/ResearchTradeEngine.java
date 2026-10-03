@@ -743,6 +743,14 @@ final class ResearchTradeEngine {
             p.put("forecastSessionKey", prediction.optString("forecastSessionKey", AppPrefs.getResearchForecastTargetKey(c)));
             p.put("lastMinuteCaptureAt", prediction.optLong("lastMinuteCaptureAt", 0L));
             p.put("minuteDataPoints", prediction.optInt("minuteDataPoints", 0));
+            p.put("minuteVwap", prediction.optDouble("minuteVwap", 0));
+            p.put("minuteRsi14", prediction.optDouble("minuteRsi14", 0));
+            p.put("minuteReturn5Pct", prediction.optDouble("minuteReturn5Pct", 0));
+            p.put("minuteRelativeVolume20", prediction.optDouble("minuteRelativeVolume20", 0));
+            p.put("positiveCatalysts", prediction.optInt("positiveCatalysts", 0));
+            p.put("negativeCatalysts", prediction.optInt("negativeCatalysts", 0));
+            p.put("marketRegimeStatus", prediction.optString("marketRegimeStatus", "NOT_CONNECTED"));
+            p.put("marketRegimeText", prediction.optString("marketRegimeText", ""));
             p.put("preopenFreezeAt", prediction.optLong("preopenFreezeAt", 0L));
             p.put("score", prediction.optInt("similarity"));
             p.put("consensus", prediction.optInt("consensus"));
