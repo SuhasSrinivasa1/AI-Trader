@@ -444,7 +444,28 @@ final class ResearchTradeEngine {
                     else failureBucket = "NO_ROBUST_EDGE";
                     p.put("failureBucket", failureBucket);
                 } else {
-                    p.put("replaySummary", "OPEN • not scored as win/loss until the trade closes.");
+                    int horizon = Math.max(1, p.optInt("evaluationHorizonSessions",
+                            evaluationHorizonSessions(p.optString("strategy"))));
+                    int elapsed = NseTradingCalendar.tradingSessionsElapsed(
+                            p.optLong("entryAt", 0L), System.currentTimeMillis());
+                    p.put("evaluationSessionsElapsed", elapsed);
+                    p.put("evaluationHorizonSessions", horizon);
+                    if (elapsed >= horizon && "OPEN".equals(p.optString("evaluationState", "OPEN"))) {
+                        double mfe = p.optDouble("mfePct", 0);
+                        if (mfe >= MIN_NET_WIN_PCT) {
+                            p.put("evaluationState", "EDGE_SEEN_WITHIN_HORIZON");
+                            p.put("replaySummary", "HORIZON EVALUATED • >=0.5% favorable opportunity appeared within "
+                                    + horizon + " trading sessions; physical/shadow position may remain open.");
+                        } else {
+                            p.put("evaluationState", "TIMEOUT_NO_EDGE");
+                            p.put("failureBucket", "HORIZON_TIMEOUT_NO_EDGE");
+                            p.put("replaySummary", "HORIZON TIMEOUT • no >=0.5% favorable opportunity within "
+                                    + horizon + " trading sessions. Prediction scored without forcing a position exit.");
+                        }
+                    } else {
+                        p.put("replaySummary", "OPEN • evaluation " + elapsed + "/" + horizon
+                                + " trading sessions; physical/shadow position remains independently managed.");
+                    }
                 }
             }
             ResearchStore.savePositions(c, a);
