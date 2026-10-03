@@ -188,6 +188,7 @@ final class ResearchTradeEngine {
             p.put("automaticEntry", automatic);
             p.put("budget", budget);
             p.put("orderId", r.orderId);
+            p.put("requestedQuantity", r.requestedQuantity);
             p.put("brokerQtyBeforeResearch", beforeBroker.quantity);
             p.put("entryAt", System.currentTimeMillis());
             if (r.filled && r.averagePrice > 0) {
