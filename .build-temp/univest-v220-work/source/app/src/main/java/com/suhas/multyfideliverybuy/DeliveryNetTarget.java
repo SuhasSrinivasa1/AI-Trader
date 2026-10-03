@@ -2,6 +2,7 @@ package com.suhas.multyfideliverybuy;
 
 /** Conservative NSE equity-delivery charge estimator for broker-hosted GTT targets. */
 final class DeliveryNetTarget {
+    static final String CHARGE_MODEL_VERSION = "GROWW_NSE_DELIVERY_2026_10_03";
     private static final double BROKERAGE_RATE = 0.001;
     private static final double BROKERAGE_CAP = 20.0;
     private static final double BROKERAGE_MIN = 5.0;
