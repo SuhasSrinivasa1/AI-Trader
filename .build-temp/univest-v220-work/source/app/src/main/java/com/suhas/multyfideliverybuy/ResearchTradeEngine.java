@@ -1035,6 +1035,8 @@ final class ResearchTradeEngine {
         return n;
     }
 
+    static int committedCapital(Context c) { return liveResearchCapital(c); }
+
     private static int liveResearchCapital(Context c) {
         JSONArray a = ResearchStore.positions(c); int total = 0;
         for (int i = 0; i < a.length(); i++) {
