@@ -37,22 +37,22 @@ jobs:
           set -euo pipefail
           SRC=/tmp/v166/Global-Edge-AI-Trader-v1.5.0-source
           cat fresh-global-edge/v166/patch-parts/part-*.b64 | tr -d '\r\n ' | base64 -d > /tmp/v166.patch.gz
-          echo '93efac10a139de8999cca7e69dfcbfca40697be4da9ba85b0e8d58aee8002184  /tmp/v166.patch.gz' | sha256sum -c -
+          echo 'ac51eda305f32dc343e342eb368c3fda717973b03ddcfddc5f1adeb0dec0380c  /tmp/v166.patch.gz' | sha256sum -c -
           gzip -t /tmp/v166.patch.gz
           gunzip -c /tmp/v166.patch.gz > /tmp/v166.patch
           cd "$SRC"
           patch -p1 --batch < /tmp/v166.patch
           grep -q 'versionCode = 166' app/build.gradle.kts
           grep -q 'versionName = "1.6.6"' app/build.gradle.kts
-          grep -q 'getFreshQuote' app/src/main/java/com/suhas/ucsentinel/data/remote/GrowwClient.kt
+          grep -q 'fresh:Boolean=false' app/src/main/java/com/suhas/ucsentinel/data/remote/GrowwClient.kt
           grep -q 'getPositions' app/src/main/java/com/suhas/ucsentinel/data/remote/GrowwClient.kt
-          grep -q 'createProtectiveOco' app/src/main/java/com/suhas/ucsentinel/data/remote/GrowwClient.kt
-          grep -q 'requireOrderReference' app/src/main/java/com/suhas/ucsentinel/data/remote/GrowwClient.kt
-          grep -q 'multifyExecutableQuote' app/src/main/java/com/suhas/ucsentinel/domain/engine/ExecutionQuality.kt
-          grep -q 'com.multyfi.invest' app/src/main/java/com/suhas/ucsentinel/data/local/MultifyEventStore.kt
-          grep -q 'MULTIFY_CHAMPION_MIN_SAMPLES=8' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
-          grep -q 'multifyCounterfactualReplay' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
-          grep -q 'DISARM + FLATTEN LIVE MULTIFY' app/src/main/java/com/suhas/ucsentinel/ui/MultifyScreen.kt
+          grep -q 'createCashMisOco' app/src/main/java/com/suhas/ucsentinel/data/remote/GrowwClient.kt
+          grep -q 'validOrderReference' app/src/main/java/com/suhas/ucsentinel/data/remote/GrowwClient.kt
+          grep -q 'strictMultifyExecutionQuote' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'trusted_multify_package' app/src/main/java/com/suhas/ucsentinel/notifications/MultifyNotificationService.kt
+          grep -q 'it.samples>=5&&it.winRatePct>=55.0' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'counterfactualMultifyReplay' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'exitAllMultifyPositions' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
           grep -q 'android:allowBackup="false"' app/src/main/AndroidManifest.xml
           test -s CHANGELOG-v1.6.6.txt
 
@@ -123,7 +123,7 @@ jobs:
             echo "signer_sha256=$CERT_SHA"
             echo 'update_certificate_preserved=true'
             echo 'multify_equity_only=true'
-            echo 'trusted_multyfi_live_package=com.multyfi.invest'
+            echo 'trusted_multify_package_pinning=true'
             echo 'groww_order_reference_8_20=true'
             echo 'multify_fresh_quote=true'
             echo 'multify_quote_freshness_max=15_seconds'
@@ -131,7 +131,7 @@ jobs:
             echo 'groww_position_truth=true'
             echo 'partial_fill_safe=true'
             echo 'ambiguous_submission_recovery=true'
-            echo 'groww_margin_check=true'
+            echo 'groww_margin_check=false'
             echo 'broker_oco_protection=true'
             echo 'oco_failure_flatten=true'
             echo 'broker_truth_emergency_flatten=true'
@@ -141,7 +141,7 @@ jobs:
             echo 'multify_capital_budget=200000'
             echo 'multify_risk_based_sizing=true'
             echo 'multify_signed_exit_learning=true'
-            echo 'multify_champion_min_samples=8'
+            echo 'multify_champion_min_samples=5'
             echo 'multify_context_recency_learning=true'
             echo 'multify_1minute_session_context=true'
             echo 'multify_anchored_vwap=true'
@@ -150,8 +150,8 @@ jobs:
             echo 'strategy_stochastic_real=true'
             echo 'strategy_adx_real=true'
             echo 'strategy_bollinger_real=true'
-            echo 'gap_go_prior_session_only=true'
-            echo 'android_visible_foreground_service_start=true'
+            echo 'gap_go_prior_session_only=false'
+            echo 'android_visible_foreground_service_start=false'
             echo 'android_backup_disabled=true'
             echo 'centralized_log_export=true'
             echo 'v165_multify_live_preserved=true'
