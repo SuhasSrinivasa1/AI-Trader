@@ -130,7 +130,9 @@ final class AppPrefs {
     }
 
     static boolean isReadyForBuy(Context c) {
-        return isAuthTestFresh(c) && isStaticIpMatch(c) && !getExpectedStaticIp(c).isEmpty();
+        long windowStart = currentGrowwTokenWindowStart(System.currentTimeMillis());
+        boolean ipFresh = isStaticIpMatch(c) && getStaticIpCheckTime(c) >= windowStart;
+        return isAuthTestFresh(c) && ipFresh && !getExpectedStaticIp(c).isEmpty();
     }
 
     private static long currentGrowwTokenWindowStart(long now) {
