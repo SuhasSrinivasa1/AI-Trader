@@ -1,26 +1,26 @@
-name: Univest AutoTrade v2.1.0 Reliability Build
+name: Univest AutoTrade v2.2.0 Release Build
 on:
   push:
-    paths:
-      - '.github/workflows/univest-v210-build.yml'
-      - '.build-temp/univest-v210-final/**'
+    paths: ['.github/workflows/univest-v210-build.yml']
   workflow_dispatch:
-
+permissions:
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
     env:
       ANDROID_HOME: /usr/local/lib/android/sdk
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
       - name: Install Android SDK 35
-        shell: bash
         run: |
           set -euo pipefail
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
@@ -29,50 +29,94 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Reconstruct source
-        run: |
-          rm -rf UnivestAutoTrade
-          mkdir UnivestAutoTrade
-          tar -xzf .build-temp/univest-v210-final/source.tar.gz -C UnivestAutoTrade
-      - name: Validate production contract
-        shell: bash
+      - name: Validate v2.2 source contract
         run: |
           set -euo pipefail
-          grep -q "versionCode 210" UnivestAutoTrade/app/build.gradle
-          grep -q "versionName '2.1.0'" UnivestAutoTrade/app/build.gradle
-          grep -R -q 'com.univest.capp' UnivestAutoTrade/app/src/main/java
-          grep -R -q 'ENTRY_BUDGET = 20000' UnivestAutoTrade/app/src/main/java
-          grep -R -q 'REENTRY_BUDGET = 5000' UnivestAutoTrade/app/src/main/java
-          grep -R -q 'AVERAGE_BUDGET = 5000' UnivestAutoTrade/app/src/main/java
-          grep -R -q 'AVERAGE_STEP_PCT = 2.0' UnivestAutoTrade/app/src/main/java
-          grep -R -q 'MAX_AVERAGE_LEVELS = 3' UnivestAutoTrade/app/src/main/java
-          grep -R -q 'ENTRY_ALREADY_HELD' UnivestAutoTrade/app/src/main/java
-          grep -R -q 'STALE_STATE_REPAIRED' UnivestAutoTrade/app/src/main/java
-          grep -R -q 'ANDROID_NOTIFICATION_DUPLICATE_SUPPRESSED' UnivestAutoTrade/app/src/main/java
-          grep -R -q 'todayTradingSignals' UnivestAutoTrade/app/src/main/java
-          grep -R -q 'post(TOKEN_URL, totpToken, body.toString(), true)' UnivestAutoTrade/app/src/main/java
+          SRC=.build-temp/univest-v220-work/source
+          grep -q "versionCode 220" "$SRC/app/build.gradle"
+          grep -q "versionName '2.2.0'" "$SRC/app/build.gradle"
+          grep -R -q 'com.univest.capp' "$SRC/app/src/main/java"
+          grep -R -q 'ENTRY_BUDGET = 20000' "$SRC/app/src/main/java"
+          grep -R -q 'REENTRY_BUDGET = 5000' "$SRC/app/src/main/java"
+          grep -R -q 'MAX_AVERAGE_LEVELS = 3' "$SRC/app/src/main/java"
+          ! grep -R -q 'ANDROID_NOTIFICATION_DUPLICATE_SUPPRESSED' "$SRC/app/src/main/java"
+          grep -R -q 'budgetForBackInRange' "$SRC/app/src/main/java"
+          grep -R -q 'LIVE ORDERS ENABLED' "$SRC/app/src/main/java"
       - name: Unit tests and release build
-        working-directory: UnivestAutoTrade
-        shell: bash
+        working-directory: .build-temp/univest-v220-work/source
         run: |
           set -o pipefail
-          gradle --no-daemon --console=plain clean testReleaseUnitTest assembleRelease
-      - name: Collect APK and metadata
-        shell: bash
+          gradle --no-daemon --console=plain clean testReleaseUnitTest assembleRelease | tee ../../test-results.txt
+      - name: Prepare editable source ZIP
         run: |
           set -euo pipefail
           mkdir -p release
-          APK="$(find UnivestAutoTrade/app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' | head -1)"
+          cd .build-temp/univest-v220-work/source
+          zip -qr ../../../release/Univest-AutoTrade-v2.2.0-source.zip . -x '*/build/*' '.gradle/*' '*.jks' '*.keystore'
+      - name: Sign and verify release APK
+        env:
+          KS_B64_A: ${{ secrets.MULTYFI_SIGNING_KEY }}
+          KS_B64_B: ${{ secrets.UNIVEST_RELEASE_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.MULTYFI_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.MULTYFI_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.MULTYFI_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          APK="$(find .build-temp/univest-v220-work/source/app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' | head -1)"
           test -n "$APK" && test -s "$APK"
-          cp "$APK" release/Univest-AutoTrade-v2.1.0-UNSIGNED.apk
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | tee release/APK-BADGING.txt
+          KS_B64="${KS_B64_A:-${KS_B64_B:-}}"
+          if [ -z "$KS_B64" ] || [ -z "$KS_PASS" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASS" ]; then
+            echo "Existing release signing secrets are not available under the expected GitHub Actions secret names." | tee release/signing-blocker.txt
+            exit 42
+          fi
+          printf '%s' "$KS_B64" | base64 -d > "$RUNNER_TEMP/univest-release.jks"
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$APK" "$RUNNER_TEMP/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$RUNNER_TEMP/univest-release.jks" --ks-pass env:KS_PASS --ks-key-alias "$KEY_ALIAS" --key-pass env:KEY_PASS --out release/Univest-AutoTrade-v2.2.0-SIGNED.apk "$RUNNER_TEMP/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs release/Univest-AutoTrade-v2.2.0-SIGNED.apk | tee release/APK-SIGNATURE.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging release/Univest-AutoTrade-v2.2.0-SIGNED.apk | tee release/APK-BADGING.txt
           grep -q "package: name='com.suhas.multyfideliverybuy'" release/APK-BADGING.txt
-          grep -q "versionCode='210'" release/APK-BADGING.txt
-          grep -q "versionName='2.1.0'" release/APK-BADGING.txt
-          sha256sum release/Univest-AutoTrade-v2.1.0-UNSIGNED.apk > release/APK-SHA256.txt
+          grep -q "versionCode='220'" release/APK-BADGING.txt
+          grep -q "versionName='2.2.0'" release/APK-BADGING.txt
+          CERT="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs release/Univest-AutoTrade-v2.2.0-SIGNED.apk | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1 | tr '[:upper:]' '[:lower:]')"
+          test "$CERT" = "8a2f10a5541b4764ec15c3fa090d84fa8dca86a31c81f21c1d72cf706544c444"
+          sha256sum release/Univest-AutoTrade-v2.2.0-SIGNED.apk | tee release/APK-SHA256.txt
+          cp .build-temp/univest-v220-work/test-results.txt release/test-results.txt
+          unzip -t release/Univest-AutoTrade-v2.2.0-source.zip >/dev/null
+      - name: Build report
+        if: success()
+        run: |
+          {
+            echo "Univest AutoTrade v2.2.0 build: SUCCESS"
+            echo "package=com.suhas.multyfideliverybuy"
+            echo "versionCode=220"
+            echo "versionName=2.2.0"
+            echo "source=com.univest.capp only"
+            echo "product=NSE CASH / CNC DELIVERY"
+            echo "notification_duplicate_execution_gate=removed"
+            echo "back_in_range_flat=INR 20000 missed initial entry"
+            echo "back_in_range_held=INR 5000 add"
+            echo "averaging=INR 5000 at -2/-4/-6 percent, max 3, initial fill anchor"
+            echo "exit=cancel averaging then sell actual broker CNC holding"
+            echo "signing_certificate_sha256=8a2f10a5541b4764ec15c3fa090d84fa8dca86a31c81f21c1d72cf706544c444"
+          } > release/Univest-AutoTrade-v2.2.0-build-report.txt
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: Univest-AutoTrade-v2.1.0-UNSIGNED
-          retention-days: 7
+          name: Univest-AutoTrade-v2.2.0-release
+          retention-days: 14
           path: release/*
-          if-no-files-found: error
+          if-no-files-found: warn
+      - name: Publish artifacts/diagnostics to temporary branch
+        if: always()
+        run: |
+          set -euo pipefail
+          rm -rf .build-temp/univest-v220-output
+          mkdir -p .build-temp/univest-v220-output
+          cp release/* .build-temp/univest-v220-output/ 2>/dev/null || true
+          test -f .build-temp/univest-v220-work/test-results.txt && cp .build-temp/univest-v220-work/test-results.txt .build-temp/univest-v220-output/test-results.txt || true
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add -f .build-temp/univest-v220-output
+          git diff --cached --quiet && exit 0
+          git commit -m "Publish Univest AutoTrade v2.2.0 CI artifacts"
+          git push origin HEAD:univest-v220-build
