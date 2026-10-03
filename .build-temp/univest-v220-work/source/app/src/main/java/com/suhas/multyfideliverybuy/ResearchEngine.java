@@ -264,8 +264,17 @@ final class ResearchEngine {
                 j.put("positiveCatalysts", n.positiveCatalysts);
                 j.put("negativeCatalysts", n.negativeCatalysts);
                 j.put("newsSignal", n.catalystLabel);
+                int technical = j.optInt("similarity", 0);
+                int catalystAdjustment = Math.min(6, n.positiveCatalysts * 2)
+                        - Math.min(8, n.negativeCatalysts * 3);
+                j.put("technicalSimilarity", technical);
+                j.put("catalystAdjustment", catalystAdjustment);
+                j.put("similarity", Math.max(0, Math.min(100, technical + catalystAdjustment)));
             } catch (Throwable ignored) {}
         }
+        // News can modestly re-order the technically qualified shortlist, but cannot rescue an
+        // instrument that failed the full-NSE technical/liquidity data scan.
+        candidates.sort((a, b) -> Integer.compare(b.optInt("similarity"), a.optInt("similarity")));
 
         if (candidates.size() > FINAL_LIMIT)
             candidates = new ArrayList<>(candidates.subList(0, FINAL_LIMIT));
