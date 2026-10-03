@@ -10,12 +10,17 @@ import java.io.FileOutputStream;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.Locale;
 
 final class ResearchEventStore {
-    static final int SCHEMA_VERSION = 1;
+    static final int SCHEMA_VERSION = 2;
     private static final Object LOCK = new Object();
+    private static final Map<String, Set<String>> MINUTE_SEEN = new HashMap<>();
 
     private ResearchEventStore() {}
 
