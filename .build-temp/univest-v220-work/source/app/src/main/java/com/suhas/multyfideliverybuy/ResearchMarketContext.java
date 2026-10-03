@@ -18,10 +18,10 @@ final class ResearchMarketContext {
     static JSONObject snapshot(Context c, long now) {
         JSONObject out = new JSONObject();
         try {
-            out.put("source", "NIFTYBEES_PROXY");
+            out.put("source", "NIFTY_INDEX");
             out.put("capturedAt", now);
             List<GrowwClient.Candle> candles = GrowwClient.getHistoricalCandles(
-                    c, "NIFTYBEES", now - 140L * DAY, now, "1day");
+                    c, "NIFTY", now - 140L * DAY, now, "1day");
             ResearchMath.Features f = ResearchMath.fromCandles(candles);
             if (!(f.close > 0) || f.dataPoints < 20) {
                 out.put("status", "UNAVAILABLE");
@@ -51,12 +51,12 @@ final class ResearchMarketContext {
 
     static String label(JSONObject m) {
         if (m == null || !"AVAILABLE".equals(m.optString("status"))) return "NOT_CONNECTED";
-        return "NIFTYBEES_PROXY:" + m.optString("regime", "UNKNOWN");
+        return "NIFTY:" + m.optString("regime", "UNKNOWN");
     }
 
     static String text(JSONObject m) {
         if (m == null || !"AVAILABLE".equals(m.optString("status")))
-            return "Broad-market proxy unavailable.";
+            return "NIFTY broad-market context unavailable.";
         return String.format(Locale.US,
                 "%s • 5-session %.1f%% • 20-session %.1f%% • RSI %.1f",
                 label(m), m.optDouble("return5Pct"), m.optDouble("return20Pct"), m.optDouble("rsi14"));
