@@ -116,8 +116,9 @@ final class ResearchEngine {
             String key = source + "|" + symbol + "|" + at;
             if (symbol.isEmpty() || at <= 0 || done.contains(key)) continue;
             try {
+                long asOfCutoff = completedDailyCutoff(at);
                 List<GrowwClient.Candle> candles = GrowwClient.getHistoricalCandles(
-                        c, symbol, at - 140 * DAY, at + DAY, "1day");
+                        c, symbol, at - 140 * DAY, asOfCutoff, "1day");
                 ResearchMath.Features ft = ResearchMath.fromCandles(candles);
                 if (!(ft.close > 0)) continue;
                 ResearchMath.StrategyScores sc = ResearchMath.score(ft, 0, 0, false);
@@ -125,6 +126,8 @@ final class ResearchEngine {
                 InstrumentRepository.Instrument ins = map.get(symbol);
                 j.put("companyName", ins == null ? symbol : ins.name);
                 j.put("source", source);
+                j.put("featureBoundary", "AS_OF_BEFORE_SIGNAL");
+                j.put("asOfCutoffMillis", asOfCutoff);
                 j.put("reasons", reasons(ft));
                 j.put("counterSignals", counter(ft));
                 j.put("fundamentalsStatus", "UNKNOWN_NOT_CONNECTED");
@@ -135,17 +138,24 @@ final class ResearchEngine {
                     ResearchEventMath.Profile ep = ResearchEventMath.profile(minute, at);
                     j.put("eventMinutePoints", ep.points);
                     j.put("eventPrice", ep.eventPrice);
+                    j.put("asOfPre15ReturnPct", ep.pre15ReturnPct);
+                    j.put("asOfPre15Vwap", ep.pre15Vwap);
+                    j.put("outcomeAnchoredVwap", ep.anchoredVwap);
+                    j.put("outcomePostMfe15Pct", ep.postMfe15Pct);
+                    j.put("outcomePostMae15Pct", ep.postMae15Pct);
+                    j.put("outcomePostMfe30Pct", ep.postMfe30Pct);
+                    j.put("outcomePostMae30Pct", ep.postMae30Pct);
+                    j.put("outcomePostMfeSessionPct", ep.postMfeSessionPct);
+                    j.put("outcomePostMaeSessionPct", ep.postMaeSessionPct);
+                    j.put("outcomeVolumeAcceleration", ep.volumeAcceleration);
+                    j.put("outcomeTimeToPeakMinutes", ep.timeToPeakMinutes);
+                    // Compatibility fields are retained for existing archive rendering only. Learning uses AS_OF fields.
                     j.put("pre15ReturnPct", ep.pre15ReturnPct);
                     j.put("pre15Vwap", ep.pre15Vwap);
                     j.put("anchoredVwap", ep.anchoredVwap);
                     j.put("postMfe15Pct", ep.postMfe15Pct);
                     j.put("postMae15Pct", ep.postMae15Pct);
-                    j.put("postMfe30Pct", ep.postMfe30Pct);
-                    j.put("postMae30Pct", ep.postMae30Pct);
                     j.put("postMfeSessionPct", ep.postMfeSessionPct);
-                    j.put("postMaeSessionPct", ep.postMaeSessionPct);
-                    j.put("eventVolumeAcceleration", ep.volumeAcceleration);
-                    j.put("timeToPeakMinutes", ep.timeToPeakMinutes);
                     ResearchEventStore.appendMinuteCandles(c, symbol, minute, source, at);
                 } catch (Throwable intradayError) {
                     j.put("eventMinuteStatus", "UNAVAILABLE: " + (intradayError.getMessage() == null
@@ -186,16 +196,18 @@ final class ResearchEngine {
                 j.put("name", n);
                 j.put("evidence", e);
                 j.put("avgMatch", avg);
-                j.put("status", e >= 8 ? "CHALLENGER" : e >= 3 ? "DEVELOPING" : "EXPERIMENTAL");
+                j.put("status", e >= 20 ? "CHALLENGER" : e >= 8 ? "DEVELOPING" : "EXPERIMENTAL");
                 j.put("strategyVersion", STRATEGY_VERSION);
                 a.put(j);
             } catch (Exception ignored) {}
         }
-        if (count.containsKey(champion) && count.get(champion) >= 5) {
+        if (count.containsKey(champion) && count.get(champion) >= 30) {
             for (int i = 0; i < a.length(); i++) {
                 JSONObject j = a.optJSONObject(i);
                 if (j != null && champion.equals(j.optString("name"))) {
-                    try { j.put("status", "CHAMPION"); } catch (Exception ignored) {}
+                    if (j.optDouble("avgMatch", 0) >= 75.0) {
+                        try { j.put("status", "CHAMPION"); } catch (Exception ignored) {}
+                    }
                 }
             }
         }
@@ -241,7 +253,7 @@ final class ResearchEngine {
         candidates.sort((a, b) -> Integer.compare(b.optInt("similarity"), a.optInt("similarity")));
         AppPrefs.setResearchStatus(c, "Full NSE scan complete • deep-analyzing top shortlist with 15-minute context…");
         ResearchEventStore.captureDeepShortlist(c, candidates, now, 50);
-        int deepCount = Math.min(25, candidates.size());
+        int deepCount = Math.min(50, candidates.size());
         for (int i = 0; i < deepCount; i++) {
             JSONObject j = candidates.get(i);
             try {
@@ -323,6 +335,16 @@ final class ResearchEngine {
         } catch (Throwable ignored) {
             return null;
         }
+    }
+
+    static long completedDailyCutoff(long signalAt) {
+        Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("Asia/Kolkata"));
+        cal.setTimeInMillis(signalAt);
+        cal.set(Calendar.HOUR_OF_DAY, 0);
+        cal.set(Calendar.MINUTE, 0);
+        cal.set(Calendar.SECOND, 0);
+        cal.set(Calendar.MILLISECOND, 0);
+        return cal.getTimeInMillis();
     }
 
     private static JSONObject feature(String symbol, long at, ResearchMath.Features f,
