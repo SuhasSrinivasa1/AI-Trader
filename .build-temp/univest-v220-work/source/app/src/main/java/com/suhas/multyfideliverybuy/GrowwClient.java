@@ -31,6 +31,7 @@ final class GrowwClient {
     private static final String ORDER_CANCEL_URL = "https://api.groww.in/v1/order/cancel";
     private static final String GTT_URL = "https://api.groww.in/v1/order-advance/create";
     private static final String LTP_URL = "https://api.groww.in/v1/live-data/ltp";
+    private static final String QUOTE_URL = "https://api.groww.in/v1/live-data/quote";
     private static final String USER_URL = "https://api.groww.in/v1/user/detail";
     private static final String GTT_STATUS_URL = "https://api.groww.in/v1/order-advance/status/CASH/GTT/internal/";
     private static final String GTT_CANCEL_URL = "https://api.groww.in/v1/order-advance/cancel/CASH/GTT/";
@@ -46,6 +47,43 @@ final class GrowwClient {
         Candle(long epochSeconds, double open, double high, double low, double close, double volume) {
             this.epochSeconds = epochSeconds; this.open = open; this.high = high; this.low = low;
             this.close = close; this.volume = volume;
+        }
+    }
+
+    static final class QuoteSnapshot {
+        final boolean success;
+        final double lastPrice;
+        final double bidPrice;
+        final double offerPrice;
+        final int bidQuantity;
+        final int offerQuantity;
+        final double upperCircuit;
+        final double lowerCircuit;
+        final long volume;
+        final String message;
+
+        QuoteSnapshot(boolean success, double lastPrice, double bidPrice, double offerPrice,
+                      int bidQuantity, int offerQuantity, double upperCircuit, double lowerCircuit,
+                      long volume, String message) {
+            this.success = success;
+            this.lastPrice = lastPrice;
+            this.bidPrice = bidPrice;
+            this.offerPrice = offerPrice;
+            this.bidQuantity = bidQuantity;
+            this.offerQuantity = offerQuantity;
+            this.upperCircuit = upperCircuit;
+            this.lowerCircuit = lowerCircuit;
+            this.volume = volume;
+            this.message = message == null ? "" : message;
+        }
+
+        double spreadPct() {
+            double mid = bidPrice > 0 && offerPrice > 0 ? (bidPrice + offerPrice) / 2.0 : lastPrice;
+            return mid > 0 && bidPrice > 0 && offerPrice >= bidPrice ? (offerPrice - bidPrice) / mid * 100.0 : -1.0;
+        }
+
+        double distanceToUpperCircuitPct() {
+            return lastPrice > 0 && upperCircuit > 0 ? (upperCircuit / lastPrice - 1.0) * 100.0 : Double.POSITIVE_INFINITY;
         }
     }
 
@@ -361,6 +399,70 @@ final class GrowwClient {
 
     static double getLtpForAutomation(Context context, String symbol) throws Exception { return getLtp(context, symbol); }
 
+    static QuoteSnapshot getQuoteForAutomation(Context context, String symbol) {
+        if (symbol == null || symbol.trim().isEmpty())
+            return new QuoteSnapshot(false, 0, 0, 0, 0, 0, 0, 0, 0, "Missing trading symbol.");
+        try {
+            String endpoint = QUOTE_URL + "?exchange=NSE&segment=CASH&trading_symbol="
+                    + URLEncoder.encode(symbol.trim().toUpperCase(Locale.US), StandardCharsets.UTF_8.name());
+            HttpResponse r = get(endpoint, ensureToken(context), true);
+            if (r.code == 401 || r.code == 403) {
+                AppPrefs.clearAccessToken(context);
+                Result a = authenticate(context);
+                if (!a.success) return new QuoteSnapshot(false, 0, 0, 0, 0, 0, 0, 0, 0, a.message);
+                r = get(endpoint, AppPrefs.getAccessToken(context), true);
+            }
+            if (r.code < 200 || r.code >= 300)
+                return new QuoteSnapshot(false, 0, 0, 0, 0, 0, 0, 0, 0,
+                        "Quote HTTP " + r.code + ": " + shortText(r.body));
+            JSONObject root = new JSONObject(r.body);
+            JSONObject p = root.optJSONObject("payload");
+            if (p == null) return new QuoteSnapshot(false, 0, 0, 0, 0, 0, 0, 0, 0, "Quote payload missing.");
+            return new QuoteSnapshot(true,
+                    p.optDouble("last_price", 0), p.optDouble("bid_price", 0), p.optDouble("offer_price", 0),
+                    p.optInt("bid_quantity", 0), p.optInt("offer_quantity", 0),
+                    p.optDouble("upper_circuit_limit", 0), p.optDouble("lower_circuit_limit", 0),
+                    p.optLong("volume", 0), "Quote OK");
+        } catch (Throwable t) {
+            return new QuoteSnapshot(false, 0, 0, 0, 0, 0, 0, 0, 0, safeMessage(t));
+        }
+    }
+
+    /**
+     * Research-only market BUY. Quantity uses the executable offer when available plus a small
+     * slippage reserve so the configured Research budget remains a ceiling under normal liquidity.
+     * Official Univest fast-path sizing is deliberately untouched.
+     */
+    static ExecutionResult placeResearchCncMarketBuy(Context context, String symbol, int budget, String referenceId) {
+        QuoteSnapshot q = getQuoteForAutomation(context, symbol);
+        if (!q.success || !(q.lastPrice > 0))
+            return new ExecutionResult(false, false, false, "", 0, 0, 0, 0, 0,
+                    "Research quote unavailable: " + q.message);
+        double basis = Math.max(q.lastPrice, q.offerPrice > 0 ? q.offerPrice : q.lastPrice);
+        double guarded = basis * 1.005;
+        int quantity = (int)Math.floor(budget / guarded);
+        if (quantity < 1)
+            return new ExecutionResult(false, false, false, "", 0, 0, 0, q.lastPrice, 0,
+                    symbol + " executable price is above the Research budget.");
+        long dispatch = System.currentTimeMillis();
+        OrderSubmit entry = submitMarketOrder(context, symbol, quantity, "CNC", "BUY", referenceId);
+        if (!entry.success)
+            return new ExecutionResult(false, false, entry.unknown, entry.orderId, quantity, 0, 0, q.lastPrice, dispatch, entry.message);
+        if (entry.orderId.isEmpty())
+            return new ExecutionResult(true, false, false, "", quantity, 0, 0, q.lastPrice, dispatch,
+                    "Research CNC MARKET BUY accepted, but Groww returned no order ID.");
+        try {
+            Fill fill = awaitExecution(context, entry.orderId, quantity);
+            return new ExecutionResult(true, fill.quantity > 0 && fill.averagePrice > 0, false, entry.orderId, quantity,
+                    fill.quantity, fill.averagePrice, q.lastPrice, dispatch,
+                    fill.quantity > 0 && fill.averagePrice > 0
+                            ? "Research CNC MARKET BUY executed • qty " + fill.quantity + " • avg ₹" + money(fill.averagePrice)
+                            : "Research CNC MARKET BUY accepted • fill not confirmed in time.");
+        } catch (Throwable t) {
+            return new ExecutionResult(true, false, true, entry.orderId, quantity, 0, 0, q.lastPrice, dispatch,
+                    "Research CNC MARKET BUY accepted; fill confirmation uncertain: " + safeMessage(t));
+        }
+    }
 
     static List<Candle> getHistoricalCandles(Context context, String symbol, long startMillis, long endMillis, String candleInterval) throws Exception {
         if (symbol == null || symbol.trim().isEmpty()) return new ArrayList<>();
@@ -388,7 +490,9 @@ final class GrowwClient {
         for (int i = 0; i < candles.length(); i++) {
             JSONArray a = candles.optJSONArray(i);
             if (a == null || a.length() < 6) continue;
-            out.add(new Candle(a.optLong(0, 0L), a.optDouble(1, 0), a.optDouble(2, 0),
+            long epoch = parseEpochSeconds(a.opt(0));
+            if (epoch <= 0L) continue;
+            out.add(new Candle(epoch, a.optDouble(1, 0), a.optDouble(2, 0),
                     a.optDouble(3, 0), a.optDouble(4, 0), a.optDouble(5, 0)));
         }
         return out;
@@ -1105,6 +1209,36 @@ final class GrowwClient {
         } catch (Exception e) {
             return new Result(false, true, 0, "GTT status unknown after network error: " + safeMessage(e) + ". Verify Groww before retrying.");
         }
+    }
+
+    static long parseEpochSeconds(Object raw) {
+        if (raw == null || raw == JSONObject.NULL) return 0L;
+        if (raw instanceof Number) {
+            long v = ((Number) raw).longValue();
+            return v > 10_000_000_000L ? v / 1000L : v;
+        }
+        String text = String.valueOf(raw).trim();
+        if (text.isEmpty()) return 0L;
+        try {
+            long v = Long.parseLong(text);
+            return v > 10_000_000_000L ? v / 1000L : v;
+        } catch (NumberFormatException ignored) {}
+        String[] patterns = {
+                "yyyy-MM-dd HH:mm:ss",
+                "yyyy-MM-dd'T'HH:mm:ssXXX",
+                "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
+                "yyyy-MM-dd'T'HH:mm:ss"
+        };
+        for (String pattern : patterns) {
+            try {
+                SimpleDateFormat f = new SimpleDateFormat(pattern, Locale.US);
+                f.setLenient(false);
+                if (!pattern.contains("XXX")) f.setTimeZone(TimeZone.getTimeZone("Asia/Kolkata"));
+                Date d = f.parse(text);
+                if (d != null) return d.getTime() / 1000L;
+            } catch (ParseException ignored) {}
+        }
+        return 0L;
     }
 
     private static String ensureToken(Context context) throws Exception {
