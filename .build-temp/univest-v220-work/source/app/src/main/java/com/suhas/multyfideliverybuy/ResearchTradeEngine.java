@@ -104,6 +104,8 @@ final class ResearchTradeEngine {
         if (!AppPrefs.isLiveMode(c)) return "Research broker BUY requires LIVE mode.";
         if (!AppPrefs.isReadyForBuy(c)) return "Groww/static-IP readiness is not current. Test connection first.";
         if (!NseTradingCalendar.isRegularMarketOpen(System.currentTimeMillis())) return "Research BUY is allowed only during a regular NSE trading session.";
+        if (automatic && !NseTradingCalendar.calendarCoverageKnown(System.currentTimeMillis()))
+            return "Research AutoTrade BUY blocked: the NSE holiday calendar is not verified for the current year.";
         if (!NseTradingCalendar.dayKey(System.currentTimeMillis()).equals(AppPrefs.getResearchForecastTargetKey(c)))
             return "Research BUY blocked: the frozen forecast does not target today's NSE session.";
         int budget = AppPrefs.getUnivestBudget(c);
@@ -134,6 +136,12 @@ final class ResearchTradeEngine {
                 return "Research AutoTrade BUY blocked: one-minute market context is stale or unavailable.";
             if (p.optInt("dataConfidence", 0) < 60)
                 return "Research AutoTrade BUY blocked: data confidence is below 60%.";
+            if (p.optInt("negativeCatalysts", 0) >= 2
+                    && p.optInt("negativeCatalysts", 0) > p.optInt("positiveCatalysts", 0))
+                return "Research AutoTrade BUY blocked: current news enrichment has a material negative skew.";
+            if (p.optString("marketRegimeStatus", "").contains("RISK_OFF")
+                    && p.optDouble("minuteReturn5Pct", 0) <= 0)
+                return "Research AutoTrade BUY blocked: NIFTY regime is risk-off and short-term stock momentum is not positive.";
             liveQuote = GrowwClient.getQuoteForAutomation(c, symbol);
             if (!liveQuote.success || !(liveQuote.lastPrice > 0))
                 return "Research AutoTrade BUY blocked: live quote/depth unavailable.";
