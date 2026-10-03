@@ -176,7 +176,10 @@ final class DiagnosticsStore {
             j.put("todayNotificationCount", todayNotificationCount(c));
             j.put("researchAutoTradeEnabled", AppPrefs.isResearchAutoTradeEnabled(c));
             j.put("researchCapitalLimit", AppPrefs.getResearchCapitalLimit(c));
+            j.put("researchCommittedCapital", ResearchTradeEngine.committedCapital(c));
             j.put("researchMaxPositions", AppPrefs.getResearchMaxPositions(c));
+            j.put("credentialStorage", "ANDROID_KEYSTORE_AES_GCM");
+            j.put("chargeModel", DeliveryNetTarget.CHARGE_MODEL_VERSION);
             j.put("researchOrchestratorStage", AppPrefs.getResearchOrchestratorStage(c));
             j.put("researchOrchestratorStatus", AppPrefs.getResearchOrchestratorStatus(c));
             j.put("researchForecastTargetKey", AppPrefs.getResearchForecastTargetKey(c));
