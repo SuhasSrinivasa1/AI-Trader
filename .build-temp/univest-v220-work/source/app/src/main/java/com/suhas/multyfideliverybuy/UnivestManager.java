@@ -255,6 +255,11 @@ final class UnivestManager {
         cancelLegacyTrackedOrders(context, state);
         GrowwClient.Result conflicts = GrowwClient.cancelOpenCncSellOrdersForSymbol(context, symbol);
         DiagnosticsStore.broker(context, "CANCEL_CONFLICTING_CNC_SELLS", symbol, conflicts.success || conflicts.unknown, conflicts.message);
+        if (!conflicts.success) {
+            fail(context, "EXIT_CONFLICTING_SELL_UNKNOWN", symbol,
+                    "Official exit paused because a conflicting CNC SELL could not be confirmed cleared. " + conflicts.message, null);
+            return;
+        }
 
         GrowwClient.PositionSnapshot holding = GrowwClient.getCncPosition(context, symbol);
         if (!holding.success) { fail(context, "EXIT_HOLDING_CHECK_FAILED", symbol, holding.message, null); return; }
