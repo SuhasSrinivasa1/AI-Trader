@@ -7,8 +7,7 @@ import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Best-effort broad-market regime using NIFTYBEES as an NSE CASH proxy.
- * It is explicitly labelled as a proxy and never represented as the NIFTY index itself.
+ * Broad-market regime using the actual NSE NIFTY cash index supported by Groww.
  */
 final class ResearchMarketContext {
     private static final long DAY = TimeUnit.DAYS.toMillis(1);
