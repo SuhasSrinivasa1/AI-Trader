@@ -960,6 +960,7 @@ final class ResearchTradeEngine {
             p.put("exitType", exitType);
             p.put("exitReason", reason);
             p.put("outcome", net >= MIN_NET_WIN_PCT ? "WIN" : "BELOW_0_5_NET");
+            p.put("evaluationState", net >= MIN_NET_WIN_PCT ? "WIN" : "CLOSED_BELOW_EDGE");
             p.put("horizon", AppPrefs.istDayKey(p.optLong("entryAt", now)).equals(AppPrefs.istDayKey(now))
                     ? "SAME_DAY" : "MULTI_DAY");
             double mfe = p.optDouble("mfePct", 0);
