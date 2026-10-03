@@ -102,6 +102,7 @@ final class ResearchEventStore {
                     p.put("minuteReturn5Pct", live.return5Pct);
                     p.put("minuteRelativeVolume20", live.relativeVolume20);
                     p.put("minuteVwap", vwap(candles));
+                    ResearchDataQuality.annotate(p);
                 }
             } catch (Throwable t) {
                 try {
