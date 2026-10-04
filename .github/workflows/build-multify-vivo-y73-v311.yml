@@ -1,0 +1,69 @@
+name: Build Multify Trader Pro Vivo Y73 v3.1.1
+
+on:
+  push:
+    branches:
+      - multify-vivo-y73-v311-build-20261004
+    paths:
+      - 'multify-vivo-y73-v311/**'
+      - '.github/workflows/build-multify-vivo-y73-v311.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Restore v3.1 Android project
+        run: |
+          cat multify-final-v31/android_src.part* | base64 -d > /tmp/multify-v31-android.tgz
+          tar -xzf /tmp/multify-v31-android.tgz
+          test -f android/app/build.gradle.kts
+
+      - name: Apply Vivo Y73 compatibility patch
+        run: python multify-vivo-y73-v311/vivo_y73_patch.py
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK 35
+        run: |
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Unit tests
+        working-directory: android
+        run: gradle --no-daemon :app:testDebugUnitTest
+
+      - name: Build Vivo Y73 APK
+        working-directory: android
+        run: gradle --no-daemon --stacktrace :app:assembleDebug
+
+      - name: Stage output
+        run: |
+          mkdir -p build-output
+          cp android/app/build/outputs/apk/debug/app-debug.apk build-output/MultifyTraderPro-VivoY73-v3.1.1-debug.apk
+          sha256sum build-output/MultifyTraderPro-VivoY73-v3.1.1-debug.apk | tee build-output/SHA256.txt
+
+      - name: Upload installable APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MultifyTraderPro-VivoY73-v311-APK
+          path: build-output/*
+          if-no-files-found: error
+          retention-days: 7
