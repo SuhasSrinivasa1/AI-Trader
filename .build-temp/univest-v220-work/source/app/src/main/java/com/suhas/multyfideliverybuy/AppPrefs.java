@@ -71,6 +71,13 @@ final class AppPrefs {
     static int getReentryBudget(Context c) { return getUnivestAddBudget(c); }
     static int getAveragingBudget(Context c) { return getUnivestAddBudget(c); }
 
+    static long getNotificationListenerHeartbeat(Context c) { return p(c).getLong("notification_listener_heartbeat", 0L); }
+    static String getNotificationListenerState(Context c) { return p(c).getString("notification_listener_state", "NOT_CONNECTED"); }
+    static void setNotificationListenerHeartbeat(Context c, String state) {
+        p(c).edit().putLong("notification_listener_heartbeat", System.currentTimeMillis())
+                .putString("notification_listener_state", state == null ? "" : state).apply();
+    }
+
     static String getUnivestStatus(Context c) { return p(c).getString("univest_status", "Univest automation is OFF."); }
     static long getUnivestStatusTime(Context c) { return p(c).getLong("univest_status_time", 0L); }
     static void setUnivestStatus(Context c, String v) {
