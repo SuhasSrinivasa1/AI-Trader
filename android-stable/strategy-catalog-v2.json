@@ -1,5 +1,5 @@
 {
-  "version": "STRAT-WEB-2026-09-29",
+  "version": "STRAT-WEB-2026-10-04",
   "strategies": [
     {
       "id": "pd_fvg_sweep",
@@ -238,13 +238,13 @@
   ],
   "research": {
     "mode": "broad_web_weekly",
-    "last_research_at": "2026-09-29T17:34:39.139271+00:00",
-    "finding_count": 138,
+    "last_research_at": "2026-10-04T21:46:17.666611+00:00",
+    "finding_count": 139,
     "challenger_count": 2,
     "engine_counts": {
-      "ARBITRAGE": 40,
-      "HEDGING": 36,
-      "DIRECTIONAL_FNO": 62
+      "ARBITRAGE": 41,
+      "HEDGING": 37,
+      "DIRECTIONAL_FNO": 61
     },
     "policy": "Discovery never promotes directly. Supported encodings enter Challenger shadow tests; unsupported or vague ideas remain research-only. Existing Champions remain until evidence-based demotion."
   }
