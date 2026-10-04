@@ -154,7 +154,7 @@ final class DiagnosticsStore {
                 addText(zip, "snapshot.json", snapshot(c).toString(2));
                 addText(zip, "README.txt",
                         "Univest AutoTrade diagnostic export\n" +
-                        "v2.8.0 stores diagnostics in daily IST files. The app UI shows only today's trading signals/trades/errors.\n" +
+                        "v2.8.1 stores diagnostics in daily IST files. The app UI shows only today's trading signals/trades/errors.\n" +
                         "Historical notification/runtime/broker logs remain in this export for debugging.\n" +
                         "Groww TOTP token, TOTP secret, generated OTP and access token are never exported.\n");
             }
