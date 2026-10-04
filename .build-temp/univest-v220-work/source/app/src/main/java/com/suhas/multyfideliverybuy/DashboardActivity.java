@@ -492,7 +492,7 @@ public class DashboardActivity extends Activity {
         left.addView(text(subtitle, 12, SUBTEXT, false), margins(0, 3, 0, 0));
         row.addView(left, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        TextView version = text("v2.8.0", 11, TEAL, true);
+        TextView version = text("v2.8.1", 11, TEAL, true);
         version.setGravity(Gravity.CENTER);
         version.setPadding(dp(10), dp(6), dp(10), dp(6));
         GradientDrawable chip = new GradientDrawable();
