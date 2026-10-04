@@ -3,6 +3,7 @@ package com.suhas.multyfideliverybuy;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.content.ComponentName;
 import android.content.Context;
 import android.os.Build;
 import android.service.notification.NotificationListenerService;
@@ -21,13 +22,33 @@ public class MultyfiNotificationService extends NotificationListenerService {
 
     @Override public void onCreate() {
         super.onCreate();
+        AppPrefs.setNotificationListenerHeartbeat(getApplicationContext(), "CREATED");
         signalExecutor.execute("__STARTUP__", () -> {
             try { UnivestManager.reconcileAll(getApplicationContext()); }
             catch (Throwable t) { DiagnosticsStore.error(getApplicationContext(), "STARTUP_RECONCILIATION_ERROR", "", "Campaign reconciliation failed.", t); }
         });
     }
 
+    @Override public void onListenerConnected() {
+        super.onListenerConnected();
+        AppPrefs.setNotificationListenerHeartbeat(getApplicationContext(), "CONNECTED");
+        ResearchScheduler.ensureScheduled(getApplicationContext());
+        ResearchMonitorScheduler.ensureScheduled(getApplicationContext());
+        signalExecutor.execute("__RECONNECT__", () -> {
+            try { UnivestManager.reconcileAll(getApplicationContext()); }
+            catch (Throwable t) { DiagnosticsStore.error(getApplicationContext(), "LISTENER_RECONNECT_RECONCILIATION_ERROR", "", "Broker reconciliation after notification-listener reconnect failed.", t); }
+        });
+    }
+
+    @Override public void onListenerDisconnected() {
+        AppPrefs.setNotificationListenerHeartbeat(getApplicationContext(), "DISCONNECTED");
+        try { requestRebind(new ComponentName(this, MultyfiNotificationService.class)); }
+        catch (Throwable ignored) {}
+        super.onListenerDisconnected();
+    }
+
     @Override public void onNotificationPosted(StatusBarNotification sbn) {
+        AppPrefs.setNotificationListenerHeartbeat(getApplicationContext(), "RECEIVING");
         if (sbn == null || sbn.getNotification() == null) return;
         String packageName = sbn.getPackageName() == null ? "" : sbn.getPackageName();
         if (!UNIVEST_PACKAGE.equals(packageName)) return; // hard package source lock
@@ -92,7 +113,11 @@ public class MultyfiNotificationService extends NotificationListenerService {
         });
     }
 
-    @Override public void onDestroy() { signalExecutor.shutdown(); super.onDestroy(); }
+    @Override public void onDestroy() {
+        AppPrefs.setNotificationListenerHeartbeat(getApplicationContext(), "DESTROYED");
+        signalExecutor.shutdown();
+        super.onDestroy();
+    }
 
     private String collectText(Notification n) {
         StringBuilder sb = new StringBuilder();
