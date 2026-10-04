@@ -416,6 +416,46 @@ public class DashboardActivity extends Activity {
         permissions.addView(access, fixedMargins(-1, 50, 0, 12, 0, 0));
         root.addView(permissions, margins(0, 0, 0, 14));
 
+        LinearLayout device = card();
+        boolean batteryFree = DeviceReliability.isIgnoringBatteryOptimizations(this);
+        boolean vivo = DeviceReliability.isVivoFamily();
+        device.addView(sectionRow(vivo ? "VIVO / FUNTOUCH RELIABILITY" : "DEVICE RELIABILITY",
+                batteryFree ? "BATTERY UNRESTRICTED" : "ACTION RECOMMENDED"));
+        device.addView(meta(DeviceReliability.deviceLabel()
+                + " • Notification listener: " + listenerHealthText()
+                + " • Battery optimization: " + (batteryFree ? "ignored" : "active"),
+                (notificationAccessEnabled() && batteryFree) ? GREEN : AMBER), margins(0, 10, 0, 0));
+        device.addView(meta("For reliable Univest notifications, keep notification access enabled and allow unrestricted background activity. These controls do not change trading rules."), margins(0, 8, 0, 0));
+
+        Button battery = secondaryButton(batteryFree ? "BATTERY EXEMPTION ALREADY ACTIVE" : "ALLOW UNRESTRICTED BATTERY");
+        battery.setEnabled(!batteryFree);
+        battery.setOnClickListener(v -> {
+            if (!DeviceReliability.requestBatteryOptimizationExemption(this))
+                Toast.makeText(this, "Open App info → Battery and choose unrestricted/background allowed.", Toast.LENGTH_LONG).show();
+        });
+        device.addView(battery, fixedMargins(-1, 50, 0, 12, 0, 0));
+
+        Button vivoBg = secondaryButton(vivo ? "OPEN VIVO AUTOSTART / BACKGROUND SETTINGS" : "OPEN APP BACKGROUND SETTINGS");
+        vivoBg.setOnClickListener(v -> {
+            boolean opened = vivo ? DeviceReliability.openVivoBackgroundSettings(this) : DeviceReliability.openAppDetails(this);
+            if (!opened) Toast.makeText(this, "Unable to open device background settings automatically.", Toast.LENGTH_LONG).show();
+        });
+        device.addView(vivoBg, fixedMargins(-1, 50, 0, 10, 0, 0));
+
+        Button rebind = secondaryButton("REFRESH NOTIFICATION LISTENER");
+        rebind.setOnClickListener(v -> {
+            try {
+                android.service.notification.NotificationListenerService.requestRebind(
+                        new android.content.ComponentName(this, MultyfiNotificationService.class));
+                Toast.makeText(this, "Notification-listener rebind requested.", Toast.LENGTH_SHORT).show();
+            } catch (Throwable t) {
+                Toast.makeText(this, "Open Notification Access and toggle Univest AutoTrade off/on once.", Toast.LENGTH_LONG).show();
+            }
+        });
+        device.addView(rebind, fixedMargins(-1, 50, 0, 10, 0, 0));
+        device.addView(meta("On Vivo/iQOO: allow Auto-start/Background activity for Univest AutoTrade and avoid one-tap cleaners that revoke background permissions."), margins(0, 8, 0, 0));
+        root.addView(device, margins(0, 0, 0, 14));
+
         LinearLayout data = card();
         data.addView(sectionRow("DATA & DIAGNOSTICS", "Maintenance"));
 
@@ -433,7 +473,7 @@ public class DashboardActivity extends Activity {
 
         LinearLayout about = card();
         about.addView(sectionRow("ABOUT", "Orchestrated Research"));
-        about.addView(body("Univest AutoTrade v2.8.0"), margins(0, 10, 0, 0));
+        about.addView(body("Univest AutoTrade v2.8.1"), margins(0, 10, 0, 0));
         about.addView(meta("Package: com.suhas.multyfideliverybuy"), margins(0, 6, 0, 0));
         about.addView(meta("Official Univest execution and Research decisions remain separately attributed; Research→Univest same-symbol confirmation is intentionally additive."), margins(0, 6, 0, 0));
         root.addView(about, margins(0, 0, 0, 22));
@@ -759,6 +799,16 @@ public class DashboardActivity extends Activity {
                     !UnivestStateStore.EXITED.equals(s.phase)) n++;
         }
         return n;
+    }
+
+    private String listenerHealthText() {
+        if (!notificationAccessEnabled()) return "ACCESS OFF";
+        long t = AppPrefs.getNotificationListenerHeartbeat(this);
+        String state = AppPrefs.getNotificationListenerState(this);
+        if (t <= 0L) return "GRANTED • waiting for listener connection";
+        long age = Math.max(0L, System.currentTimeMillis() - t);
+        if (age < 5L * 60L * 1000L) return state + " • heartbeat " + (age / 1000L) + "s ago";
+        return state + " • last heartbeat " + (age / 60000L) + " min ago";
     }
 
     private boolean notificationAccessEnabled() {
