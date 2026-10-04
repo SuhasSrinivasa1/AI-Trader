@@ -1,4 +1,4 @@
-name: Univest AutoTrade v2.8.0 Release Build Bootstrap
+name: Univest AutoTrade v2.8.1 Release Build Bootstrap
 on:
   push:
     branches: [main]
@@ -34,12 +34,12 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Validate v2.8.0 execution hardening and Research contract
+      - name: Validate v2.8.1 Vivo reliability and stable trading contract
         shell: bash
         run: |
           set -euo pipefail
           SRC=.build-temp/univest-v220-work/source
-          grep -q "versionCode 280" "$SRC/app/build.gradle"
+          grep -q "versionCode 281" "$SRC/app/build.gradle"
           grep -q "versionName '2.8.0'" "$SRC/app/build.gradle"
           grep -R -q 'com.univest.capp' "$SRC/app/src/main/java"
           grep -R -q 'ENTRY_BUDGET = 20000' "$SRC/app/src/main/java"
@@ -114,6 +114,19 @@ jobs:
           grep -q 'AndroidKeyStore' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/SecurePrefs.java"
           grep -q 'SCHEMA_VERSION = 2' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/ResearchEventStore.java"
           grep -q 'GROWW_NSE_DELIVERY_2026_10_03' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/DeliveryNetTarget.java"
+          # Vivo v2.8.1 is a device-reliability release. The broker/parser/state trading core must match v2.8.0 exactly.
+          git diff --exit-code 817e6c7f780f95beefc7f965bc2dbbb2354d6adc HEAD -- \
+            "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/UnivestParser.java" \
+            "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/UnivestManager.java" \
+            "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/GrowwClient.java" \
+            "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/UnivestStateStore.java"
+          grep -q 'REQUEST_IGNORE_BATTERY_OPTIMIZATIONS' "$SRC/app/src/main/AndroidManifest.xml"
+          grep -q 'VIVO / FUNTOUCH RELIABILITY' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/DashboardActivity.java"
+          grep -q 'requestBatteryOptimizationExemption' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/DeviceReliability.java"
+          grep -q 'openVivoBackgroundSettings' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/DeviceReliability.java"
+          grep -q 'onListenerConnected' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/MultyfiNotificationService.java"
+          grep -q 'requestRebind' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/MultyfiNotificationService.java"
+          grep -q 'getNotificationListenerHeartbeat' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/AppPrefs.java"
       - name: Unit tests and release build
         working-directory: .build-temp/univest-v220-work/source
         shell: bash
@@ -126,7 +139,7 @@ jobs:
           set -euo pipefail
           mkdir -p release
           cd .build-temp/univest-v220-work/source
-          zip -qr ../../../release/Univest-AutoTrade-v2.8.0-source.zip . -x '*/build/*' '.gradle/*' '*.jks' '*.keystore' '*credentials.env'
+          zip -qr ../../../release/Univest-AutoTrade-v2.8.1-source.zip . -x '*/build/*' '.gradle/*' '*.jks' '*.keystore' '*credentials.env'
       - name: Generate new signing identity and sign APK
         shell: bash
         run: |
@@ -135,27 +148,27 @@ jobs:
           test -n "$APK" && test -s "$APK"
           PASS="$(openssl rand -hex 24)"
           KS="$RUNNER_TEMP/univest-v230-release.jks"
-          keytool -genkeypair -v             -keystore "$KS"             -storepass "$PASS"             -keypass "$PASS"             -alias univest-v220             -keyalg RSA -keysize 4096 -validity 10000             -dname 'CN=Univest AutoTrade v2.8.0, OU=Private Release, O=Univest AutoTrade, L=Bengaluru, ST=Karnataka, C=IN'
+          keytool -genkeypair -v             -keystore "$KS"             -storepass "$PASS"             -keypass "$PASS"             -alias univest-v220             -keyalg RSA -keysize 4096 -validity 10000             -dname 'CN=Univest AutoTrade v2.8.1, OU=Private Release, O=Univest AutoTrade, L=Bengaluru, ST=Karnataka, C=IN'
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$APK" "$RUNNER_TEMP/aligned.apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign             --ks "$KS"             --ks-pass "pass:$PASS"             --ks-key-alias univest-v220             --key-pass "pass:$PASS"             --v1-signing-enabled true             --v2-signing-enabled true             --v3-signing-enabled true             --out release/Univest-AutoTrade-v2.8.0-SIGNED.apk             "$RUNNER_TEMP/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign             --ks "$KS"             --ks-pass "pass:$PASS"             --ks-key-alias univest-v220             --key-pass "pass:$PASS"             --v1-signing-enabled true             --v2-signing-enabled true             --v3-signing-enabled true             --out release/Univest-AutoTrade-v2.8.1-SIGNED.apk             "$RUNNER_TEMP/aligned.apk"
           rm -f "$KS"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs release/Univest-AutoTrade-v2.8.0-SIGNED.apk | tee release/APK-SIGNATURE.txt
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging release/Univest-AutoTrade-v2.8.0-SIGNED.apk | tee release/APK-BADGING.txt
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs release/Univest-AutoTrade-v2.8.1-SIGNED.apk | tee release/APK-SIGNATURE.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging release/Univest-AutoTrade-v2.8.1-SIGNED.apk | tee release/APK-BADGING.txt
           grep -q "package: name='com.suhas.multyfideliverybuy'" release/APK-BADGING.txt
-          grep -q "versionCode='280'" release/APK-BADGING.txt
+          grep -q "versionCode='281'" release/APK-BADGING.txt
           grep -q "versionName='2.8.0'" release/APK-BADGING.txt
-          sha256sum release/Univest-AutoTrade-v2.8.0-SIGNED.apk | tee release/APK-SHA256.txt
+          sha256sum release/Univest-AutoTrade-v2.8.1-SIGNED.apk | tee release/APK-SHA256.txt
           cp .build-temp/test-results.txt release/test-results.txt
-          unzip -t release/Univest-AutoTrade-v2.8.0-source.zip >/dev/null
+          unzip -t release/Univest-AutoTrade-v2.8.1-source.zip >/dev/null
       - name: Build report
         shell: bash
         run: |
           set -euo pipefail
           CERT="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' release/APK-SIGNATURE.txt | head -1)"
           {
-            echo "Univest AutoTrade v2.8.0 build: SUCCESS"
+            echo "Univest AutoTrade v2.8.1 build: SUCCESS"
             echo "package=com.suhas.multyfideliverybuy"
-            echo "versionCode=280"
+            echo "versionCode=281"
             echo "versionName=2.8.0"
             echo "source=com.univest.capp only"
             echo "product=NSE CASH / CNC DELIVERY"
@@ -192,12 +205,15 @@ jobs:
             echo "minute_store=schema v2 deduplicated by symbol/timestamp/source"
             echo "historical_timestamp_parser=epoch seconds, epoch milliseconds and timestamp strings"
             echo "charge_model=GROWW_NSE_DELIVERY_2026_10_03"
+            echo "device_profile=Vivo Y73 / Funtouch OS reliability hardening"
+            echo "device_reliability=battery-optimization exemption, Vivo autostart/background shortcuts, notification-listener heartbeat and rebind"
+            echo "trading_core_change=none versus successful v2.8.0 broker/parser/state core"
             echo "signing_certificate_sha256=$CERT"
             echo "signing_identity=new ephemeral identity authorized by user"
-          } > release/Univest-AutoTrade-v2.8.0-build-report.txt
+          } > release/Univest-AutoTrade-v2.8.1-build-report.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: Univest-AutoTrade-v2.8.0-FINAL
+          name: Univest-AutoTrade-v2.8.1-FINAL
           retention-days: 14
           path: release/*
           if-no-files-found: error
