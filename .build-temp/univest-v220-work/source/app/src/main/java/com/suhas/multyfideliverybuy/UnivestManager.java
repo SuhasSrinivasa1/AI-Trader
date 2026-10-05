@@ -278,7 +278,16 @@ final class UnivestManager {
         String orderRef = stableRef("UX", symbol, signal.rawText, notificationPostTime);
         GrowwClient.ExecutionResult r = GrowwClient.placeUnivestCncMarketSell(context, symbol, holding.quantity, orderRef);
         DiagnosticsStore.trade(context, r.submitted ? "SELL_SUBMITTED" : "SELL_FAILED", symbol, state.lastAction, r);
-        if (!r.submitted) { fail(context, "EXIT_NOT_SUBMITTED", symbol, r.message, null); return; }
+        if (!r.submitted) {
+            state.phase = UnivestStateStore.EXITING_OFFICIAL;
+            state.exitOrderId = r.orderId == null ? "" : r.orderId;
+            state.exitRequestedQty = holding.quantity;
+            state.lastAction = "Official exit order was not completed and requires broker-truth recovery. " + r.message;
+            UnivestStateStore.put(context, state);
+            OfficialSignalRecoveryScheduler.scheduleAfter(context, 60_000L);
+            fail(context, "EXIT_NOT_SUBMITTED", symbol, r.message, null);
+            return;
+        }
 
         GrowwClient.PositionSnapshot after = GrowwClient.getCncPosition(context, symbol);
         if (r.filled || (after.success && after.quantity == 0)) {
@@ -320,10 +329,20 @@ final class UnivestManager {
 
     static void reconcileAll(Context context) {
         migrateLegacyRules(context);
-        if (!AppPrefs.isLiveMode(context) || !AppPrefs.isReadyForBuy(context)) return;
+        if (!AppPrefs.isLiveMode(context)) return;
+
+        boolean readyForBuys = AppPrefs.isReadyForBuy(context);
         for (UnivestStateStore.State state : UnivestStateStore.all(context)) {
             if (state == null || state.symbol == null || state.symbol.isEmpty() || UnivestStateStore.EXITED.equals(state.phase)) continue;
             try {
+                if (UnivestStateStore.EXITING_OFFICIAL.equals(state.phase)) {
+                    reconcilePendingOfficialExit(context, state);
+                    continue;
+                }
+
+                // Normal campaign maintenance still requires fresh LIVE buy readiness.
+                if (!readyForBuys) continue;
+
                 GrowwClient.PositionSnapshot broker = GrowwClient.getCncPosition(context, state.symbol);
                 if (!broker.success) continue;
                 if (broker.quantity <= 0) {
@@ -343,6 +362,103 @@ final class UnivestManager {
             } catch (Throwable t) {
                 DiagnosticsStore.error(context, "RECONCILIATION_ERROR", state.symbol, "Campaign reconciliation failed.", t);
             }
+        }
+    }
+
+    static boolean hasPendingOfficialExit(Context context) {
+        for (UnivestStateStore.State state : UnivestStateStore.all(context)) {
+            if (state != null && UnivestStateStore.EXITING_OFFICIAL.equals(state.phase)) return true;
+        }
+        return false;
+    }
+
+    private static void reconcilePendingOfficialExit(Context context, UnivestStateStore.State state) {
+        String symbol = state.symbol;
+        GrowwClient.PositionSnapshot broker = GrowwClient.getCncPosition(context, symbol);
+        if (!broker.success) {
+            DiagnosticsStore.error(context, "EXIT_RECOVERY_HOLDING_UNKNOWN", symbol,
+                    "Pending official exit could not refresh broker holding; recovery remains armed.", null);
+            OfficialSignalRecoveryScheduler.scheduleAfter(context, 60_000L);
+            return;
+        }
+        if (broker.quantity <= 0) {
+            markExited(context, state, symbol, "Pending official exit reconciled: broker is flat.");
+            ResearchTradeEngine.onOfficialExitExecuted(context, symbol, 0);
+            DiagnosticsStore.runtime(context, "EXIT_RECOVERY_CONFIRMED_FLAT", symbol,
+                    "Broker truth confirms the official exit is complete.");
+            return;
+        }
+
+        if (state.exitOrderId != null && !state.exitOrderId.isEmpty()) {
+            GrowwClient.ExecutionResult existing = GrowwClient.checkCashOrderExecution(
+                    context, state.exitOrderId, Math.max(1, state.exitRequestedQty));
+            if (existing.filled && existing.filledQuantity >= Math.max(1, state.exitRequestedQty)) {
+                GrowwClient.PositionSnapshot after = GrowwClient.getCncPosition(context, symbol);
+                if (after.success && after.quantity <= 0) {
+                    markExited(context, state, symbol, "Pending official exit reconciled from completed Groww order.");
+                    ResearchTradeEngine.onOfficialExitExecuted(context, symbol, existing.averagePrice);
+                    DiagnosticsStore.runtime(context, "EXIT_RECOVERY_ORDER_COMPLETE", symbol,
+                            "Previously submitted official exit is fully executed.");
+                    return;
+                }
+            }
+
+            if (!GrowwClient.isTerminalFailureStatus(existing.message)) {
+                state.quantity = broker.quantity;
+                state.lastAction = "Official exit still pending at Groww • " + existing.message;
+                UnivestStateStore.put(context, state);
+                OfficialSignalRecoveryScheduler.scheduleAfter(context, 60_000L);
+                return;
+            }
+
+            DiagnosticsStore.runtime(context, "EXIT_RECOVERY_TERMINAL_ORDER", symbol,
+                    "Previous official exit reached terminal failure; safe broker-truth retry will be attempted. "
+                            + existing.message);
+            state.exitOrderId = "";
+            UnivestStateStore.put(context, state);
+        }
+
+        GrowwClient.Result conflicts = GrowwClient.cancelOpenCncSellOrdersForSymbol(context, symbol);
+        DiagnosticsStore.broker(context, "EXIT_RECOVERY_CANCEL_CONFLICTS", symbol,
+                conflicts.success || conflicts.unknown, conflicts.message);
+        if (!conflicts.success) {
+            state.lastAction = "Official exit recovery paused: conflicting sell state is unknown. " + conflicts.message;
+            UnivestStateStore.put(context, state);
+            OfficialSignalRecoveryScheduler.scheduleAfter(context, 60_000L);
+            return;
+        }
+
+        String retryRef = stableRef("UXR", symbol,
+                "RECOVER|" + state.exitRequestedQty + "|" + state.updatedAt, System.currentTimeMillis());
+        GrowwClient.ExecutionResult retry = GrowwClient.placeUnivestCncMarketSell(
+                context, symbol, broker.quantity, retryRef);
+        DiagnosticsStore.trade(context, retry.submitted ? "SELL_RECOVERY_SUBMITTED" : "SELL_RECOVERY_FAILED",
+                symbol, "Broker-truth official exit recovery for qty " + broker.quantity, retry);
+
+        if (!retry.submitted) {
+            state.phase = UnivestStateStore.EXITING_OFFICIAL;
+            state.exitOrderId = retry.orderId == null ? "" : retry.orderId;
+            state.exitRequestedQty = broker.quantity;
+            state.lastAction = "Official exit recovery not completed. " + retry.message;
+            UnivestStateStore.put(context, state);
+            OfficialSignalRecoveryScheduler.scheduleAfter(context, 60_000L);
+            return;
+        }
+
+        GrowwClient.PositionSnapshot after = GrowwClient.getCncPosition(context, symbol);
+        if (retry.filled || (after.success && after.quantity <= 0)) {
+            markExited(context, state, symbol, "Official exit recovered and broker position is flat.");
+            ResearchTradeEngine.onOfficialExitExecuted(context, symbol, retry.averagePrice);
+            DiagnosticsStore.runtime(context, "EXIT_RECOVERY_EXECUTED", symbol,
+                    "Official exit recovery sold the remaining broker CNC holding.");
+        } else {
+            state.phase = UnivestStateStore.EXITING_OFFICIAL;
+            state.exitOrderId = retry.orderId;
+            state.exitRequestedQty = broker.quantity;
+            state.quantity = broker.quantity;
+            state.lastAction = "Official exit recovery accepted; awaiting broker fill. " + retry.message;
+            UnivestStateStore.put(context, state);
+            OfficialSignalRecoveryScheduler.scheduleAfter(context, 60_000L);
         }
     }
 
