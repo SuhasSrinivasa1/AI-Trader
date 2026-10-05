@@ -279,6 +279,34 @@ final class AppPrefs {
                 .apply();
     }
 
+
+    static String getHistoryBackupUri(Context c) { return p(c).getString("history_backup_uri", ""); }
+    static void setHistoryBackupUri(Context c, String v) { p(c).edit().putString("history_backup_uri", clean(v)).apply(); }
+    static long getHistoryBackupTime(Context c) { return p(c).getLong("history_backup_time", 0L); }
+    static String getHistoryBackupStatus(Context c) { return p(c).getString("history_backup_status", ""); }
+    static void setHistoryBackupState(Context c, long when, String status) {
+        p(c).edit().putLong("history_backup_time", Math.max(0L, when))
+                .putString("history_backup_status", status == null ? "" : status).apply();
+    }
+
+    static boolean isPreMarketReady(Context c) { return p(c).getBoolean("premarket_ready", false); }
+    static long getPreMarketReadinessTime(Context c) { return p(c).getLong("premarket_ready_time", 0L); }
+    static String getPreMarketReadinessPhase(Context c) { return p(c).getString("premarket_ready_phase", ""); }
+    static String getPreMarketReadinessStatus(Context c) { return p(c).getString("premarket_ready_status", "Pre-market validation has not run."); }
+    static void setPreMarketReadiness(Context c, boolean ready, String phase, String status) {
+        p(c).edit().putBoolean("premarket_ready", ready)
+                .putLong("premarket_ready_time", System.currentTimeMillis())
+                .putString("premarket_ready_phase", clean(phase))
+                .putString("premarket_ready_status", status == null ? "" : status).apply();
+    }
+
+    static String getUnivestStrategyStudy(Context c) {
+        return p(c).getString("univest_strategy_study", "No off-market Univest strategy study has run yet.");
+    }
+    static void setUnivestStrategyStudy(Context c, String v) {
+        p(c).edit().putString("univest_strategy_study", v == null ? "" : v).apply();
+    }
+
     static boolean isUnivestV2Migrated(Context c) { return p(c).getBoolean("univest_v2_migrated", false); }
     static void setUnivestV2Migrated(Context c, boolean v) { p(c).edit().putBoolean("univest_v2_migrated", v).apply(); }
 
