@@ -43,6 +43,7 @@ final class GrowwClient {
     private static final String POSITION_SYMBOL_URL = "https://api.groww.in/v1/positions/trading-symbol";
     private static final String HOLDINGS_URL = "https://api.groww.in/v1/holdings/user";
     private static final String HISTORICAL_CANDLES_URL = "https://api.groww.in/v1/historical/candles";
+    private static final double OFFICIAL_MARKETABLE_LIMIT_BUFFER_PCT = 0.02;
 
 
     static final class Candle {
@@ -88,6 +89,25 @@ final class GrowwClient {
 
         double distanceToUpperCircuitPct() {
             return lastPrice > 0 && upperCircuit > 0 ? (upperCircuit / lastPrice - 1.0) * 100.0 : Double.POSITIVE_INFINITY;
+        }
+    }
+
+    static final class CircuitOrderPlan {
+        final boolean useLimit;
+        final double referencePrice;
+        final double limitPrice;
+        final double lowerCircuit;
+        final double upperCircuit;
+        final String message;
+
+        CircuitOrderPlan(boolean useLimit, double referencePrice, double limitPrice,
+                         double lowerCircuit, double upperCircuit, String message) {
+            this.useLimit = useLimit;
+            this.referencePrice = referencePrice;
+            this.limitPrice = limitPrice;
+            this.lowerCircuit = lowerCircuit;
+            this.upperCircuit = upperCircuit;
+            this.message = message == null ? "" : message;
         }
     }
 
@@ -342,25 +362,62 @@ final class GrowwClient {
 
 
     /** Univest equity fast path: one LTP read only for ₹20k quantity sizing, then immediate CNC MARKET BUY. */
+    /**
+     * Official Univest CNC BUY. Groww MARKET orders can be internally price-protected beyond the
+     * exchange circuit band and then rejected by RMS. When quote/circuit data is available, submit
+     * an aggressive DAY LIMIT inside the live circuit band instead. This preserves immediate-entry
+     * intent while preventing a protected-market circuit breach.
+     */
     static ExecutionResult placeUnivestCncMarketBuy(Context context, String symbol, int budget, String referenceId) {
         try {
-            double ltp = getLtp(context, symbol);
+            QuoteSnapshot quote = getQuoteForAutomation(context, symbol);
+            double ltp = quote.success && quote.lastPrice > 0 ? quote.lastPrice : getLtp(context, symbol);
             if (!(ltp > 0)) return new ExecutionResult(false, false, false, "", 0, 0, 0, 0, 0,
                     "No valid Groww LTP for " + symbol + "; no Univest order submitted.");
-            int quantity = (int) Math.floor(budget / ltp);
+
+            double tick = tickSizeFor(context, symbol);
+            CircuitOrderPlan plan = circuitOrderPlan(quote, "BUY", tick);
+            double sizingPrice = plan.useLimit && plan.limitPrice > 0 ? plan.limitPrice : ltp;
+            int quantity = (int)Math.floor(budget / sizingPrice);
             if (quantity < 1) return new ExecutionResult(false, false, false, "", 0, 0, 0, ltp, 0,
-                    symbol + " LTP ₹" + money(ltp) + " is above the ₹" + inr(budget) + " Univest budget.");
+                    symbol + " circuit-safe executable price ₹" + money(sizingPrice)
+                            + " is above the ₹" + inr(budget) + " Univest budget.");
+
             long dispatch = System.currentTimeMillis();
-            OrderSubmit entry = submitMarketOrder(context, symbol, quantity, "CNC", "BUY", referenceId);
-            if (!entry.success) return new ExecutionResult(false, false, entry.unknown, entry.orderId, quantity, 0, 0, ltp, dispatch, entry.message);
+            OrderSubmit entry;
+            if (plan.useLimit) {
+                DiagnosticsStore.broker(context, "CIRCUIT_GUARD_BUY", symbol, true,
+                        "Official BUY uses circuit-safe marketable LIMIT ₹" + money(plan.limitPrice)
+                                + " • band ₹" + money(plan.lowerCircuit) + "–₹" + money(plan.upperCircuit)
+                                + " • reference ₹" + money(plan.referencePrice) + ".");
+                entry = submitLimitOrder(context, symbol, quantity, "CNC", "BUY", plan.limitPrice, referenceId);
+            } else {
+                DiagnosticsStore.broker(context, "CIRCUIT_GUARD_UNAVAILABLE_BUY", symbol, true,
+                        "Circuit range unavailable; preserving legacy CNC MARKET BUY path. " + plan.message);
+                entry = submitMarketOrder(context, symbol, quantity, "CNC", "BUY", referenceId);
+            }
+
+            if (!entry.success) return new ExecutionResult(false, false, entry.unknown, entry.orderId,
+                    quantity, 0, 0, ltp, dispatch, entry.message);
             if (entry.orderId.isEmpty()) return new ExecutionResult(true, false, false, "", quantity, 0, 0, ltp, dispatch,
-                    "CNC MARKET BUY accepted, but Groww returned no order ID. Verify fill manually.");
+                    (plan.useLimit ? "Circuit-safe CNC LIMIT BUY" : "CNC MARKET BUY")
+                            + " accepted, but Groww returned no order ID. Verify fill manually.");
+
             Fill fill = awaitExecution(context, entry.orderId, quantity);
-            return new ExecutionResult(true, fill.quantity > 0 && fill.averagePrice > 0, false, entry.orderId, quantity,
-                    fill.quantity, fill.averagePrice, ltp, dispatch,
+            if (isTerminalFailure(fill.status)) {
+                DiagnosticsStore.broker(context, "ORDER_BUY_CNC_TERMINAL_REJECT", symbol, false,
+                        "Groww accepted then terminally rejected official BUY • " + fill.status);
+                return new ExecutionResult(false, false, false, entry.orderId, quantity, fill.quantity,
+                        fill.averagePrice, ltp, dispatch,
+                        "Official BUY rejected after submission • " + fill.status);
+            }
+            return new ExecutionResult(true, fill.quantity >= quantity && fill.averagePrice > 0, false,
+                    entry.orderId, quantity, fill.quantity, fill.averagePrice, ltp, dispatch,
                     fill.quantity > 0 && fill.averagePrice > 0
-                            ? "CNC MARKET BUY executed • qty " + fill.quantity + " • avg ₹" + money(fill.averagePrice)
-                            : "CNC MARKET BUY accepted • order " + entry.orderId + " • fill not confirmed in time.");
+                            ? (plan.useLimit ? "Circuit-safe CNC LIMIT BUY" : "CNC MARKET BUY")
+                                + " executed • qty " + fill.quantity + " • avg ₹" + money(fill.averagePrice)
+                            : (plan.useLimit ? "Circuit-safe CNC LIMIT BUY" : "CNC MARKET BUY")
+                                + " accepted • order " + entry.orderId + " • fill not confirmed in time.");
         } catch (SocketTimeoutException e) {
             return new ExecutionResult(false, false, true, "", 0, 0, 0, 0, 0,
                     "Univest entry status unknown after network timeout. Check Groww before any manual retry.");
@@ -373,20 +430,47 @@ final class GrowwClient {
     static ExecutionResult placeUnivestCncMarketSell(Context context, String symbol, int quantity, String referenceId) {
         if (quantity <= 0) return new ExecutionResult(false, false, false, "", 0, 0, 0, 0, 0, "Sell quantity is zero.");
         long dispatch = System.currentTimeMillis();
-        OrderSubmit sell = submitMarketOrder(context, symbol, quantity, "CNC", "SELL", referenceId);
-        if (!sell.success) return new ExecutionResult(false, false, sell.unknown, sell.orderId, quantity, 0, 0, 0, dispatch, sell.message);
-        if (sell.orderId.isEmpty()) return new ExecutionResult(true, false, false, "", quantity, 0, 0, 0, dispatch,
-                "CNC MARKET SELL accepted, but Groww returned no order ID. Verify execution manually.");
         try {
+            QuoteSnapshot quote = getQuoteForAutomation(context, symbol);
+            double tick = tickSizeFor(context, symbol);
+            CircuitOrderPlan plan = circuitOrderPlan(quote, "SELL", tick);
+            OrderSubmit sell;
+            if (plan.useLimit) {
+                DiagnosticsStore.broker(context, "CIRCUIT_GUARD_SELL", symbol, true,
+                        "Official SELL uses circuit-safe marketable LIMIT ₹" + money(plan.limitPrice)
+                                + " • band ₹" + money(plan.lowerCircuit) + "–₹" + money(plan.upperCircuit)
+                                + " • reference ₹" + money(plan.referencePrice) + ".");
+                sell = submitLimitOrder(context, symbol, quantity, "CNC", "SELL", plan.limitPrice, referenceId);
+            } else {
+                DiagnosticsStore.broker(context, "CIRCUIT_GUARD_UNAVAILABLE_SELL", symbol, true,
+                        "Circuit range unavailable; preserving legacy CNC MARKET SELL path. " + plan.message);
+                sell = submitMarketOrder(context, symbol, quantity, "CNC", "SELL", referenceId);
+            }
+            if (!sell.success) return new ExecutionResult(false, false, sell.unknown, sell.orderId,
+                    quantity, 0, 0, quote.lastPrice, dispatch, sell.message);
+            if (sell.orderId.isEmpty()) return new ExecutionResult(true, false, false, "", quantity, 0, 0,
+                    quote.lastPrice, dispatch,
+                    (plan.useLimit ? "Circuit-safe CNC LIMIT SELL" : "CNC MARKET SELL")
+                            + " accepted, but Groww returned no order ID. Verify execution manually.");
+
             Fill fill = awaitExecution(context, sell.orderId, quantity);
-            return new ExecutionResult(true, fill.quantity > 0 && fill.averagePrice > 0, false, sell.orderId, quantity,
-                    fill.quantity, fill.averagePrice, 0, dispatch,
+            if (isTerminalFailure(fill.status)) {
+                DiagnosticsStore.broker(context, "ORDER_SELL_CNC_TERMINAL_REJECT", symbol, false,
+                        "Groww accepted then terminally rejected official SELL • " + fill.status);
+                return new ExecutionResult(false, false, false, sell.orderId, quantity, fill.quantity,
+                        fill.averagePrice, quote.lastPrice, dispatch,
+                        "Official SELL rejected after submission • " + fill.status);
+            }
+            return new ExecutionResult(true, fill.quantity >= quantity && fill.averagePrice > 0, false,
+                    sell.orderId, quantity, fill.quantity, fill.averagePrice, quote.lastPrice, dispatch,
                     fill.quantity > 0 && fill.averagePrice > 0
-                            ? "CNC MARKET SELL executed • qty " + fill.quantity + " • avg ₹" + money(fill.averagePrice)
-                            : "CNC MARKET SELL accepted • order " + sell.orderId + " • fill not confirmed in time.");
+                            ? (plan.useLimit ? "Circuit-safe CNC LIMIT SELL" : "CNC MARKET SELL")
+                                + " executed • qty " + fill.quantity + " • avg ₹" + money(fill.averagePrice)
+                            : (plan.useLimit ? "Circuit-safe CNC LIMIT SELL" : "CNC MARKET SELL")
+                                + " accepted • order " + sell.orderId + " • fill not confirmed in time.");
         } catch (Exception e) {
-            return new ExecutionResult(true, false, true, sell.orderId, quantity, 0, 0, 0, dispatch,
-                    "CNC MARKET SELL accepted; fill confirmation uncertain: " + safeMessage(e));
+            return new ExecutionResult(false, false, true, "", quantity, 0, 0, 0, dispatch,
+                    "Official SELL status unknown after circuit-safe execution error: " + safeMessage(e));
         }
     }
 
@@ -976,6 +1060,110 @@ final class GrowwClient {
         return payload.optDouble(key, -1);
     }
 
+    static CircuitOrderPlan circuitOrderPlan(QuoteSnapshot q, String transaction, double tickSize) {
+        String side = transaction == null ? "" : transaction.trim().toUpperCase(Locale.US);
+        if (q == null || !q.success || !(q.lastPrice > 0)) {
+            return new CircuitOrderPlan(false, q == null ? 0 : q.lastPrice, 0,
+                    q == null ? 0 : q.lowerCircuit, q == null ? 0 : q.upperCircuit,
+                    "Quote unavailable.");
+        }
+        double tick = tickSize > 0 ? tickSize : 0.05;
+        if ("BUY".equals(side) && q.upperCircuit > 0) {
+            double reference = Math.max(q.lastPrice, q.offerPrice > 0 ? q.offerPrice : q.lastPrice);
+            double aggressive = reference * (1.0 + OFFICIAL_MARKETABLE_LIMIT_BUFFER_PCT);
+            double capped = Math.min(q.upperCircuit, aggressive);
+            double limit = roundDownToTick(capped, tick);
+            if (limit <= 0) return new CircuitOrderPlan(false, reference, 0, q.lowerCircuit, q.upperCircuit, "Invalid upper-circuit plan.");
+            return new CircuitOrderPlan(true, reference, limit, q.lowerCircuit, q.upperCircuit, "Circuit-safe BUY limit.");
+        }
+        if ("SELL".equals(side) && q.lowerCircuit > 0) {
+            double reference = Math.min(q.lastPrice, q.bidPrice > 0 ? q.bidPrice : q.lastPrice);
+            double aggressive = reference * (1.0 - OFFICIAL_MARKETABLE_LIMIT_BUFFER_PCT);
+            double floored = Math.max(q.lowerCircuit, aggressive);
+            double limit = roundUpToTick(floored, tick);
+            if (limit <= 0) return new CircuitOrderPlan(false, reference, 0, q.lowerCircuit, q.upperCircuit, "Invalid lower-circuit plan.");
+            return new CircuitOrderPlan(true, reference, limit, q.lowerCircuit, q.upperCircuit, "Circuit-safe SELL limit.");
+        }
+        return new CircuitOrderPlan(false, q.lastPrice, 0, q.lowerCircuit, q.upperCircuit,
+                "Circuit limits missing from live quote.");
+    }
+
+    private static double tickSizeFor(Context context, String symbol) {
+        try {
+            InstrumentRepository.Instrument i = InstrumentRepository.resolve(InstrumentRepository.load(context), symbol);
+            if (i != null && i.tickSize > 0) return i.tickSize;
+        } catch (Throwable ignored) {}
+        return 0.05;
+    }
+
+    private static double roundDownToTick(double price, double tick) {
+        double t = tick > 0 ? tick : 0.05;
+        return Math.max(t, Math.floor((price + 1e-9) / t) * t);
+    }
+
+    private static double roundUpToTick(double price, double tick) {
+        double t = tick > 0 ? tick : 0.05;
+        return Math.max(t, Math.ceil((price - 1e-9) / t) * t);
+    }
+
+    private static boolean isTerminalFailure(String status) {
+        if (status == null) return false;
+        String s = status.toUpperCase(Locale.US);
+        return s.contains("REJECT") || s.contains("FAILED") || s.contains("CANCELLED");
+    }
+
+    private static OrderSubmit submitLimitOrder(Context context, String symbol, int quantity, String product,
+                                                String transaction, double limitPrice, String referenceId) {
+        if (quantity <= 0) return new OrderSubmit(false, false, 0, "", "Quantity is zero; order not submitted.");
+        if (!(limitPrice > 0)) return new OrderSubmit(false, false, 0, "", "Limit price is invalid; order not submitted.");
+        try {
+            String token = ensureToken(context);
+            JSONObject body = new JSONObject();
+            body.put("trading_symbol", symbol);
+            body.put("quantity", quantity);
+            body.put("validity", "DAY");
+            body.put("exchange", "NSE");
+            body.put("segment", "CASH");
+            body.put("product", product);
+            body.put("order_type", "LIMIT");
+            body.put("price", money(limitPrice));
+            body.put("transaction_type", transaction);
+            body.put("order_reference_id", referenceId);
+
+            HttpResponse r = post(ORDER_URL, token, body.toString(), true);
+            if (r.code == 401 || r.code == 403) {
+                AppPrefs.clearAccessToken(context);
+                Result auth = authenticate(context);
+                if (!auth.success) return new OrderSubmit(false, false, auth.httpCode, "", auth.message);
+                r = post(ORDER_URL, AppPrefs.getAccessToken(context), body.toString(), true);
+            }
+            if (r.code >= 200 && r.code < 300) {
+                String orderId = "";
+                String remark = "Limit order accepted";
+                try {
+                    JSONObject json = new JSONObject(r.body);
+                    JSONObject payload = json.optJSONObject("payload");
+                    if (payload != null) {
+                        orderId = payload.optString("groww_order_id", "");
+                        remark = payload.optString("remark", remark);
+                    }
+                } catch (Exception ignored) {}
+                String msg = remark + " • LIMIT ₹" + money(limitPrice) + (orderId.isEmpty() ? "" : " • " + orderId);
+                DiagnosticsStore.broker(context, "ORDER_" + transaction + "_" + product + "_CIRCUIT_LIMIT", symbol, true, msg);
+                return new OrderSubmit(true, false, r.code, orderId, msg);
+            }
+            String reject = transaction + " circuit-safe LIMIT rejected (HTTP " + r.code + "): " + shortText(r.body);
+            DiagnosticsStore.broker(context, "ORDER_" + transaction + "_" + product + "_CIRCUIT_LIMIT", symbol, false, reject);
+            return new OrderSubmit(false, false, r.code, "", reject);
+        } catch (SocketTimeoutException e) {
+            return new OrderSubmit(false, true, 0, "",
+                    transaction + " circuit-safe LIMIT status unknown after timeout. No automatic retry was made.");
+        } catch (Exception e) {
+            return new OrderSubmit(false, true, 0, "",
+                    transaction + " circuit-safe LIMIT status unknown after network error: " + safeMessage(e) + ".");
+        }
+    }
+
     private static OrderSubmit submitMarketOrder(Context context, String symbol, int quantity, String product, String transaction, String referenceId) {
         if (quantity <= 0) return new OrderSubmit(false, false, 0, "", "Quantity is zero; order not submitted.");
         try {
@@ -1024,6 +1212,17 @@ final class GrowwClient {
         }
     }
 
+    private static String detailedOrderStatus(JSONObject p) {
+        if (p == null) return "UNKNOWN";
+        String status = p.optString("order_status", "");
+        String reason = p.optString("rejection_reason", "");
+        if (reason.isEmpty()) reason = p.optString("remark", "");
+        if (reason.isEmpty()) reason = p.optString("status_message", "");
+        if (reason.isEmpty()) reason = p.optString("message", "");
+        if (reason.isEmpty()) return status;
+        return status + " • " + reason;
+    }
+
     private static Fill getExecutionOnce(Context context, String orderId) throws Exception {
         String endpoint = ORDER_DETAIL_URL + URLEncoder.encode(orderId, StandardCharsets.UTF_8.name()) + "?segment=CASH";
         HttpResponse r = get(endpoint, ensureToken(context), true);
@@ -1035,7 +1234,7 @@ final class GrowwClient {
             JSONObject json = new JSONObject(r.body); JSONObject p = json.optJSONObject("payload");
             if (p != null) {
                 int filled = p.optInt("filled_quantity", 0); double avg = p.optDouble("average_fill_price", 0);
-                String status = p.optString("order_status", "");
+                String status = detailedOrderStatus(p);
                 return new Fill(filled > 0 && avg > 0, filled, avg, status);
             }
         }
@@ -1060,10 +1259,10 @@ final class GrowwClient {
                 if (p != null) {
                     int filled = p.optInt("filled_quantity", 0);
                     double avg = p.optDouble("average_fill_price", 0);
-                    String status = p.optString("order_status", "");
+                    String status = detailedOrderStatus(p);
                     if (filled > 0 && avg > 0) best = new Fill(filled >= requestedQty, filled, avg, status);
                     if (filled >= requestedQty && avg > 0) return new Fill(true, filled, avg, status);
-                    if ("REJECTED".equalsIgnoreCase(status) || "FAILED".equalsIgnoreCase(status) || "CANCELLED".equalsIgnoreCase(status)) return best;
+                    if (isTerminalFailure(status)) return new Fill(false, filled, avg, status);
                 }
             }
             Thread.sleep(175L);
