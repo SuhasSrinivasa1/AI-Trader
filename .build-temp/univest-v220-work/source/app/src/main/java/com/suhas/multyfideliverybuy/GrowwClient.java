@@ -23,6 +23,10 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.TimeZone;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -44,6 +48,7 @@ final class GrowwClient {
     private static final String HOLDINGS_URL = "https://api.groww.in/v1/holdings/user";
     private static final String HISTORICAL_CANDLES_URL = "https://api.groww.in/v1/historical/candles";
     private static final double OFFICIAL_MARKETABLE_LIMIT_BUFFER_PCT = 0.02;
+    private static final ExecutorService EXIT_READ_POOL = Executors.newFixedThreadPool(2);
 
 
     static final class Candle {
@@ -224,6 +229,42 @@ final class GrowwClient {
         final String message;
         PositionSnapshot(boolean success, int quantity, double netPrice, String message) {
             this.success = success; this.quantity = quantity; this.netPrice = netPrice; this.message = message;
+        }
+    }
+
+    static final class ExitSnapshot {
+        final boolean success;
+        final PositionSnapshot holding;
+        final QuoteSnapshot quote;
+        final double executableSellPrice;
+        final String message;
+
+        ExitSnapshot(boolean success, PositionSnapshot holding, QuoteSnapshot quote,
+                     double executableSellPrice, String message) {
+            this.success = success;
+            this.holding = holding;
+            this.quote = quote;
+            this.executableSellPrice = executableSellPrice;
+            this.message = message == null ? "" : message;
+        }
+    }
+
+    static final class GreenSellPlan {
+        final boolean canSell;
+        final double averageBuyPrice;
+        final double executableSellPrice;
+        final double minimumGreenPrice;
+        final double limitPrice;
+        final String reason;
+
+        GreenSellPlan(boolean canSell, double averageBuyPrice, double executableSellPrice,
+                      double minimumGreenPrice, double limitPrice, String reason) {
+            this.canSell = canSell;
+            this.averageBuyPrice = averageBuyPrice;
+            this.executableSellPrice = executableSellPrice;
+            this.minimumGreenPrice = minimumGreenPrice;
+            this.limitPrice = limitPrice;
+            this.reason = reason == null ? "" : reason;
         }
     }
 
@@ -513,6 +554,126 @@ final class GrowwClient {
                     p.optLong("volume", 0), "Quote OK");
         } catch (Exception t) {
             return new QuoteSnapshot(false, 0, 0, 0, 0, 0, 0, 0, 0, safeMessage(t));
+        }
+    }
+
+    static ExitSnapshot getFastExitSnapshot(Context context, String symbol) {
+        Future<PositionSnapshot> position = EXIT_READ_POOL.submit(() -> getCncPosition(context, symbol));
+        Future<QuoteSnapshot> quote = EXIT_READ_POOL.submit(() -> getQuoteForAutomation(context, symbol));
+        try {
+            PositionSnapshot p = position.get(6, TimeUnit.SECONDS);
+            QuoteSnapshot q = quote.get(6, TimeUnit.SECONDS);
+            double executable = q != null && q.bidPrice > 0 ? q.bidPrice
+                    : (q != null ? q.lastPrice : 0.0);
+            boolean ok = p != null && p.success && q != null && q.success;
+            String msg = "Parallel EXIT snapshot • holding=" + (p == null ? "missing" : p.quantity)
+                    + " • avg=₹" + money(p == null ? 0 : p.netPrice)
+                    + " • bid/LTP=₹" + money(executable)
+                    + " • holdingOk=" + (p != null && p.success)
+                    + " • quoteOk=" + (q != null && q.success);
+            return new ExitSnapshot(ok,
+                    p == null ? new PositionSnapshot(false, -1, 0, "Holding snapshot missing.") : p,
+                    q == null ? new QuoteSnapshot(false,0,0,0,0,0,0,0,0,"Quote snapshot missing.") : q,
+                    executable, msg);
+        } catch (Exception e) {
+            position.cancel(true); quote.cancel(true);
+            return new ExitSnapshot(false,
+                    new PositionSnapshot(false, -1, 0, "Parallel holding read failed."),
+                    new QuoteSnapshot(false,0,0,0,0,0,0,0,0,"Parallel quote read failed."),
+                    0, "Parallel EXIT snapshot failed: " + safeMessage(e));
+        }
+    }
+
+    static GreenSellPlan greenSellPlan(ExitSnapshot snap, double tickSize) {
+        double tick = tickSize > 0 ? tickSize : 0.05;
+        if (snap == null || snap.holding == null || snap.quote == null || !snap.holding.success) {
+            return new GreenSellPlan(false, 0, 0, 0, 0, "Broker holding is unavailable.");
+        }
+        double avg = snap.holding.netPrice;
+        if (!(avg > 0)) {
+            return new GreenSellPlan(false, avg, snap.executableSellPrice, 0, 0,
+                    "Broker average buy price is unavailable; green-only EXIT fails closed.");
+        }
+        if (!snap.quote.success) {
+            return new GreenSellPlan(false, avg, 0, 0, 0,
+                    "Live quote is unavailable; green-only EXIT fails closed.");
+        }
+        double executable = snap.quote.bidPrice > 0 ? snap.quote.bidPrice : snap.quote.lastPrice;
+        if (!(executable > 0)) {
+            return new GreenSellPlan(false, avg, executable, 0, 0,
+                    "No executable bid/LTP available.");
+        }
+
+        double minimumGreen = roundUpToTick(avg + tick, tick);
+        if (executable + 1e-9 < minimumGreen) {
+            return new GreenSellPlan(false, avg, executable, minimumGreen, 0,
+                    "Deferred: executable sell price ₹" + money(executable)
+                            + " is not above broker average ₹" + money(avg)
+                            + " by at least one tick.");
+        }
+
+        CircuitOrderPlan circuit = circuitOrderPlan(snap.quote, "SELL", tick);
+        double limit = circuit.useLimit ? circuit.limitPrice : minimumGreen;
+        limit = Math.max(limit, minimumGreen);
+        if (snap.quote.lowerCircuit > 0)
+            limit = Math.max(limit, roundUpToTick(snap.quote.lowerCircuit, tick));
+
+        if (limit > executable + 1e-9) {
+            return new GreenSellPlan(false, avg, executable, minimumGreen, limit,
+                    "Deferred: green-protection limit ₹" + money(limit)
+                            + " is above the currently executable price ₹" + money(executable) + ".");
+        }
+        return new GreenSellPlan(true, avg, executable, minimumGreen, limit,
+                "Green EXIT ready • avg ₹" + money(avg)
+                        + " • executable ₹" + money(executable)
+                        + " • protected limit ₹" + money(limit) + ".");
+    }
+
+    static ExecutionResult placeUnivestCncGreenSell(Context context, String symbol, int quantity,
+                                                    ExitSnapshot snap, double tickSize,
+                                                    String referenceId) {
+        if (quantity <= 0)
+            return new ExecutionResult(false, false, false, "", 0, 0, 0, 0, 0,
+                    "Green EXIT quantity is zero.");
+        GreenSellPlan plan = greenSellPlan(snap, tickSize);
+        if (!plan.canSell)
+            return new ExecutionResult(false, false, false, "", quantity, 0, 0,
+                    snap == null || snap.quote == null ? 0 : snap.quote.lastPrice,
+                    System.currentTimeMillis(), plan.reason);
+
+        long dispatch = System.currentTimeMillis();
+        DiagnosticsStore.broker(context, "GREEN_EXIT_GUARD_READY", symbol, true, plan.reason);
+        OrderSubmit sell = submitLimitOrder(context, symbol, quantity, "CNC", "SELL",
+                plan.limitPrice, referenceId);
+        if (!sell.success)
+            return new ExecutionResult(false, false, sell.unknown, sell.orderId, quantity, 0, 0,
+                    snap.quote.lastPrice, dispatch, sell.message);
+        if (sell.orderId.isEmpty())
+            return new ExecutionResult(true, false, false, "", quantity, 0, 0,
+                    snap.quote.lastPrice, dispatch,
+                    "Green-protected CNC LIMIT SELL accepted, but Groww returned no order ID.");
+
+        try {
+            Fill fill = awaitExecution(context, sell.orderId, quantity);
+            if (isTerminalFailureStatus(fill.status)) {
+                DiagnosticsStore.broker(context, "GREEN_EXIT_TERMINAL_REJECT", symbol, false, fill.status);
+                return new ExecutionResult(false, false, false, sell.orderId, quantity,
+                        fill.quantity, fill.averagePrice, snap.quote.lastPrice, dispatch,
+                        "Green-protected official SELL rejected after submission • " + fill.status);
+            }
+            return new ExecutionResult(true, fill.quantity >= quantity && fill.averagePrice > 0,
+                    false, sell.orderId, quantity, fill.quantity, fill.averagePrice,
+                    snap.quote.lastPrice, dispatch,
+                    fill.quantity > 0 && fill.averagePrice > 0
+                            ? "Green-protected CNC LIMIT SELL executed • qty " + fill.quantity
+                                + " • avg ₹" + money(fill.averagePrice)
+                                + " • broker buy avg ₹" + money(plan.averageBuyPrice)
+                            : "Green-protected CNC LIMIT SELL accepted • order " + sell.orderId
+                                + " • fill not confirmed in time.");
+        } catch (Exception e) {
+            return new ExecutionResult(true, false, true, sell.orderId, quantity, 0, 0,
+                    snap.quote.lastPrice, dispatch,
+                    "Green-protected SELL accepted; fill confirmation uncertain: " + safeMessage(e));
         }
     }
 
