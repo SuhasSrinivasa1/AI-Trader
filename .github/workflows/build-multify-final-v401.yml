@@ -16,8 +16,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: Checkout
+      - name: Checkout minimal Multify source payload
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout: |
+            multify-final-v401
+            .github/workflows/build-multify-final-v401.yml
+          sparse-checkout-cone-mode: false
 
       - name: Restore Android project
         run: |
