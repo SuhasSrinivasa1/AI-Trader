@@ -9,8 +9,6 @@ import android.os.Build;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
 
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /**
  * Historical class name retained so Android keeps the existing notification-listener grant on upgrade.
@@ -18,15 +16,16 @@ import java.util.concurrent.Executors;
  */
 public class MultyfiNotificationService extends NotificationListenerService {
     static final String UNIVEST_PACKAGE = "com.univest.capp";
-    private final PerSymbolSerialExecutor signalExecutor = new PerSymbolSerialExecutor(4);
 
     @Override public void onCreate() {
         super.onCreate();
         AppPrefs.setNotificationListenerHeartbeat(getApplicationContext(), "CREATED");
-        signalExecutor.execute("__STARTUP__", () -> {
+        DurableOfficialSignalQueue.recoverPending(getApplicationContext());
+        OfficialSignalRecoveryScheduler.scheduleNow(getApplicationContext());
+        new Thread(() -> {
             try { UnivestManager.reconcileAll(getApplicationContext()); }
             catch (Throwable t) { DiagnosticsStore.error(getApplicationContext(), "STARTUP_RECONCILIATION_ERROR", "", "Campaign reconciliation failed.", t); }
-        });
+        }, "official-startup-reconcile").start();
     }
 
     @Override public void onListenerConnected() {
@@ -34,10 +33,12 @@ public class MultyfiNotificationService extends NotificationListenerService {
         AppPrefs.setNotificationListenerHeartbeat(getApplicationContext(), "CONNECTED");
         ResearchScheduler.ensureScheduled(getApplicationContext());
         ResearchMonitorScheduler.ensureScheduled(getApplicationContext());
-        signalExecutor.execute("__RECONNECT__", () -> {
+        DurableOfficialSignalQueue.recoverPending(getApplicationContext());
+        OfficialSignalRecoveryScheduler.scheduleNow(getApplicationContext());
+        new Thread(() -> {
             try { UnivestManager.reconcileAll(getApplicationContext()); }
             catch (Throwable t) { DiagnosticsStore.error(getApplicationContext(), "LISTENER_RECONNECT_RECONCILIATION_ERROR", "", "Broker reconciliation after notification-listener reconnect failed.", t); }
-        });
+        }, "official-reconnect-reconcile").start();
     }
 
     @Override public void onListenerDisconnected() {
@@ -92,11 +93,16 @@ public class MultyfiNotificationService extends NotificationListenerService {
                     : AppPrefs.getUnivestAddBudget(getApplicationContext());
             AppPrefs.setUnivestStatus(getApplicationContext(), "UNIVEST " + signal.type + " DETECTED • " + signal.symbol
                     + " • ₹" + java.text.NumberFormat.getIntegerInstance(new java.util.Locale("en", "IN")).format(configuredBudget)
-                    + " CNC " + AppPrefs.getExecutionMode(getApplicationContext()) + " path queued.");
-            signalExecutor.execute(signal.symbol, () -> {
-                UnivestManager.handle(getApplicationContext(), signal, postTime);
+                    + " CNC " + AppPrefs.getExecutionMode(getApplicationContext()) + " path being durably queued.");
+            String queued = DurableOfficialSignalQueue.enqueueAndDispatch(getApplicationContext(), signal, postTime);
+            if (queued.isEmpty()) {
+                String msg = "UNIVEST " + signal.type + " • " + signal.symbol
+                        + " • durable queue write failed; no broker action was attempted.";
+                AppPrefs.setUnivestStatus(getApplicationContext(), msg);
+                DiagnosticsStore.error(getApplicationContext(), "OFFICIAL_SIGNAL_DURABLE_QUEUE_BLOCK", signal.symbol, msg, null);
+            } else {
                 showLocalStatus("UNIVEST " + signal.type, AppPrefs.getUnivestStatus(getApplicationContext()));
-            });
+            }
             return;
         }
 
@@ -106,16 +112,19 @@ public class MultyfiNotificationService extends NotificationListenerService {
                     "Groww/static-IP readiness flag is stale; official Univest exit will still be attempted to reduce exposure.");
         }
         AppPrefs.setUnivestStatus(getApplicationContext(), "UNIVEST BOOK PROFIT / EXIT DETECTED • " + signal.symbol
-                + " • " + AppPrefs.getExecutionMode(getApplicationContext()) + " full CNC holding sell path queued.");
-        signalExecutor.execute(signal.symbol, () -> {
-            UnivestManager.handle(getApplicationContext(), signal, postTime);
+                + " • " + AppPrefs.getExecutionMode(getApplicationContext()) + " full CNC holding sell path being durably queued.");
+        String queued = DurableOfficialSignalQueue.enqueueAndDispatch(getApplicationContext(), signal, postTime);
+        if (queued.isEmpty()) {
+            String msg = "UNIVEST EXIT • " + signal.symbol + " • durable queue write failed; no broker action was attempted.";
+            AppPrefs.setUnivestStatus(getApplicationContext(), msg);
+            DiagnosticsStore.error(getApplicationContext(), "OFFICIAL_SIGNAL_DURABLE_QUEUE_BLOCK", signal.symbol, msg, null);
+        } else {
             showLocalStatus("UNIVEST EXIT", AppPrefs.getUnivestStatus(getApplicationContext()));
-        });
+        }
     }
 
     @Override public void onDestroy() {
         AppPrefs.setNotificationListenerHeartbeat(getApplicationContext(), "DESTROYED");
-        signalExecutor.shutdown();
         super.onDestroy();
     }
 
