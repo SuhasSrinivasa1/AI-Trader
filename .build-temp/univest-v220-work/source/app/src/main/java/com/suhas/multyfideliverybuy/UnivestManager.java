@@ -272,7 +272,7 @@ final class UnivestManager {
 
         if (state == null) { state = new UnivestStateStore.State(); state.symbol = symbol; }
         state.phase = UnivestStateStore.EXITING_OFFICIAL; state.exitRequestedQty = holding.quantity;
-        state.lastAction = "Official Univest book-profit/exit • CNC MARKET SELL requested for full broker holding qty " + holding.quantity;
+        state.lastAction = "Official Univest book-profit/exit • circuit-safe CNC SELL requested for full broker holding qty " + holding.quantity;
         UnivestStateStore.put(context, state);
 
         String orderRef = stableRef("UX", symbol, signal.rawText, notificationPostTime);
