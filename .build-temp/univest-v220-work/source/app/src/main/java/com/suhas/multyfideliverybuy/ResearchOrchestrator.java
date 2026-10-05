@@ -41,6 +41,8 @@ final class ResearchOrchestrator {
                     AppPrefs.setResearchOrchestrator(c, STAGE_EOD,
                             "Running full eligible NSE CASH EOD scan for the next trading session…");
                     ResearchEngine.runNightly(c);
+                    UnivestStrategyStudy.runNightly(c);
+                    HistoryBackupManager.forceAutoBackup(c);
                     AppPrefs.setResearchEodScanKey(c, today);
                     String target = NseTradingCalendar.nextTradingDayKey(now);
                     AppPrefs.setResearchForecastTargetKey(c, target);
@@ -60,6 +62,8 @@ final class ResearchOrchestrator {
                     AppPrefs.setResearchOrchestrator(c, STAGE_REPLAY,
                             "Running deterministic post-market replay and accuracy/failure attribution…");
                     ResearchTradeEngine.replayAndScore(c);
+                    UnivestStrategyStudy.runNightly(c);
+                    HistoryBackupManager.forceAutoBackup(c);
                     AppPrefs.setResearchFailureSummary(c, ResearchTradeEngine.failureClustersText(c));
                     AppPrefs.setResearchReplayKey(c, today);
                 }
