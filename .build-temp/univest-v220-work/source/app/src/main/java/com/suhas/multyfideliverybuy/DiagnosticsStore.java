@@ -86,6 +86,8 @@ final class DiagnosticsStore {
                 try (Writer w = new OutputStreamWriter(new FileOutputStream(f, true), StandardCharsets.UTF_8)) {
                     w.write(row.toString()); w.write('\n');
                 }
+                UnivestHistoryDb.recordDiagnostic(c, now, stream, event, symbol, detail);
+                HistoryBackupManager.scheduleAutoBackup(c);
             } catch (Exception ignored) {}
         }
     }
@@ -153,10 +155,13 @@ final class DiagnosticsStore {
                 addDirectory(zip, research, "research_lab/");
                 File durable = new File(c.getFilesDir(), "official-signal-queue.json");
                 if (durable.exists()) addFile(zip, durable, "official/official-signal-queue.json");
+                File historyDb = UnivestHistoryDb.databaseFile(c);
+                if (historyDb.exists()) addFile(zip, historyDb, "history/univest_history.db");
+                addText(zip, "history/event-ledger.json", UnivestHistoryDb.exportJson(c).toString());
                 addText(zip, "snapshot.json", snapshot(c).toString(2));
                 addText(zip, "README.txt",
                         "Univest AutoTrade diagnostic export\n" +
-                        "v2.8.3 stores diagnostics in daily IST files. The app UI shows only today's trading signals/trades/errors.\n" +
+                        "v2.8.4 stores diagnostics in daily IST files. The app UI shows only today's trading signals/trades/errors.\n" +
                         "Historical notification/runtime/broker logs remain in this export for debugging.\n" +
                         "Groww TOTP token, TOTP secret, generated OTP and access token are never exported.\n");
             }
@@ -167,7 +172,7 @@ final class DiagnosticsStore {
     private static JSONObject snapshot(Context c) {
         JSONObject j = new JSONObject();
         try {
-            j.put("app", "Univest AutoTrade"); j.put("version", "2.8.3"); j.put("versionCode", 283);
+            j.put("app", "Univest AutoTrade"); j.put("version", "2.8.3"); j.put("versionCode", 284);
             j.put("sourcePackageLock", "com.univest.capp"); j.put("productLock", "CNC DELIVERY ONLY");
             j.put("executionMode", AppPrefs.getExecutionMode(c)); j.put("entryBudget", AppPrefs.getUnivestBudget(c));
             j.put("reentryBudget", AppPrefs.getUnivestAddBudget(c)); j.put("downwardAverageBudget", AppPrefs.getAveragingBudget(c));
@@ -180,6 +185,11 @@ final class DiagnosticsStore {
             j.put("durableOfficialStatus", DurableOfficialSignalQueue.statusText(c));
             j.put("notificationListenerState", AppPrefs.getNotificationListenerState(c));
             j.put("notificationListenerHeartbeat", AppPrefs.getNotificationListenerHeartbeat(c));
+            j.put("preMarketReady", AppPrefs.isPreMarketReady(c));
+            j.put("preMarketStatus", AppPrefs.getPreMarketReadinessStatus(c));
+            j.put("historyLedgerEvents", UnivestHistoryDb.count(c));
+            j.put("portableHistoryBackupConnected", HistoryBackupManager.isConnected(c));
+            j.put("portableHistoryBackupStatus", AppPrefs.getHistoryBackupStatus(c));
             j.put("researchAutoTradeEnabled", AppPrefs.isResearchAutoTradeEnabled(c));
             j.put("researchCapitalLimit", AppPrefs.getResearchCapitalLimit(c));
             j.put("researchCommittedCapital", ResearchTradeEngine.committedCapital(c));
