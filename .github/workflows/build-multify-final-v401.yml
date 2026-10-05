@@ -54,13 +54,14 @@ jobs:
       - name: Stage output
         run: |
           mkdir -p build-output
-          cp android/app/build/outputs/apk/debug/app-debug.apk build-output/MultifyTraderPro-Final-v4.0.0-debug.apk
-          sha256sum build-output/MultifyTraderPro-Final-v4.0.0-debug.apk | tee build-output/SHA256.txt
+          cp android/app/build/outputs/apk/debug/app-debug.apk build-output/MultifyTraderPro-Final-v4.0.1-debug.apk
+          sha256sum build-output/MultifyTraderPro-Final-v4.0.1-debug.apk | tee build-output/SHA256.txt
+          zip -qr build-output/MultifyTraderPro-Final-v4.0.1-source.zip android -x 'android/.gradle/*' 'android/**/build/*'
 
-      - name: Upload APK
+      - name: Upload APK and source
         uses: actions/upload-artifact@v4
         with:
-          name: MultifyTraderPro-Final-v4-APK
+          name: MultifyTraderPro-Final-v4.0.1-SNAPSHOT
           path: build-output/*
           if-no-files-found: error
           retention-days: 7
