@@ -151,10 +151,12 @@ final class DiagnosticsStore {
                 }
                 File research = new File(c.getFilesDir(), "research_lab");
                 addDirectory(zip, research, "research_lab/");
+                File durable = new File(c.getFilesDir(), "official-signal-queue.json");
+                if (durable.exists()) addFile(zip, durable, "official/official-signal-queue.json");
                 addText(zip, "snapshot.json", snapshot(c).toString(2));
                 addText(zip, "README.txt",
                         "Univest AutoTrade diagnostic export\n" +
-                        "v2.8.1 stores diagnostics in daily IST files. The app UI shows only today's trading signals/trades/errors.\n" +
+                        "v2.8.2 stores diagnostics in daily IST files. The app UI shows only today's trading signals/trades/errors.\n" +
                         "Historical notification/runtime/broker logs remain in this export for debugging.\n" +
                         "Groww TOTP token, TOTP secret, generated OTP and access token are never exported.\n");
             }
@@ -165,7 +167,7 @@ final class DiagnosticsStore {
     private static JSONObject snapshot(Context c) {
         JSONObject j = new JSONObject();
         try {
-            j.put("app", "Univest AutoTrade"); j.put("version", "2.8.1"); j.put("versionCode", 281);
+            j.put("app", "Univest AutoTrade"); j.put("version", "2.8.2"); j.put("versionCode", 282);
             j.put("sourcePackageLock", "com.univest.capp"); j.put("productLock", "CNC DELIVERY ONLY");
             j.put("executionMode", AppPrefs.getExecutionMode(c)); j.put("entryBudget", AppPrefs.getUnivestBudget(c));
             j.put("reentryBudget", AppPrefs.getUnivestAddBudget(c)); j.put("downwardAverageBudget", AppPrefs.getAveragingBudget(c));
@@ -174,6 +176,10 @@ final class DiagnosticsStore {
             j.put("growwReady", AppPrefs.isReadyForBuy(c)); j.put("staticIpMatch", AppPrefs.isStaticIpMatch(c));
             j.put("lastDetectedIp", AppPrefs.getLastDetectedIp(c)); j.put("lastStatus", AppPrefs.getUnivestStatus(c));
             j.put("todayNotificationCount", todayNotificationCount(c));
+            j.put("durableOfficialPending", DurableOfficialSignalQueue.pendingCount(c));
+            j.put("durableOfficialStatus", DurableOfficialSignalQueue.statusText(c));
+            j.put("notificationListenerState", AppPrefs.getNotificationListenerState(c));
+            j.put("notificationListenerHeartbeat", AppPrefs.getNotificationListenerHeartbeat(c));
             j.put("researchAutoTradeEnabled", AppPrefs.isResearchAutoTradeEnabled(c));
             j.put("researchCapitalLimit", AppPrefs.getResearchCapitalLimit(c));
             j.put("researchCommittedCapital", ResearchTradeEngine.committedCapital(c));
