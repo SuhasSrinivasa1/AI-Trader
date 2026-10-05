@@ -290,8 +290,12 @@ final class ResearchTradeEngine {
             String symbol = cleanSymbol(signal.symbol);
             final long eventAt = at > 0 ? at : System.currentTimeMillis();
             final String eventType = signal.type.name();
-            new Thread(() -> ResearchEventStore.capturePreEventWindow(c, symbol, eventAt, eventType),
-                    "research-official-event-window").start();
+            String captureKey = "research_event_window_" + eventType + "_" + symbol + "_"
+                    + Integer.toHexString((signal.rawText == null ? "" : signal.rawText).hashCode());
+            if (AppPrefs.claimRecent(c, captureKey, 2L * 60L * 1000L)) {
+                new Thread(() -> ResearchEventStore.capturePreEventWindow(c, symbol, eventAt, eventType),
+                        "research-official-event-window").start();
+            }
             JSONObject p = findOpen(c, symbol);
             if (p != null && signal.type == UnivestParser.Type.ENTRY) {
                 long entryAt = p.optLong("entryAt", p.optLong("predictionAt", 0));
