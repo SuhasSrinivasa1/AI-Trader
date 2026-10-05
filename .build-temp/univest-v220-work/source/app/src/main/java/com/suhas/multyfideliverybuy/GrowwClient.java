@@ -404,7 +404,7 @@ final class GrowwClient {
                             + " accepted, but Groww returned no order ID. Verify fill manually.");
 
             Fill fill = awaitExecution(context, entry.orderId, quantity);
-            if (isTerminalFailure(fill.status)) {
+            if (isTerminalFailureStatus(fill.status)) {
                 DiagnosticsStore.broker(context, "ORDER_BUY_CNC_TERMINAL_REJECT", symbol, false,
                         "Groww accepted then terminally rejected official BUY • " + fill.status);
                 return new ExecutionResult(false, false, false, entry.orderId, quantity, fill.quantity,
@@ -454,7 +454,7 @@ final class GrowwClient {
                             + " accepted, but Groww returned no order ID. Verify execution manually.");
 
             Fill fill = awaitExecution(context, sell.orderId, quantity);
-            if (isTerminalFailure(fill.status)) {
+            if (isTerminalFailureStatus(fill.status)) {
                 DiagnosticsStore.broker(context, "ORDER_SELL_CNC_TERMINAL_REJECT", symbol, false,
                         "Groww accepted then terminally rejected official SELL • " + fill.status);
                 return new ExecutionResult(false, false, false, sell.orderId, quantity, fill.quantity,
@@ -533,7 +533,10 @@ final class GrowwClient {
             return new ExecutionResult(false, false, false, "", 0, 0, 0, q.lastPrice, 0,
                     symbol + " executable price is above the Research budget.");
         long dispatch = System.currentTimeMillis();
-        OrderSubmit entry = submitMarketOrder(context, symbol, quantity, "CNC", "BUY", referenceId);
+        CircuitOrderPlan circuit = circuitOrderPlan(q, "BUY", tickSizeFor(context, symbol));
+        OrderSubmit entry = circuit.useLimit
+                ? submitLimitOrder(context, symbol, quantity, "CNC", "BUY", circuit.limitPrice, referenceId)
+                : submitMarketOrder(context, symbol, quantity, "CNC", "BUY", referenceId);
         if (!entry.success)
             return new ExecutionResult(false, false, entry.unknown, entry.orderId, quantity, 0, 0, q.lastPrice, dispatch, entry.message);
         if (entry.orderId.isEmpty())
@@ -1106,7 +1109,7 @@ final class GrowwClient {
         return Math.max(t, Math.ceil((price - 1e-9) / t) * t);
     }
 
-    private static boolean isTerminalFailure(String status) {
+    static boolean isTerminalFailureStatus(String status) {
         if (status == null) return false;
         String s = status.toUpperCase(Locale.US);
         return s.contains("REJECT") || s.contains("FAILED") || s.contains("CANCELLED");
@@ -1262,7 +1265,7 @@ final class GrowwClient {
                     String status = detailedOrderStatus(p);
                     if (filled > 0 && avg > 0) best = new Fill(filled >= requestedQty, filled, avg, status);
                     if (filled >= requestedQty && avg > 0) return new Fill(true, filled, avg, status);
-                    if (isTerminalFailure(status)) return new Fill(false, filled, avg, status);
+                    if (isTerminalFailureStatus(status)) return new Fill(false, filled, avg, status);
                 }
             }
             Thread.sleep(175L);
