@@ -13,6 +13,8 @@ import java.io.OutputStreamWriter;
 import java.io.Reader;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -307,17 +309,23 @@ final class DurableOfficialSignalQueue {
         File temp = new File(target.getParentFile(), FILE_NAME + ".tmp");
         JSONArray a = new JSONArray();
         for (JSONObject row : all) a.put(row);
-        try (Writer w = new OutputStreamWriter(new FileOutputStream(temp, false), StandardCharsets.UTF_8)) {
+        try (FileOutputStream fos = new FileOutputStream(temp, false);
+             Writer w = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
             w.write(a.toString());
             w.flush();
+            fos.getFD().sync();
         } catch (Exception e) {
             throw new IllegalStateException("Unable to write durable official signal queue.", e);
         }
-        if (target.exists() && !target.delete()) {
-            throw new IllegalStateException("Unable to replace previous durable official signal queue.");
-        }
-        if (!temp.renameTo(target)) {
-            throw new IllegalStateException("Unable to atomically install durable official signal queue.");
+        try {
+            Files.move(temp.toPath(), target.toPath(),
+                    StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } catch (Exception atomicMoveFailed) {
+            try {
+                Files.move(temp.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            } catch (Exception fallbackFailed) {
+                throw new IllegalStateException("Unable to install durable official signal queue.", fallbackFailed);
+            }
         }
     }
 
