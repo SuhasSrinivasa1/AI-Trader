@@ -4,6 +4,7 @@ import org.junit.Test;
 
 import static org.junit.Assert.*;
 
+// v2.8.3 regression contract for Groww RMS circuit-band execution.
 public class CircuitExecutionGuardTest {
     @Test public void buyPlanNeverExceedsUpperCircuit() {
         GrowwClient.QuoteSnapshot q = new GrowwClient.QuoteSnapshot(
