@@ -1,4 +1,4 @@
-name: Univest AutoTrade v2.8.3 Release Build Bootstrap
+name: Univest AutoTrade v2.8.4 Release Build Bootstrap
 on:
   push:
     branches: [main]
@@ -34,12 +34,12 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Validate v2.8.3 circuit-safe execution and durable-exit contract
+      - name: Validate v2.8.4 pre-market, green-exit and durable-history contract
         shell: bash
         run: |
           set -euo pipefail
           SRC=.build-temp/univest-v220-work/source
-          grep -q "versionCode 283" "$SRC/app/build.gradle"
+          grep -q "versionCode 284" "$SRC/app/build.gradle"
           grep -q "versionName '2.8.3'" "$SRC/app/build.gradle"
           grep -R -q 'com.univest.capp' "$SRC/app/src/main/java"
           grep -R -q 'ENTRY_BUDGET = 20000' "$SRC/app/src/main/java"
@@ -87,7 +87,12 @@ jobs:
           grep -q 'PerSymbolSerialExecutor' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/DurableOfficialSignalQueue.java"
           grep -q 'EXIT_CONFLICTING_SELL_UNKNOWN' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/UnivestManager.java"
           grep -q 'placeUnivestCncMarketBuy' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/UnivestManager.java"
-          grep -q 'placeUnivestCncMarketSell' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/UnivestManager.java"
+          grep -q 'placeUnivestCncGreenSell' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/UnivestManager.java"
+          grep -q 'EXIT_DEFERRED_NOT_GREEN' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/UnivestManager.java"
+          grep -q 'UNIVEST_EXIT_EXTERNAL_OR_MANUAL_HOLDING' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/UnivestManager.java"
+          grep -q 'greenSellPlan' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/GrowwClient.java"
+          grep -q 'getFastExitSnapshot' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/GrowwClient.java"
+          grep -q 'GreenOfficialExitTest' "$SRC/app/src/test/java/com/suhas/multyfideliverybuy/GreenOfficialExitTest.java"
           grep -q 'class ResearchOrchestrator' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/ResearchOrchestrator.java"
           grep -q 'Mahatma Gandhi Jayanti' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/NseTradingCalendar.java"
           grep -q 'PREOPEN_FROZEN' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/ResearchOrchestrator.java"
@@ -115,7 +120,7 @@ jobs:
           grep -q 'AndroidKeyStore' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/SecurePrefs.java"
           grep -q 'SCHEMA_VERSION = 2' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/ResearchEventStore.java"
           grep -q 'GROWW_NSE_DELIVERY_2026_10_03' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/DeliveryNetTarget.java"
-          # v2.8.3 changes only execution safety/recovery around the proven official strategy.
+          # v2.8.4 changes only execution safety/recovery around the proven official strategy.
           # Parser semantics and campaign-state schema must remain unchanged from the successful v2.8.2 build.
           git diff --exit-code 6af50076dfdfc460ee288ee7d1c43d86db687c91 HEAD -- \
             "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/UnivestParser.java" \
@@ -143,6 +148,18 @@ jobs:
           grep -q 'onListenerConnected' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/MultyfiNotificationService.java"
           grep -q 'requestRebind' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/MultyfiNotificationService.java"
           grep -q 'getNotificationListenerHeartbeat' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/AppPrefs.java"
+          grep -q 'class PreMarketReadiness' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/PreMarketReadiness.java"
+          grep -q 'JOB_WARMUP = 23033' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/PreMarketReadinessScheduler.java"
+          grep -q 'JOB_FINAL = 23034' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/PreMarketReadinessScheduler.java"
+          grep -q 'PreMarketReadinessJobService' "$SRC/app/src/main/AndroidManifest.xml"
+          grep -q '08:25 IST warm-up' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/DashboardActivity.java"
+          grep -q 'extends SQLiteOpenHelper' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/UnivestHistoryDb.java"
+          grep -q 'UNIVEST_PORTABLE_HISTORY' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/HistoryBackupManager.java"
+          grep -q 'containsCredentials.*false' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/HistoryBackupManager.java"
+          grep -q 'RESTORE / RECONNECT HISTORY BACKUP' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/DashboardActivity.java"
+          grep -q 'UnivestStrategyStudy.runNightly' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/ResearchOrchestrator.java"
+          grep -q 'NIGHTLY UNIVEST STRATEGY STUDY' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/DashboardActivity.java"
+          grep -q 'DeferredGreenExitWatcher.start' "$SRC/app/src/main/java/com/suhas/multyfideliverybuy/UnivestManager.java"
       - name: Unit tests and release build
         working-directory: .build-temp/univest-v220-work/source
         shell: bash
@@ -155,7 +172,7 @@ jobs:
           set -euo pipefail
           mkdir -p release
           cd .build-temp/univest-v220-work/source
-          zip -qr ../../../release/Univest-AutoTrade-v2.8.3-source.zip . -x '*/build/*' '.gradle/*' '*.jks' '*.keystore' '*credentials.env'
+          zip -qr ../../../release/Univest-AutoTrade-v2.8.4-source.zip . -x '*/build/*' '.gradle/*' '*.jks' '*.keystore' '*credentials.env'
       - name: Generate new signing identity and sign APK
         shell: bash
         run: |
@@ -164,27 +181,27 @@ jobs:
           test -n "$APK" && test -s "$APK"
           PASS="$(openssl rand -hex 24)"
           KS="$RUNNER_TEMP/univest-v230-release.jks"
-          keytool -genkeypair -v             -keystore "$KS"             -storepass "$PASS"             -keypass "$PASS"             -alias univest-v220             -keyalg RSA -keysize 4096 -validity 10000             -dname 'CN=Univest AutoTrade v2.8.3, OU=Private Release, O=Univest AutoTrade, L=Bengaluru, ST=Karnataka, C=IN'
+          keytool -genkeypair -v             -keystore "$KS"             -storepass "$PASS"             -keypass "$PASS"             -alias univest-v220             -keyalg RSA -keysize 4096 -validity 10000             -dname 'CN=Univest AutoTrade v2.8.4, OU=Private Release, O=Univest AutoTrade, L=Bengaluru, ST=Karnataka, C=IN'
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$APK" "$RUNNER_TEMP/aligned.apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign             --ks "$KS"             --ks-pass "pass:$PASS"             --ks-key-alias univest-v220             --key-pass "pass:$PASS"             --v1-signing-enabled true             --v2-signing-enabled true             --v3-signing-enabled true             --out release/Univest-AutoTrade-v2.8.3-SIGNED.apk             "$RUNNER_TEMP/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign             --ks "$KS"             --ks-pass "pass:$PASS"             --ks-key-alias univest-v220             --key-pass "pass:$PASS"             --v1-signing-enabled true             --v2-signing-enabled true             --v3-signing-enabled true             --out release/Univest-AutoTrade-v2.8.4-SIGNED.apk             "$RUNNER_TEMP/aligned.apk"
           rm -f "$KS"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs release/Univest-AutoTrade-v2.8.3-SIGNED.apk | tee release/APK-SIGNATURE.txt
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging release/Univest-AutoTrade-v2.8.3-SIGNED.apk | tee release/APK-BADGING.txt
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs release/Univest-AutoTrade-v2.8.4-SIGNED.apk | tee release/APK-SIGNATURE.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging release/Univest-AutoTrade-v2.8.4-SIGNED.apk | tee release/APK-BADGING.txt
           grep -q "package: name='com.suhas.multyfideliverybuy'" release/APK-BADGING.txt
-          grep -q "versionCode='283'" release/APK-BADGING.txt
+          grep -q "versionCode='284'" release/APK-BADGING.txt
           grep -q "versionName='2.8.3'" release/APK-BADGING.txt
-          sha256sum release/Univest-AutoTrade-v2.8.3-SIGNED.apk | tee release/APK-SHA256.txt
+          sha256sum release/Univest-AutoTrade-v2.8.4-SIGNED.apk | tee release/APK-SHA256.txt
           cp .build-temp/test-results.txt release/test-results.txt
-          unzip -t release/Univest-AutoTrade-v2.8.3-source.zip >/dev/null
+          unzip -t release/Univest-AutoTrade-v2.8.4-source.zip >/dev/null
       - name: Build report
         shell: bash
         run: |
           set -euo pipefail
           CERT="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' release/APK-SIGNATURE.txt | head -1)"
           {
-            echo "Univest AutoTrade v2.8.3 build: SUCCESS"
+            echo "Univest AutoTrade v2.8.4 build: SUCCESS"
             echo "package=com.suhas.multyfideliverybuy"
-            echo "versionCode=283"
+            echo "versionCode=284"
             echo "versionName=2.8.3"
             echo "source=com.univest.capp only"
             echo "product=NSE CASH / CNC DELIVERY"
@@ -195,7 +212,9 @@ jobs:
             echo "averaging=uses same configured shared budget at -2/-4/-6 percent, max 3, initial fill anchor"
             echo "budget_step=INR 1000"
             echo "budget_change_safety=AutoTrade disarms when slider value changes"
-            echo "exit=cancel averaging then sell actual broker CNC holding"
+            echo "exit=official exact-symbol EXIT applies to any actual Groww CNC holding, including manual/external holdings; averaging is cancelled first"
+            echo "exit_green_guard=sell only when live executable bid/LTP is at least one tick above broker average buy price; order limit never goes below the green floor"
+            echo "exit_deferred=red/unknown-price official exits remain EXITING_OFFICIAL and are watched/reconciled until green or broker flat"
             echo "research_scan=entire eligible NSE CASH universe off-market"
             echo "research_forecast=frozen snapshots with live 15-minute monitoring"
             echo "research_accuracy=daily and lifetime >=0.5 percent estimated net win accounting"
@@ -204,7 +223,10 @@ jobs:
             echo "research_dual_confirmation=Research pre-entry plus later Univest ENTRY is intentionally additive"
             echo "research_fundamentals=current build marks unavailable fundamentals as UNKNOWN_NOT_CONNECTED, never fabricated"
             echo "official_univest_execution=v2.6 trading semantics preserved; v2.8 adds per-symbol ordering and fail-closed conflicting-sell reconciliation"
-            echo "research_orchestration=holiday-aware EOD scan -> preopen freeze -> live monitor -> post-close replay"
+            echo "research_orchestration=holiday-aware post-close replay + full EOD NSE scan + nightly observable Univest strategy study -> preopen freeze -> live monitor"
+            echo "premarket_readiness=08:25 IST warm-up plus 08:55 IST final check for notification listener, static IP, Groww auth, durable queue, instrument map and broker reconciliation"
+            echo "history_db=SQLite event ledger mirrors diagnostics and imports legacy JSONL history"
+            echo "portable_history=user-owned SAF ZIP contains history/state/research/diagnostics without Groww credentials; can be re-selected after uninstall/new-signature install"
             echo "research_calendar=embedded official NSE equity holidays for 2026"
             echo "research_data=tiered full-NSE daily, top-50 15-minute, top-10/live one-minute, official event windows"
             echo "research_event_learning=pre-event state plus anchored VWAP plus MFE/MAE/time-to-peak"
@@ -226,18 +248,18 @@ jobs:
             echo "official_signal_delivery=fsync + atomic persistent queue before async execution; recovered on listener reconnect, boot, app resume and persisted JobScheduler"
             echo "official_signal_replay_safety=broker truth + deterministic Groww references; same concrete notification ID only, later genuine notifications remain distinct"
             echo "research_event_capture=duplicate event-window requests throttled independently from official execution"
-            echo "circuit_guard=official BUY/REENTRY and SELL use aggressive circuit-safe DAY LIMIT orders when live circuit data is available; legacy MARKET fallback only when circuit data is unavailable"
+            echo "circuit_guard=official BUY/REENTRY use aggressive circuit-safe DAY LIMIT when circuit data is available; official green EXIT always uses a protected LIMIT floor above broker average and remains circuit-bounded"
             echo "circuit_guard_buffer=2 percent from executable quote, clamped inside upper/lower circuit and tick-rounded"
             echo "budget_guard=official BUY quantity sized using the circuit-safe limit so worst-case fill remains within configured entry/re-entry budget"
             echo "terminal_rejection_detection=Groww accepted-then-REJECTED/FAILED/CANCELLED order states are treated as failures, not pending fills"
-            echo "official_exit_recovery=EXITING_OFFICIAL state remains broker-truth recoverable; rejected/pending exits retry safely via recovery job until broker flat or still pending"
+            echo "official_exit_recovery=EXITING_OFFICIAL remains broker-truth recoverable; rejected/pending/red exits retry through in-process 15-second green watcher plus persisted recovery job"
             echo "trading_core_change=official parser semantics, budgets, back-in-range rules and -2/-4/-6 averaging ladder unchanged versus successful v2.8.2"
             echo "signing_certificate_sha256=$CERT"
             echo "signing_identity=new ephemeral identity authorized by user"
-          } > release/Univest-AutoTrade-v2.8.3-build-report.txt
+          } > release/Univest-AutoTrade-v2.8.4-build-report.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: Univest-AutoTrade-v2.8.3-FINAL
+          name: Univest-AutoTrade-v2.8.4-FINAL
           retention-days: 14
           path: release/*
           if-no-files-found: error
