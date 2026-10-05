@@ -20,6 +20,8 @@ public class MultyfiNotificationService extends NotificationListenerService {
     @Override public void onCreate() {
         super.onCreate();
         AppPrefs.setNotificationListenerHeartbeat(getApplicationContext(), "CREATED");
+        UnivestHistoryDb.ensureInitialized(getApplicationContext());
+        PreMarketReadinessScheduler.ensureScheduled(getApplicationContext());
         DurableOfficialSignalQueue.recoverPending(getApplicationContext());
         OfficialSignalRecoveryScheduler.scheduleNow(getApplicationContext());
         new Thread(() -> {
@@ -33,6 +35,7 @@ public class MultyfiNotificationService extends NotificationListenerService {
         AppPrefs.setNotificationListenerHeartbeat(getApplicationContext(), "CONNECTED");
         ResearchScheduler.ensureScheduled(getApplicationContext());
         ResearchMonitorScheduler.ensureScheduled(getApplicationContext());
+        PreMarketReadinessScheduler.ensureScheduled(getApplicationContext());
         DurableOfficialSignalQueue.recoverPending(getApplicationContext());
         OfficialSignalRecoveryScheduler.scheduleNow(getApplicationContext());
         new Thread(() -> {
@@ -112,7 +115,8 @@ public class MultyfiNotificationService extends NotificationListenerService {
                     "Groww/static-IP readiness flag is stale; official Univest exit will still be attempted to reduce exposure.");
         }
         AppPrefs.setUnivestStatus(getApplicationContext(), "UNIVEST BOOK PROFIT / EXIT DETECTED • " + signal.symbol
-                + " • " + AppPrefs.getExecutionMode(getApplicationContext()) + " full CNC holding sell path being durably queued.");
+                + " • " + AppPrefs.getExecutionMode(getApplicationContext())
+                + " exact-symbol full CNC holding exit queued • green-only guard will use live broker average + executable bid.");
         String queued = DurableOfficialSignalQueue.enqueueAndDispatch(getApplicationContext(), signal, postTime);
         if (queued.isEmpty()) {
             String msg = "UNIVEST EXIT • " + signal.symbol + " • durable queue write failed; no broker action was attempted.";
