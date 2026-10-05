@@ -49,6 +49,8 @@ public class DashboardActivity extends Activity {
     private static final int AMBER = Color.rgb(255, 185, 92);
     private static final int RED = Color.rgb(255, 108, 124);
     private static final int REQUEST_EXPORT = 8240;
+    private static final int REQUEST_HISTORY_CREATE = 8241;
+    private static final int REQUEST_HISTORY_RESTORE = 8242;
 
     private FrameLayout contentHost;
     private LinearLayout bottomNav;
@@ -64,6 +66,8 @@ public class DashboardActivity extends Activity {
         getWindow().setNavigationBarColor(NAV_BG);
         ResearchScheduler.ensureScheduled(getApplicationContext());
         ResearchMonitorScheduler.ensureScheduled(getApplicationContext());
+        PreMarketReadinessScheduler.ensureScheduled(getApplicationContext());
+        UnivestHistoryDb.ensureInitialized(getApplicationContext());
         DurableOfficialSignalQueue.recoverPending(getApplicationContext());
         OfficialSignalRecoveryScheduler.scheduleNow(getApplicationContext());
         requestNotificationPermissionIfNeeded();
@@ -91,6 +95,8 @@ public class DashboardActivity extends Activity {
         super.onResume();
         ResearchScheduler.ensureScheduled(getApplicationContext());
         ResearchMonitorScheduler.ensureScheduled(getApplicationContext());
+        PreMarketReadinessScheduler.ensureScheduled(getApplicationContext());
+        UnivestHistoryDb.ensureInitialized(getApplicationContext());
         DurableOfficialSignalQueue.recoverPending(getApplicationContext());
         if (DurableOfficialSignalQueue.pendingCount(getApplicationContext()) > 0)
             OfficialSignalRecoveryScheduler.scheduleNow(getApplicationContext());
@@ -229,6 +235,12 @@ public class DashboardActivity extends Activity {
         lifecycle.addView(sectionRow("OFFICIAL ENTRY → EXIT LIFECYCLES", "Reverse engineering"));
         lifecycle.addView(body(ResearchEngine.officialLifecycleText(this, 8)), margins(0, 12, 0, 0));
         root.addView(lifecycle, margins(0, 0, 0, 14));
+
+        LinearLayout study = card();
+        study.addView(sectionRow("NIGHTLY UNIVEST STRATEGY STUDY", "Off-market"));
+        study.addView(body(AppPrefs.getUnivestStrategyStudy(this)), margins(0, 12, 0, 0));
+        study.addView(meta("Descriptive reverse engineering only: it learns recurring observable fingerprints from official calls and keeps pre-signal features separate from later outcomes."), margins(0, 8, 0, 0));
+        root.addView(study, margins(0, 0, 0, 14));
 
         LinearLayout intel = card();
         intel.addView(sectionRow("MARKET INTELLIGENCE", "India + Global"));
@@ -403,6 +415,9 @@ public class DashboardActivity extends Activity {
         scheduler.addView(sectionRow("RESEARCH SCHEDULER", scheduleOk ? "ACTIVE" : "NEEDS ATTENTION"));
         scheduler.addView(meta(ResearchScheduler.statusText(this), scheduleOk ? GREEN : AMBER), margins(0, 10, 0, 0));
         scheduler.addView(meta("Orchestrator: " + ResearchOrchestrator.statusText(this)), margins(0, 8, 0, 0));
+        scheduler.addView(meta("Pre-market: " + PreMarketReadiness.statusText(this),
+                AppPrefs.isPreMarketReady(this) ? GREEN : AMBER), margins(0, 8, 0, 0));
+        scheduler.addView(meta("Trading-day targets: 08:25 IST warm-up + 08:55 IST final readiness/freeze. Live EXIT still refreshes only broker quantity + executable quote because those cannot be safely pre-cached."), margins(0, 8, 0, 0));
         Button repair = secondaryButton("REPAIR / RESCHEDULE RESEARCH");
         repair.setOnClickListener(v -> repairSchedule(repair));
         scheduler.addView(repair, fixedMargins(-1, 50, 0, 12, 0, 0));
@@ -474,13 +489,28 @@ public class DashboardActivity extends Activity {
         export.setOnClickListener(v -> createExport());
         data.addView(export, fixedMargins(-1, 50, 0, 10, 0, 0));
 
+        data.addView(text("PERSISTENT HISTORY", 12, SUBTEXT, true), margins(0, 16, 0, 6));
+        data.addView(meta("SQLite ledger: " + UnivestHistoryDb.count(this) + " events • " + HistoryBackupManager.statusText(this),
+                HistoryBackupManager.isConnected(this) ? GREEN : AMBER), margins(0, 0, 0, 8));
+        data.addView(meta("The portable ZIP excludes Groww/TOTP credentials. It survives app uninstall, but Android revokes the file permission on uninstall: after a new-signature install, select the same ZIP once with RESTORE to reconnect it."), margins(0, 0, 0, 8));
+
+        Button historyCreate = secondaryButton(HistoryBackupManager.isConnected(this)
+                ? "WRITE / RECONNECT PORTABLE HISTORY BACKUP"
+                : "CREATE PORTABLE HISTORY BACKUP");
+        historyCreate.setOnClickListener(v -> createHistoryBackup());
+        data.addView(historyCreate, fixedMargins(-1, 50, 0, 10, 0, 0));
+
+        Button historyRestore = secondaryButton("RESTORE / RECONNECT HISTORY BACKUP");
+        historyRestore.setOnClickListener(v -> restoreHistoryBackup());
+        data.addView(historyRestore, fixedMargins(-1, 50, 0, 10, 0, 0));
+
         data.addView(text("Recent errors", 12, SUBTEXT, true), margins(0, 16, 0, 6));
         data.addView(text(DiagnosticsStore.todayErrors(this, 5), 12, TEXT, false));
         root.addView(data, margins(0, 0, 0, 14));
 
         LinearLayout about = card();
         about.addView(sectionRow("ABOUT", "Orchestrated Research"));
-        about.addView(body("Univest AutoTrade v2.8.2"), margins(0, 10, 0, 0));
+        about.addView(body("Univest AutoTrade v2.8.4"), margins(0, 10, 0, 0));
         about.addView(meta("Package: com.suhas.multyfideliverybuy"), margins(0, 6, 0, 0));
         about.addView(meta("Official Univest execution and Research decisions remain separately attributed; Research→Univest same-symbol confirmation is intentionally additive."), margins(0, 6, 0, 0));
         root.addView(about, margins(0, 0, 0, 22));
@@ -499,7 +529,7 @@ public class DashboardActivity extends Activity {
         left.addView(text(subtitle, 12, SUBTEXT, false), margins(0, 3, 0, 0));
         row.addView(left, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        TextView version = text("v2.8.2", 11, TEAL, true);
+        TextView version = text("v2.8.4", 11, TEAL, true);
         version.setGravity(Gravity.CENTER);
         version.setPadding(dp(10), dp(6), dp(10), dp(6));
         GradientDrawable chip = new GradientDrawable();
@@ -525,7 +555,8 @@ public class DashboardActivity extends Activity {
 
         c.addView(meta("Static IP " + (AppPrefs.isStaticIpMatch(this) ? "matched" : "not confirmed")
                 + " • " + activeCampaignCount() + " active campaigns"
-                + " • " + DiagnosticsStore.todayNotificationCount(this) + " notifications today"), margins(0, 12, 0, 0));
+                + " • " + DiagnosticsStore.todayNotificationCount(this) + " notifications today"
+                + " • pre-market " + (AppPrefs.isPreMarketReady(this) ? "ready" : "not ready")), margins(0, 12, 0, 0));
 
         boolean liveArmed = AppPrefs.isLiveMode(this) && AppPrefs.isUnivestEnabled(this);
         c.addView(statusPill(liveArmed ? "LIVE ORDERS ENABLED" : "SAFE / DISARMED", liveArmed ? GREEN : BLUE),
@@ -851,6 +882,35 @@ public class DashboardActivity extends Activity {
         return m == null || m.trim().isEmpty() ? t.getClass().getSimpleName() : m;
     }
 
+    private void createHistoryBackup() {
+        Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType("application/zip");
+        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        i.putExtra(Intent.EXTRA_TITLE, "Univest-History-Portable-v2.8.4.zip");
+        startActivityForResult(i, REQUEST_HISTORY_CREATE);
+    }
+
+    private void restoreHistoryBackup() {
+        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType("application/zip");
+        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        startActivityForResult(i, REQUEST_HISTORY_RESTORE);
+    }
+
+    private void persistHistoryGrant(Intent data, Uri uri) {
+        if (uri == null) return;
+        int flags = data == null ? 0 : data.getFlags();
+        int take = flags & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+        if (take == 0) take = Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION;
+        try { getContentResolver().takePersistableUriPermission(uri, take); }
+        catch (Throwable ignored) {}
+        HistoryBackupManager.rememberUri(this, uri);
+    }
+
     private void createExport() {
         Toast.makeText(this, "Preparing diagnostic ZIP…", Toast.LENGTH_SHORT).show();
         new Thread(() -> {
@@ -872,9 +932,48 @@ public class DashboardActivity extends Activity {
 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode != REQUEST_EXPORT || resultCode != RESULT_OK ||
-                data == null || data.getData() == null || pendingExport == null) return;
+        if (resultCode != RESULT_OK || data == null || data.getData() == null) return;
         Uri uri = data.getData();
+
+        if (requestCode == REQUEST_HISTORY_CREATE) {
+            persistHistoryGrant(data, uri);
+            Toast.makeText(this, "Writing portable history backup…", Toast.LENGTH_SHORT).show();
+            new Thread(() -> {
+                try {
+                    HistoryBackupManager.exportToUri(getApplicationContext(), uri);
+                    runOnUiThread(() -> {
+                        Toast.makeText(this, "Portable history backup connected and written.", Toast.LENGTH_LONG).show();
+                        render();
+                    });
+                } catch (Exception e) {
+                    runOnUiThread(() -> Toast.makeText(this,
+                            "History backup failed: " + e.getMessage(), Toast.LENGTH_LONG).show());
+                }
+            }, "history-backup-create").start();
+            return;
+        }
+
+        if (requestCode == REQUEST_HISTORY_RESTORE) {
+            persistHistoryGrant(data, uri);
+            Toast.makeText(this, "Restoring Univest history…", Toast.LENGTH_SHORT).show();
+            new Thread(() -> {
+                try {
+                    int imported = HistoryBackupManager.importFromUri(getApplicationContext(), uri);
+                    UnivestStrategyStudy.runNightly(getApplicationContext());
+                    HistoryBackupManager.forceAutoBackup(getApplicationContext());
+                    runOnUiThread(() -> {
+                        Toast.makeText(this, "History restored/reconnected • " + imported + " new ledger events.", Toast.LENGTH_LONG).show();
+                        render();
+                    });
+                } catch (Exception e) {
+                    runOnUiThread(() -> Toast.makeText(this,
+                            "History restore failed: " + e.getMessage(), Toast.LENGTH_LONG).show());
+                }
+            }, "history-backup-restore").start();
+            return;
+        }
+
+        if (requestCode != REQUEST_EXPORT || pendingExport == null) return;
         try (FileInputStream in = new FileInputStream(pendingExport);
              OutputStream out = getContentResolver().openOutputStream(uri, "w")) {
             if (out == null) throw new IllegalStateException("Cannot open selected export destination.");
