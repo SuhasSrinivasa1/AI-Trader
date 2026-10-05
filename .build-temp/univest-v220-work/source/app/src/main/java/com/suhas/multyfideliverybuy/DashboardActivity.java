@@ -64,6 +64,8 @@ public class DashboardActivity extends Activity {
         getWindow().setNavigationBarColor(NAV_BG);
         ResearchScheduler.ensureScheduled(getApplicationContext());
         ResearchMonitorScheduler.ensureScheduled(getApplicationContext());
+        DurableOfficialSignalQueue.recoverPending(getApplicationContext());
+        OfficialSignalRecoveryScheduler.scheduleNow(getApplicationContext());
         requestNotificationPermissionIfNeeded();
         applyIntent(getIntent());
         setContentView(buildShell());
@@ -89,6 +91,9 @@ public class DashboardActivity extends Activity {
         super.onResume();
         ResearchScheduler.ensureScheduled(getApplicationContext());
         ResearchMonitorScheduler.ensureScheduled(getApplicationContext());
+        DurableOfficialSignalQueue.recoverPending(getApplicationContext());
+        if (DurableOfficialSignalQueue.pendingCount(getApplicationContext()) > 0)
+            OfficialSignalRecoveryScheduler.scheduleNow(getApplicationContext());
         new Thread(() -> {
             try { ResearchOrchestrator.tick(getApplicationContext()); }
             catch (Throwable ignored) {}
@@ -426,6 +431,8 @@ public class DashboardActivity extends Activity {
                 + " • Battery optimization: " + (batteryFree ? "ignored" : "active"),
                 (notificationAccessEnabled() && batteryFree) ? GREEN : AMBER), margins(0, 10, 0, 0));
         device.addView(meta("For reliable Univest notifications, keep notification access enabled and allow unrestricted background activity. These controls do not change trading rules."), margins(0, 8, 0, 0));
+        device.addView(meta("Durable official queue: " + DurableOfficialSignalQueue.statusText(this),
+                DurableOfficialSignalQueue.pendingCount(this) == 0 ? GREEN : AMBER), margins(0, 8, 0, 0));
 
         Button battery = secondaryButton(batteryFree ? "BATTERY EXEMPTION ALREADY ACTIVE" : "ALLOW UNRESTRICTED BATTERY");
         battery.setEnabled(!batteryFree);
@@ -473,7 +480,7 @@ public class DashboardActivity extends Activity {
 
         LinearLayout about = card();
         about.addView(sectionRow("ABOUT", "Orchestrated Research"));
-        about.addView(body("Univest AutoTrade v2.8.1"), margins(0, 10, 0, 0));
+        about.addView(body("Univest AutoTrade v2.8.2"), margins(0, 10, 0, 0));
         about.addView(meta("Package: com.suhas.multyfideliverybuy"), margins(0, 6, 0, 0));
         about.addView(meta("Official Univest execution and Research decisions remain separately attributed; Research→Univest same-symbol confirmation is intentionally additive."), margins(0, 6, 0, 0));
         root.addView(about, margins(0, 0, 0, 22));
@@ -492,7 +499,7 @@ public class DashboardActivity extends Activity {
         left.addView(text(subtitle, 12, SUBTEXT, false), margins(0, 3, 0, 0));
         row.addView(left, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        TextView version = text("v2.8.1", 11, TEAL, true);
+        TextView version = text("v2.8.2", 11, TEAL, true);
         version.setGravity(Gravity.CENTER);
         version.setPadding(dp(10), dp(6), dp(10), dp(6));
         GradientDrawable chip = new GradientDrawable();
