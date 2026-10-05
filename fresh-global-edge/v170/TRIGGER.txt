@@ -1,0 +1,1 @@
+Build signed Global Edge AI Trader v1.6.10 from canonical main 766d4b0c76cb039f1ea9d3d7ee10c61c8f7969b5 after green CI.
