@@ -38,6 +38,7 @@ final class DurableOfficialSignalQueue {
     static final String RUNNING = "RUNNING";
     static final String COMPLETE = "COMPLETE";
     static final String RETRYABLE = "RETRYABLE";
+    static final String CANCELLED = "CANCELLED";
 
     private static final String FILE_NAME = "official-signal-queue.json";
     private static final Object FILE_LOCK = new Object();
@@ -109,7 +110,8 @@ final class DurableOfficialSignalQueue {
             int pending = 0;
             JSONObject latest = null;
             for (JSONObject row : all) {
-                if (!COMPLETE.equals(row.optString("state"))) pending++;
+                String state = row.optString("state");
+                if (!COMPLETE.equals(state) && !CANCELLED.equals(state)) pending++;
                 if (latest == null || row.optLong("updatedAt", 0L) > latest.optLong("updatedAt", 0L)) latest = row;
             }
             if (latest == null) return "No durable official events recorded yet.";
@@ -149,7 +151,7 @@ final class DurableOfficialSignalQueue {
         final JSONObject snapshot;
         synchronized (FILE_LOCK) {
             JSONObject row = findById(loadLocked(c), id);
-            if (row == null || COMPLETE.equals(row.optString("state"))) return;
+            if (row == null || isTerminal(row.optString("state"))) return;
             synchronized (IDLE_LOCK) {
                 if (!IN_FLIGHT.add(id)) return;
             }
@@ -167,7 +169,7 @@ final class DurableOfficialSignalQueue {
             synchronized (FILE_LOCK) {
                 List<JSONObject> all = loadLocked(c);
                 JSONObject row = findById(all, id);
-                if (row == null || COMPLETE.equals(row.optString("state"))) return;
+                if (row == null || isTerminal(row.optString("state"))) return;
                 String type = row.optString("type", "");
                 UnivestParser.Type parsedType = UnivestParser.Type.valueOf(type);
                 signal = new UnivestParser.Signal(parsedType, row.optString("symbol", ""), row.optString("rawText", ""));
@@ -177,6 +179,18 @@ final class DurableOfficialSignalQueue {
                 row.put("updatedAt", System.currentTimeMillis());
                 row.put("lastError", "");
                 saveLocked(c, compact(all));
+            }
+
+            if (!AppPrefs.isUnivestEnabled(c)) {
+                markCancelled(c, id, signal.symbol,
+                        "Automation was disarmed before durable event recovery; event will not execute later.");
+                return;
+            }
+            if ((signal.type == UnivestParser.Type.ENTRY || signal.type == UnivestParser.Type.REENTRY)
+                    && AppPrefs.isLiveMode(c) && !AppPrefs.isReadyForBuy(c)) {
+                markCancelled(c, id, signal.symbol,
+                        "LIVE buy readiness was no longer current at recovery time; stale official buy was not replayed.");
+                return;
             }
 
             DiagnosticsStore.runtime(c, "OFFICIAL_SIGNAL_DURABLE_DISPATCH", signal.symbol,
@@ -220,10 +234,31 @@ final class DurableOfficialSignalQueue {
         }
     }
 
+    private static boolean isTerminal(String state) {
+        return COMPLETE.equals(state) || CANCELLED.equals(state);
+    }
+
+    private static void markCancelled(Context c, String id, String symbol, String reason) {
+        synchronized (FILE_LOCK) {
+            try {
+                List<JSONObject> all = loadLocked(c);
+                JSONObject row = findById(all, id);
+                if (row != null) {
+                    row.put("state", CANCELLED);
+                    row.put("updatedAt", System.currentTimeMillis());
+                    row.put("completedAt", System.currentTimeMillis());
+                    row.put("lastError", reason);
+                    saveLocked(c, compact(all));
+                }
+            } catch (Throwable ignored) {}
+        }
+        DiagnosticsStore.runtime(c, "OFFICIAL_SIGNAL_DURABLE_CANCELLED", symbol, reason + " • queue id " + id + ".");
+    }
+
     private static List<JSONObject> pendingLocked(Context c) {
         List<JSONObject> out = new ArrayList<>();
         for (JSONObject row : loadLocked(c)) {
-            if (!COMPLETE.equals(row.optString("state"))) out.add(new JSONObject(row.toString()));
+            if (!isTerminal(row.optString("state"))) out.add(new JSONObject(row.toString()));
         }
         return out;
     }
@@ -237,7 +272,7 @@ final class DurableOfficialSignalQueue {
         long cutoff = System.currentTimeMillis() - COMPLETE_RETENTION_MS;
         List<JSONObject> keep = new ArrayList<>();
         for (JSONObject row : all) {
-            if (COMPLETE.equals(row.optString("state")) && row.optLong("completedAt", 0L) > 0
+            if (isTerminal(row.optString("state")) && row.optLong("completedAt", 0L) > 0
                     && row.optLong("completedAt", 0L) < cutoff) continue;
             keep.add(row);
         }
