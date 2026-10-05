@@ -150,17 +150,16 @@ final class DurableOfficialSignalQueue {
 
     private static void dispatchId(Context c, String id) {
         if (id == null || id.isEmpty()) return;
-        final JSONObject snapshot;
+        final String symbol;
         synchronized (FILE_LOCK) {
             JSONObject row = findById(loadLocked(c), id);
             if (row == null || isTerminal(row.optString("state"))) return;
             synchronized (IDLE_LOCK) {
                 if (!IN_FLIGHT.add(id)) return;
             }
-            snapshot = new JSONObject(row.toString());
+            symbol = row.optString("symbol", "");
         }
 
-        String symbol = snapshot.optString("symbol", "");
         EXECUTOR.execute(symbol, () -> processOne(c, id));
     }
 
@@ -260,7 +259,7 @@ final class DurableOfficialSignalQueue {
     private static List<JSONObject> pendingLocked(Context c) {
         List<JSONObject> out = new ArrayList<>();
         for (JSONObject row : loadLocked(c)) {
-            if (!isTerminal(row.optString("state"))) out.add(new JSONObject(row.toString()));
+            if (!isTerminal(row.optString("state"))) out.add(row);
         }
         return out;
     }
