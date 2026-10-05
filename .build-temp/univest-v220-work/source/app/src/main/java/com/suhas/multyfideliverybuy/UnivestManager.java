@@ -246,60 +246,120 @@ final class UnivestManager {
         }
 
         UnivestStateStore.State state = UnivestStateStore.get(context, symbol);
+        boolean hadTrackedCampaign = state != null && !UnivestStateStore.EXITED.equals(state.phase);
         if (state != null && UnivestStateStore.EXITING_OFFICIAL.equals(state.phase)
                 && System.currentTimeMillis() - state.updatedAt < DUPLICATE_EXIT_GUARD_MS) {
-            DiagnosticsStore.runtime(context, "EXIT_DUPLICATE_GUARDED", symbol, "Recent official exit is already being processed."); return;
+            DiagnosticsStore.runtime(context, "EXIT_DUPLICATE_GUARDED", symbol,
+                    "Recent official exit is already being processed."); return;
         }
 
+        if (state == null) { state = new UnivestStateStore.State(); state.symbol = symbol; }
+        state.phase = UnivestStateStore.EXITING_OFFICIAL;
+        state.lastAction = "Official Univest EXIT received • broker-truth full-CNC exit requested.";
+        UnivestStateStore.put(context, state);
+
+        // Univest EXIT is authoritative for this exact NSE CASH symbol even when the app did not buy it.
+        // Cancel averaging/legacy smart orders immediately so a deferred green exit cannot add exposure.
         cancelAveragingLadder(context, state);
         cancelLegacyTrackedOrders(context, state);
         GrowwClient.Result conflicts = GrowwClient.cancelOpenCncSellOrdersForSymbol(context, symbol);
-        DiagnosticsStore.broker(context, "CANCEL_CONFLICTING_CNC_SELLS", symbol, conflicts.success || conflicts.unknown, conflicts.message);
+        DiagnosticsStore.broker(context, "CANCEL_CONFLICTING_CNC_SELLS", symbol,
+                conflicts.success || conflicts.unknown, conflicts.message);
         if (!conflicts.success) {
-            fail(context, "EXIT_CONFLICTING_SELL_UNKNOWN", symbol,
-                    "Official exit paused because a conflicting CNC SELL could not be confirmed cleared. " + conflicts.message, null);
+            state.lastAction = "Official exit pending: conflicting CNC SELL could not be confirmed cleared. " + conflicts.message;
+            UnivestStateStore.put(context, state);
+            OfficialSignalRecoveryScheduler.scheduleAfter(context, 60_000L);
+            fail(context, "EXIT_CONFLICTING_SELL_UNKNOWN", symbol, state.lastAction, null);
             return;
         }
 
-        GrowwClient.PositionSnapshot holding = GrowwClient.getCncPosition(context, symbol);
-        if (!holding.success) { fail(context, "EXIT_HOLDING_CHECK_FAILED", symbol, holding.message, null); return; }
+        GrowwClient.ExitSnapshot snap = GrowwClient.getFastExitSnapshot(context, symbol);
+        GrowwClient.PositionSnapshot holding = snap.holding;
+        DiagnosticsStore.broker(context, "FAST_EXIT_SNAPSHOT", symbol, snap.success, snap.message);
+        if (holding == null || !holding.success) {
+            state.lastAction = "Official exit pending: live broker holding could not be confirmed. " + snap.message;
+            UnivestStateStore.put(context, state);
+            OfficialSignalRecoveryScheduler.scheduleAfter(context, 60_000L);
+            DeferredGreenExitWatcher.start(context, symbol);
+            fail(context, "EXIT_HOLDING_CHECK_FAILED", symbol, state.lastAction, null);
+            return;
+        }
         if (holding.quantity <= 0) {
             markExited(context, state, symbol, "Official Univest exit received; broker shows no CNC holding.");
             status(context, "UNIVEST BOOK PROFIT / EXIT • " + symbol + " • no holding found; nothing to sell.");
             DiagnosticsStore.runtime(context, "EXIT_NO_HOLDING", symbol, holding.message); return;
         }
-        if (!instrument.sellAllowed) { fail(context, "EXIT_SELL_BLOCKED", symbol, "Groww instrument master marks sell_allowed=0.", null); return; }
+        if (!instrument.sellAllowed) {
+            state.quantity = holding.quantity;
+            state.exitRequestedQty = holding.quantity;
+            state.lastAction = "Official exit pending: Groww instrument master currently marks sell_allowed=0.";
+            UnivestStateStore.put(context, state);
+            OfficialSignalRecoveryScheduler.scheduleAfter(context, 60_000L);
+            fail(context, "EXIT_SELL_BLOCKED", symbol, state.lastAction, null);
+            return;
+        }
 
-        if (state == null) { state = new UnivestStateStore.State(); state.symbol = symbol; }
-        state.phase = UnivestStateStore.EXITING_OFFICIAL; state.exitRequestedQty = holding.quantity;
-        state.lastAction = "Official Univest book-profit/exit • circuit-safe CNC SELL requested for full broker holding qty " + holding.quantity;
+        if (!hadTrackedCampaign) {
+            DiagnosticsStore.runtime(context, "UNIVEST_EXIT_EXTERNAL_OR_MANUAL_HOLDING", symbol,
+                    "Official Univest EXIT matched an actual Groww CNC holding without an active app-originated campaign. "
+                            + "Full broker quantity " + holding.quantity + " is eligible for the same green-only exit rule.");
+        }
+
+        state.phase = UnivestStateStore.EXITING_OFFICIAL;
+        state.quantity = holding.quantity;
+        state.exitRequestedQty = holding.quantity;
+        state.exitOrderId = "";
+        GrowwClient.GreenSellPlan green = GrowwClient.greenSellPlan(snap, instrument.tickSize);
+        if (!green.canSell) {
+            state.lastAction = "UNIVEST EXIT DEFERRED — WAITING FOR GREEN • qty " + holding.quantity
+                    + " • broker avg ₹" + money(holding.netPrice)
+                    + " • executable ₹" + money(snap.executableSellPrice)
+                    + " • " + green.reason;
+            UnivestStateStore.put(context, state);
+            DiagnosticsStore.runtime(context, "EXIT_DEFERRED_NOT_GREEN", symbol, state.lastAction);
+            status(context, state.lastAction);
+            OfficialSignalRecoveryScheduler.scheduleAfter(context, 60_000L);
+            DeferredGreenExitWatcher.start(context, symbol);
+            return;
+        }
+
+        state.lastAction = "Official Univest exit • green guard passed • full broker CNC qty "
+                + holding.quantity + " • avg ₹" + money(holding.netPrice)
+                + " • executable ₹" + money(snap.executableSellPrice)
+                + " • protected limit ₹" + money(green.limitPrice);
         UnivestStateStore.put(context, state);
 
         String orderRef = stableRef("UX", symbol, signal.rawText, notificationPostTime);
-        GrowwClient.ExecutionResult r = GrowwClient.placeUnivestCncMarketSell(context, symbol, holding.quantity, orderRef);
+        GrowwClient.ExecutionResult r = GrowwClient.placeUnivestCncGreenSell(
+                context, symbol, holding.quantity, snap, instrument.tickSize, orderRef);
         DiagnosticsStore.trade(context, r.submitted ? "SELL_SUBMITTED" : "SELL_FAILED", symbol, state.lastAction, r);
         if (!r.submitted) {
             state.phase = UnivestStateStore.EXITING_OFFICIAL;
             state.exitOrderId = r.orderId == null ? "" : r.orderId;
             state.exitRequestedQty = holding.quantity;
-            state.lastAction = "Official exit order was not completed and requires broker-truth recovery. " + r.message;
+            state.lastAction = "Official green-protected exit not completed; broker-truth recovery remains armed. " + r.message;
             UnivestStateStore.put(context, state);
             OfficialSignalRecoveryScheduler.scheduleAfter(context, 60_000L);
+            DeferredGreenExitWatcher.start(context, symbol);
             fail(context, "EXIT_NOT_SUBMITTED", symbol, r.message, null);
             return;
         }
 
         GrowwClient.PositionSnapshot after = GrowwClient.getCncPosition(context, symbol);
         if (r.filled || (after.success && after.quantity == 0)) {
-            markExited(context, state, symbol, "Official Univest exit executed • sold full CNC holding.");
+            markExited(context, state, symbol, "Official Univest exit executed • sold full CNC holding in green.");
             ResearchTradeEngine.onOfficialExitExecuted(context, symbol, r.averagePrice);
-            long age = r.dispatchAtMillis > 0 && notificationPostTime > 0 ? Math.max(0, r.dispatchAtMillis - notificationPostTime) : -1;
-            status(context, "UNIVEST CNC SELL EXECUTED • " + symbol + " • qty " + holding.quantity
+            HistoryBackupManager.forceAutoBackup(context);
+            long age = r.dispatchAtMillis > 0 && notificationPostTime > 0
+                    ? Math.max(0, r.dispatchAtMillis - notificationPostTime) : -1;
+            status(context, "UNIVEST GREEN CNC SELL EXECUTED • " + symbol + " • qty " + holding.quantity
                     + (age >= 0 ? " • source age " + age + " ms" : "") + " • " + r.message);
         } else {
             state.phase = UnivestStateStore.EXITING_OFFICIAL; state.exitOrderId = r.orderId;
-            state.lastAction = "CNC SELL accepted; fill/position-zero not yet confirmed. " + r.message;
-            UnivestStateStore.put(context, state); status(context, "UNIVEST SELL ACCEPTED — VERIFYING • " + symbol + " • " + r.message);
+            state.lastAction = "Green-protected CNC SELL accepted; fill/position-zero not yet confirmed. " + r.message;
+            UnivestStateStore.put(context, state);
+            OfficialSignalRecoveryScheduler.scheduleAfter(context, 60_000L);
+            status(context, "UNIVEST SELL ACCEPTED — VERIFYING • " + symbol + " • " + r.message);
         }
     }
 
@@ -372,18 +432,33 @@ final class UnivestManager {
         return false;
     }
 
+    static synchronized boolean reconcileDeferredExit(Context context, String symbol) {
+        UnivestStateStore.State state = UnivestStateStore.get(context, symbol);
+        if (state == null || !UnivestStateStore.EXITING_OFFICIAL.equals(state.phase)) return true;
+        reconcilePendingOfficialExit(context, state);
+        UnivestStateStore.State after = UnivestStateStore.get(context, symbol);
+        return after == null || !UnivestStateStore.EXITING_OFFICIAL.equals(after.phase);
+    }
+
     private static void reconcilePendingOfficialExit(Context context, UnivestStateStore.State state) {
         String symbol = state.symbol;
-        GrowwClient.PositionSnapshot broker = GrowwClient.getCncPosition(context, symbol);
-        if (!broker.success) {
+        InstrumentRepository.Instrument instrument = InstrumentRepository.resolve(InstrumentRepository.load(context), symbol);
+        double tick = instrument != null && instrument.tickSize > 0 ? instrument.tickSize : 0.05;
+
+        GrowwClient.ExitSnapshot snap = GrowwClient.getFastExitSnapshot(context, symbol);
+        GrowwClient.PositionSnapshot broker = snap.holding;
+        DiagnosticsStore.broker(context, "EXIT_RECOVERY_FAST_SNAPSHOT", symbol, snap.success, snap.message);
+        if (broker == null || !broker.success) {
             DiagnosticsStore.error(context, "EXIT_RECOVERY_HOLDING_UNKNOWN", symbol,
-                    "Pending official exit could not refresh broker holding; recovery remains armed.", null);
+                    "Pending official exit could not refresh broker holding; recovery remains armed. " + snap.message, null);
             OfficialSignalRecoveryScheduler.scheduleAfter(context, 60_000L);
+            DeferredGreenExitWatcher.start(context, symbol);
             return;
         }
         if (broker.quantity <= 0) {
             markExited(context, state, symbol, "Pending official exit reconciled: broker is flat.");
             ResearchTradeEngine.onOfficialExitExecuted(context, symbol, 0);
+            HistoryBackupManager.forceAutoBackup(context);
             DiagnosticsStore.runtime(context, "EXIT_RECOVERY_CONFIRMED_FLAT", symbol,
                     "Broker truth confirms the official exit is complete.");
             return;
@@ -397,6 +472,7 @@ final class UnivestManager {
                 if (after.success && after.quantity <= 0) {
                     markExited(context, state, symbol, "Pending official exit reconciled from completed Groww order.");
                     ResearchTradeEngine.onOfficialExitExecuted(context, symbol, existing.averagePrice);
+                    HistoryBackupManager.forceAutoBackup(context);
                     DiagnosticsStore.runtime(context, "EXIT_RECOVERY_ORDER_COMPLETE", symbol,
                             "Previously submitted official exit is fully executed.");
                     return;
@@ -405,17 +481,33 @@ final class UnivestManager {
 
             if (!GrowwClient.isTerminalFailureStatus(existing.message)) {
                 state.quantity = broker.quantity;
-                state.lastAction = "Official exit still pending at Groww • " + existing.message;
+                state.lastAction = "Official green-protected exit still pending at Groww • " + existing.message;
                 UnivestStateStore.put(context, state);
                 OfficialSignalRecoveryScheduler.scheduleAfter(context, 60_000L);
                 return;
             }
 
             DiagnosticsStore.runtime(context, "EXIT_RECOVERY_TERMINAL_ORDER", symbol,
-                    "Previous official exit reached terminal failure; safe broker-truth retry will be attempted. "
+                    "Previous official exit reached terminal failure; green/broker-truth retry will be considered. "
                             + existing.message);
             state.exitOrderId = "";
             UnivestStateStore.put(context, state);
+        }
+
+        GrowwClient.GreenSellPlan green = GrowwClient.greenSellPlan(snap, tick);
+        if (!green.canSell) {
+            state.phase = UnivestStateStore.EXITING_OFFICIAL;
+            state.quantity = broker.quantity;
+            state.exitRequestedQty = broker.quantity;
+            state.exitOrderId = "";
+            state.lastAction = "UNIVEST EXIT DEFERRED — WAITING FOR GREEN • broker avg ₹"
+                    + money(broker.netPrice) + " • executable ₹" + money(snap.executableSellPrice)
+                    + " • " + green.reason;
+            UnivestStateStore.put(context, state);
+            DiagnosticsStore.runtime(context, "EXIT_RECOVERY_STILL_NOT_GREEN", symbol, state.lastAction);
+            OfficialSignalRecoveryScheduler.scheduleAfter(context, 60_000L);
+            DeferredGreenExitWatcher.start(context, symbol);
+            return;
         }
 
         GrowwClient.Result conflicts = GrowwClient.cancelOpenCncSellOrdersForSymbol(context, symbol);
@@ -429,34 +521,36 @@ final class UnivestManager {
         }
 
         String retryRef = stableRef("UXR", symbol,
-                "RECOVER|" + state.exitRequestedQty + "|" + state.updatedAt, System.currentTimeMillis());
-        GrowwClient.ExecutionResult retry = GrowwClient.placeUnivestCncMarketSell(
-                context, symbol, broker.quantity, retryRef);
+                "GREEN-RECOVER|" + state.exitRequestedQty + "|" + state.updatedAt, System.currentTimeMillis());
+        GrowwClient.ExecutionResult retry = GrowwClient.placeUnivestCncGreenSell(
+                context, symbol, broker.quantity, snap, tick, retryRef);
         DiagnosticsStore.trade(context, retry.submitted ? "SELL_RECOVERY_SUBMITTED" : "SELL_RECOVERY_FAILED",
-                symbol, "Broker-truth official exit recovery for qty " + broker.quantity, retry);
+                symbol, "Green/broker-truth official exit recovery for qty " + broker.quantity, retry);
 
         if (!retry.submitted) {
             state.phase = UnivestStateStore.EXITING_OFFICIAL;
             state.exitOrderId = retry.orderId == null ? "" : retry.orderId;
             state.exitRequestedQty = broker.quantity;
-            state.lastAction = "Official exit recovery not completed. " + retry.message;
+            state.lastAction = "Official green exit recovery not completed. " + retry.message;
             UnivestStateStore.put(context, state);
             OfficialSignalRecoveryScheduler.scheduleAfter(context, 60_000L);
+            DeferredGreenExitWatcher.start(context, symbol);
             return;
         }
 
         GrowwClient.PositionSnapshot after = GrowwClient.getCncPosition(context, symbol);
         if (retry.filled || (after.success && after.quantity <= 0)) {
-            markExited(context, state, symbol, "Official exit recovered and broker position is flat.");
+            markExited(context, state, symbol, "Official exit recovered and broker position is flat in green.");
             ResearchTradeEngine.onOfficialExitExecuted(context, symbol, retry.averagePrice);
+            HistoryBackupManager.forceAutoBackup(context);
             DiagnosticsStore.runtime(context, "EXIT_RECOVERY_EXECUTED", symbol,
-                    "Official exit recovery sold the remaining broker CNC holding.");
+                    "Official exit recovery sold the remaining broker CNC holding in green.");
         } else {
             state.phase = UnivestStateStore.EXITING_OFFICIAL;
             state.exitOrderId = retry.orderId;
             state.exitRequestedQty = broker.quantity;
             state.quantity = broker.quantity;
-            state.lastAction = "Official exit recovery accepted; awaiting broker fill. " + retry.message;
+            state.lastAction = "Official green exit recovery accepted; awaiting broker fill. " + retry.message;
             UnivestStateStore.put(context, state);
             OfficialSignalRecoveryScheduler.scheduleAfter(context, 60_000L);
         }
