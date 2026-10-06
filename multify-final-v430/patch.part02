@@ -1,0 +1,108 @@
+s.size) - .5) * .10 else 0.0
+             val frequencyBonus = min(.08, count * .008)
+-            val score = (chosen.confidence + frequencyBonus).coerceAtMost(.99)
++            val score = (chosen.confidence + frequencyBonus + winRateBonus + multifySuccessBonus).coerceIn(.01, .99)
++            val entry = chosen.features.ltp
++            val atr = chosen.features.atr14 ?: max(entry * .005, .05)
++            val target = if (chosen.side == "LONG") entry * (1.0 + expectedMovePct / 100.0) else entry * (1.0 - expectedMovePct / 100.0)
++            val stop = if (chosen.side == "LONG") max(.05, entry - max(atr, entry * .005)) else entry + max(atr, entry * .005)
+             scored += ForecastEntity(
+                 forecastDate = today, rank = 0, symbol = symbol, bias = chosen.side,
+                 confidence = chosen.confidence, score = score,
+-                reason = "${chosen.strategy} · ${chosen.regime} · ${chosen.reason}", generatedAtMs = System.currentTimeMillis()
++                reason = "${chosen.strategy} · ${chosen.regime} · ${chosen.reason}", generatedAtMs = System.currentTimeMillis(),
++                entryPrice = entry, targetPrice = target, stopPrice = stop
+             )
+         }
+-        val ranked = scored.sortedByDescending { it.score }.toMutableList()
+-        if (ranked.size < 5) {
+-            val have = ranked.map { it.symbol }.toSet()
+-            candidates.filter { it.first !in have }.take(5 - ranked.size).forEach { (symbol, count, _) ->
+-                ranked += ForecastEntity(
+-                    forecastDate = today, rank = 0, symbol = symbol, bias = "LONG",
+-                    confidence = .50, score = (.50 + min(.08, count * .008)).coerceAtMost(.58),
+-                    reason = "Historical Multify-frequency fallback · live strategy snapshot unavailable",
+-                    generatedAtMs = System.currentTimeMillis()
+-                )
+-            }
+-        }
+-        val top = ranked.sortedByDescending { it.score }.take(5).mapIndexed { i, x -> x.copy(rank = i + 1) }
+-        learningDao.deleteForecasts(today)
+-        if (top.isNotEmpty()) learningDao.insertForecasts(top)
+-        auditLogger.log("FORECAST", "DAILY_FORECAST_GENERATED", mapOf("date" to today, "count" to top.size, "universe" to candidates.size))
+-        return top.map { it.toDto() }
++        val remaining = 5 - existing.size
++        val slots = if (force) remaining else min(1, remaining)
++        val additions = scored.sortedByDescending { it.score }.take(slots).mapIndexed { i, x -> x.copy(rank = existing.size + i + 1) }
++        if (additions.isNotEmpty()) learningDao.insertForecasts(additions)
++        val all = learningDao.forecastsForDate(today)
++        auditLogger.log("FORECAST", "DYNAMIC_FORECAST_SCAN", mapOf("date" to today, "new" to additions.size, "total" to all.size, "universe" to candidates.size))
++        return all.map { it.toDto() }
+     }
+ 
+     private suspend fun forecastEvaluation(symbol: String, token: String): Pair<StrategyEvaluation, StrategyEvaluation> {
+@@ -400,13 +423,63 @@
+         return LocalStrategyEngine.evaluateLong(synthetic, f) to LocalStrategyEngine.evaluateShort(f)
+     }
+ 
+-    private fun ForecastEntity.toDto() = ForecastDto(rank, symbol, bias, confidence, score, reason, multifyMatched, multifyDirectionMatched)
++    private fun ForecastEntity.toDto() = ForecastDto(
++        rank = rank, symbol = symbol, bias = bias, confidence = confidence, score = score, reason = reason,
++        generatedAtMs = generatedAtMs, entryPrice = entryPrice, targetPrice = targetPrice, stopPrice = stopPrice,
++        result = result, outcomePct = outcomePct, maxFavourablePct = maxFavourablePct, maxAdversePct = maxAdversePct,
++        multifyMatched = multifyMatched, multifyDirectionMatched = multifyDirectionMatched
++    )
++
++    private suspend fun finalizeForecastOutcomes(token: String, date: String) {
++        val rows = learningDao.forecastsForDate(date).filter { it.result == "PENDING" && it.entryPrice != null && it.targetPrice != null && it.stopPrice != null }
++        for (f in rows) {
++            val entry = f.entryPrice ?: continue
++            val target = f.targetPrice ?: continue
++            val stop = f.stopPrice ?: continue
++            val generated = Instant.ofEpochMilli(f.generatedAtMs).atZone(INDIA)
++            val end = runCatching { LocalDate.parse(f.forecastDate).atTime(15, 30) }.getOrNull() ?: continue
++            val payload = runCatching {
++                apiFactory.groww.historicalCandles(
++                    authorization = bearer(token), growwSymbol = "NSE-${f.symbol}",
++                    startTime = generated.toLocalDateTime().format(HIST_FORMAT), endTime = end.format(HIST_FORMAT), candleInterval = "5minute"
++                ).requirePayload("Forecast outcome ${f.symbol}")
++            }.getOrNull() ?: continue
++            var result = "FAIL"
++            var exit = payload.candles.lastOrNull()?.getOrNull(4)?.asDouble ?: entry
++            var maxFav = 0.0
++            var maxAdv = 0.0
++            for (c in payload.candles) {
++                if (c.size < 5) continue
++                val high = runCatching { c[2].asDouble }.getOrNull() ?: continue
++                val low = runCatching { c[3].asDouble }.getOrNull() ?: continue
++                if (f.bias == "LONG") {
++                    maxFav = max(maxFav, (high - entry) / entry * 100.0)
++                    maxAdv = min(maxAdv, (low - entry) / entry * 100.0)
++                    val stopHit = low <= stop
++                    val targetHit = high >= target
++                    if (stopHit) { result = "FAIL"; exit = stop; break }
++                    if (targetHit) { result = "WIN"; exit = target; break }
++                } else {
++                    maxFav = max(maxFav, (entry - low) / entry * 100.0)
++                    maxAdv = min(maxAdv, (entry - high) / entry * 100.0)
++                    val stopHit = high >= stop
++                    val targetHit = low <= target
++                    if (stopHit) { result = "FAIL"; exit = stop; break }
++                    if (targetHit) { result = "WIN"; exit = target; break }
++                }
++            }
++            val outcome = if (f.bias == "LONG") (exit - entry) / entry * 100.0 else (entry - exit) / entry * 100.0
++            learningDao.updateForecast(f.copy(result = result, outcomePct = outcome, maxFavourablePct = maxFav, maxAdversePct = maxAdv))
++        }
++    }
++
+ 
+     suspend fun runAfterHoursResearch(force: Boolean = false): ResearchDto {
+         ensureHistoricalSeed()
+         val today = LocalDate.now(INDIA).toString()
+         val existing = learningDao.latestResearchReport()
+         if (!force && existing?.reportDate == today) return ResearchDto(existing.reportDate, existing.title, existing.summary)
++        ensureToken()?.let { runCatching { finalizeForecastOutcomes(it, today) } }
+         val stats = learningStats()
+         val since = startOfIndiaDayMs()
+         val shadowTrades = shadowDao
