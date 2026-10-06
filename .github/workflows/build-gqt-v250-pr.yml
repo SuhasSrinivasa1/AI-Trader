@@ -1,0 +1,156 @@
+name: Build Global Quant Trader AI v2.5.0 PR
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'global-quant-v241/**'
+      - '.github/workflows/build-gqt-v250-pr.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Bootstrap Android SDK 36
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ANDROID_HOME="$HOME/android-sdk"
+          mkdir -p "$ANDROID_HOME/cmdline-tools"
+          curl -fsSL https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o /tmp/android-cmdline.zip
+          unzip -q /tmp/android-cmdline.zip -d /tmp/android-cmdline
+          mv /tmp/android-cmdline/cmdline-tools "$ANDROID_HOME/cmdline-tools/latest"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          printf "y\\n%.0s" {1..50} | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Reconstruct exact v2.4.1 base
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat \
+            global-quant-v241/part00.b64 \
+            global-quant-v241/part01.b64 \
+            global-quant-v241/exact/p02_00.txt \
+            global-quant-v241/exact/p02_01.txt \
+            global-quant-v241/exact/p02_02.txt \
+            global-quant-v241/exact/p02_03.txt \
+            global-quant-v241/exact/p03_00.txt \
+            global-quant-v241/exact/p03_01_00.txt \
+            global-quant-v241/exact/p03_01_01.txt \
+            global-quant-v241/exact/p03_01_02.txt \
+            global-quant-v241/exact/p03_01_03.txt \
+            global-quant-v241/exact/p03_02.txt \
+            global-quant-v241/exact/p03_03.txt \
+            > /tmp/gqt241.b64
+          echo "f915912cd3ef64fbdb3b73d43e6839c8c8a8a29a80dc6ee88b6aad9de7d8690d  /tmp/gqt241.b64" | sha256sum -c -
+          base64 -d /tmp/gqt241.b64 > /tmp/gqt241.tar.gz
+          echo "a814c4f58eebc8349e69b6cd6b15a56c80bc67f3976ca068349b817e8bfe9ee1  /tmp/gqt241.tar.gz" | sha256sum -c -
+          rm -rf /tmp/gqt250
+          mkdir -p /tmp/gqt250
+          tar -xzf /tmp/gqt241.tar.gz -C /tmp/gqt250
+          echo "ROOT=/tmp/gqt250" >> "$GITHUB_ENV"
+
+      - name: Normalize reconstructed Kotlin sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - "$ROOT" <<'PY'
+          from pathlib import Path
+          import sys
+          base=Path(sys.argv[1])/"app/src/main/java/com/suhas/arbitrageedge"
+          for name in ("SecurePrefs.kt","ArbitrageRepository.kt","UI.kt"):
+              p=base/name
+              x=p.read_text()
+              x=x.replace("\\n","\n")
+              if name=="ArbitrageRepository.kt":
+                  x=x.replace('\\\"','"')
+              p.write_text(x)
+          test=Path(sys.argv[1])/"app/src/test/java/com/suhas/arbitrageedge/LiveTogglePolicyTest.kt"
+          if test.exists():
+              test.write_text(test.read_text().replace("\\n","\n"))
+          PY
+          echo 'cGFja2FnZSBjb20uc3VoYXMuYXJiaXRyYWdlZWRnZQoKaW1wb3J0IGFuZHJvaWQuY29udGVudC5Db250ZXh0CmltcG9ydCBqYXZhLmlvLkZpbGUKaW1wb3J0IGphdmEudGltZS5ab25lZERhdGVUaW1lCmltcG9ydCBqYXZhLnRpbWUuWm9uZUlkCgpvYmplY3QgQXBwTG9nIHsKICAgIHByaXZhdGUgY29uc3QgdmFsIE5BTUUgPSAiZ2xvYmFsX3F1YW50X3RyYWRlci5sb2ciCiAgICBAU3luY2hyb25pemVkIGZ1biB3cml0ZShjb250ZXh0OiBDb250ZXh0LCB0YWc6IFN0cmluZywgbWVzc2FnZTogU3RyaW5nKSB7CiAgICAgICAgcnVuQ2F0Y2hpbmcgewogICAgICAgICAgICB2YWwgZiA9IEZpbGUoY29udGV4dC5maWxlc0RpciwgTkFNRSkKICAgICAgICAgICAgaWYgKGYuZXhpc3RzKCkgJiYgZi5sZW5ndGgoKSA+IDJfMDAwXzAwMCkgewogICAgICAgICAgICAgICAgdmFsIG9sZCA9IEZpbGUoY29udGV4dC5maWxlc0RpciwgImdsb2JhbF9xdWFudF90cmFkZXIucHJldmlvdXMubG9nIikKICAgICAgICAgICAgICAgIGlmIChvbGQuZXhpc3RzKCkpIG9sZC5kZWxldGUoKQogICAgICAgICAgICAgICAgZi5yZW5hbWVUbyhvbGQpCiAgICAgICAgICAgIH0KICAgICAgICAgICAgdmFsIHRzID0gWm9uZWREYXRlVGltZS5ub3coWm9uZUlkLm9mKCJBc2lhL0tvbGthdGEiKSkKICAgICAgICAgICAgZi5hcHBlbmRUZXh0KCIkdHMgWyR0YWddICR7bWVzc2FnZS5yZXBsYWNlKCdcbicsJyAnKX1cbiIpCiAgICAgICAgfQogICAgfQogICAgZnVuIHJlYWQoY29udGV4dDogQ29udGV4dCk6IFN0cmluZyA9IHJ1bkNhdGNoaW5nIHsKICAgICAgICBGaWxlKGNvbnRleHQuZmlsZXNEaXIsIE5BTUUpLnRha2VJZiB7IGl0LmV4aXN0cygpIH0/LnJlYWRUZXh0KCkub3JFbXB0eSgpCiAgICB9LmdldE9yRGVmYXVsdCgiIikKfQo=' | base64 -d > "$ROOT/app/src/main/java/com/suhas/arbitrageedge/AppLog.kt"
+
+      - name: Apply v2.4.1 source overlay
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat global-quant-v241/overlay/part00.txt global-quant-v241/overlay/part01.txt global-quant-v241/overlay/part02.txt > /tmp/gqt241-overlay.b64
+          echo "2f51a73c0694e165c77a5f11fd27b3f1ce32cd0f4b53986ad69a33ac92af6110  /tmp/gqt241-overlay.b64" | sha256sum -c -
+          base64 -d /tmp/gqt241-overlay.b64 > /tmp/gqt241-overlay.tar.gz
+          echo "c804b658a8c6108e6b9a285a807a8e0eaa8b7653572e06817ca3dad658f5b79d  /tmp/gqt241-overlay.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/gqt241-overlay.tar.gz -C "$ROOT"
+
+      - name: Apply final v2.5.0 Multify learning overlay
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat global-quant-v241/final-v250/part00.txt global-quant-v241/final-v250/part01.txt global-quant-v241/final-v250/part02.txt global-quant-v241/final-v250/part03.txt global-quant-v241/final-v250/part04.txt global-quant-v241/final-v250/part05.txt global-quant-v241/final-v250/part06.txt global-quant-v241/final-v250/part07.txt > /tmp/gqt250-final.b64
+          echo "b823e15b970c5ee3c74a4762eb123bf52c97ddc78ab3512ce0144a33402bd5a9  /tmp/gqt250-final.b64" | sha256sum -c -
+          base64 -d /tmp/gqt250-final.b64 > /tmp/gqt250-final.tar.gz
+          echo "b084933e018de190bcfee7f33117c9b09b27ae8feaedbc46160afff0b587380d  /tmp/gqt250-final.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/gqt250-final.tar.gz -C "$ROOT"
+          grep -q 'applicationId = "com.suhas.globalquanttraderai"' "$ROOT/app/build.gradle.kts"
+          grep -q 'versionName = "2.5.0"' "$ROOT/app/build.gradle.kts"
+          grep -q 'versionCode = 250' "$ROOT/app/build.gradle.kts"
+          test -s "$ROOT/app/src/main/assets/multify_seed_20260930.csv"
+          grep -q 'MultifyNotificationListener' "$ROOT/app/src/main/AndroidManifest.xml"
+
+      - name: Unit tests
+        run: gradle --no-daemon --console=plain -p "$ROOT" :app:testDebugUnitTest
+
+      - name: Lint diagnostics
+        continue-on-error: true
+        run: gradle --no-daemon --console=plain -p "$ROOT" :app:lintDebug
+
+      - name: Build release APK and verify identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --console=plain -p "$ROOT" :app:assembleRelease
+          OUT="$ROOT/app/build/outputs/apk/release"
+          APK="$OUT/Global-Quant-Trader-AI-v2.5.0-S24-Android16.apk"
+          cp "$OUT/app-release.apk" "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" > "$OUT/signature.txt"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" > "$OUT/package-check.txt"
+          grep -q "package: name='com.suhas.globalquanttraderai' versionCode='250' versionName='2.5.0'" "$OUT/package-check.txt"
+          sha256sum "$APK" > "$OUT/SHA256.txt"
+
+      - name: Package exact final source
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$ROOT"
+          zip -qr /tmp/Global-Quant-Trader-AI-v2.5.0-source.zip . -x '.gradle/*' 'app/build/*' 'build/*'
+          cp /tmp/Global-Quant-Trader-AI-v2.5.0-source.zip "$ROOT/app/build/outputs/apk/release/"
+
+      - name: Upload v2.5.0 artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Global-Quant-Trader-AI-v2.5.0-S24
+          path: |
+            ${{ env.ROOT }}/app/build/outputs/apk/release/Global-Quant-Trader-AI-v2.5.0-S24-Android16.apk
+            ${{ env.ROOT }}/app/build/outputs/apk/release/SHA256.txt
+            ${{ env.ROOT }}/app/build/outputs/apk/release/signature.txt
+            ${{ env.ROOT }}/app/build/outputs/apk/release/package-check.txt
+            ${{ env.ROOT }}/app/build/outputs/apk/release/Global-Quant-Trader-AI-v2.5.0-source.zip
+            ${{ env.ROOT }}/app/build/reports/tests/testDebugUnitTest/
+            ${{ env.ROOT }}/app/build/reports/lint-results-debug.html
+          if-no-files-found: error
