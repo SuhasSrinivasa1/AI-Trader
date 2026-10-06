@@ -1,0 +1,150 @@
+name: Build Multify Trader Pro v4.3 Statistical Waves
+
+on:
+  push:
+    branches:
+      - multify-final-v430-statistical-waves-20261006
+    paths:
+      - 'multify-final-v430/**'
+      - '.github/workflows/build-multify-final-v430.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout v4.3 payload and stable signing material
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout: |
+            multify-final-v420
+            multify-final-v430
+            multify-final-v4/stable_signing_key.jks.b64
+            .github/workflows/build-multify-final-v430.yml
+          sparse-checkout-cone-mode: false
+
+      - name: Restore v4.2 source and apply v4.3 patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat multify-final-v420/source.part* | base64 -d > /tmp/multify-v410-android.tgz
+          tar -xzf /tmp/multify-v410-android.tgz
+          test -f android/app/build.gradle.kts
+          cat multify-final-v420/patch.part* > /tmp/multify-v420.patch
+          (cd android && patch -p2 --batch --forward < /tmp/multify-v420.patch)
+          base64 -d multify-final-v430/v430.patch.gz.b64 | gzip -d > /tmp/multify-v430.patch
+          (cd android && patch -p1 --batch --forward < /tmp/multify-v430.patch)
+          sed -i -E 's#<domain>([^<]+)</domain>#<domain includeSubdomains="false">\1</domain>#g' android/app/src/debug/res/xml/network_security_config.xml
+          sed -i '/applicationIdSuffix = ".debug"/d' android/app/build.gradle.kts
+          base64 -d multify-final-v4/stable_signing_key.jks.b64 > android/app/multify-v4-stable.jks
+          grep -q 'versionCode = 430' android/app/build.gradle.kts
+          grep -q 'versionName = "4.3.0-statistical-waves"' android/app/build.gradle.kts
+
+      - name: Verify v4.3 execution contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=android/app/src/main/java/com/multify/traderpro
+          REPO="$ROOT/data/repository/TradingRepository.kt"
+          PREF="$ROOT/data/preferences/AppPreferences.kt"
+          UI="$ROOT/ui/screens/TraderApp.kt"
+          grep -q 'AVERAGE_STEP_FRACTION = 0.02' "$ROOT/engine/AdaptiveLearningMath.kt"
+          grep -q 'AVERAGE_ADD_RUPEES = 5_000.0' "$REPO"
+          grep -q 'FAST_TRAIL_RUPEES = 1.0' "$REPO"
+          grep -q 'DAILY_SHORT_GROSS_LOSS_LIMIT = 2_000.0' "$REPO"
+          grep -q 'MULTIFY_SELL_HELD_RED' "$REPO"
+          grep -q 'entryPrice = actualEntry, stopPrice = null' "$REPO"
+          grep -q 'executionMode: String = "AUTO"' "$PREF"
+          grep -q 'waveCount: Int = 1' "$PREF"
+          grep -q 'value.coerceIn(1, 20)' "$PREF"
+          grep -q 'LONG_ONLY' "$UI"
+          grep -q 'SHORT_ONLY' "$UI"
+          grep -q 'Campaign / Shadow budget' "$UI"
+          grep -q 'TradingEngineForegroundService' android/app/src/main/AndroidManifest.xml
+          grep -q 'ContextCompat.startForegroundService' "$ROOT/service/TradingEngineForegroundService.kt"
+          grep -q 'enqueueRecovery(eventId)' "$ROOT/service/TradingEngineForegroundService.kt"
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK 35
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Unit tests and lint
+        working-directory: android
+        run: gradle --no-daemon --console=plain :app:testDebugUnitTest :app:lintDebug
+
+      - name: Build stable-signed APK
+        working-directory: android
+        run: gradle --no-daemon --stacktrace :app:assembleDebug
+
+      - name: Verify APK signature, identity and stage output
+        shell: bash
+        run: |
+          set -euo pipefail
+          STAGE=build-output
+          mkdir -p "$STAGE"
+          APK="$STAGE/MultifyTraderPro-VivoY73-v4.3.0-statistical-waves.apk"
+          cp android/app/build/outputs/apk/debug/app-debug.apk "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee "$STAGE/SIGNATURE.txt"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | tee "$STAGE/BADGING.txt"
+          grep -q "package: name='com.multify.traderpro.vivoy73final'" "$STAGE/BADGING.txt"
+          grep -q "versionCode='430'" "$STAGE/BADGING.txt"
+          grep -q "versionName='4.3.0-statistical-waves-debug'" "$STAGE/BADGING.txt"
+          sha256sum "$APK" | tee "$STAGE/SHA256.txt"
+          cat > "$STAGE/VALIDATION-v4.3.0.txt" <<'EOF'
+          Version: 4.3.0-statistical-waves
+          Stable package id: VERIFIED
+          Mutually exclusive AUTO / LONG ONLY / SHORT ONLY mode: PRESENT
+          Master live arm: RETAINED, OFF by default
+          Waves 1-20, default 1: PRESENT
+          Budget ₹10,000-₹2,00,000 in ₹5,000 steps: PRESENT
+          Long averaging ₹5,000 every further 2%: RETAINED
+          Fast Track long stop-loss: NONE
+          Negative Fast Track long sell: BLOCKED
+          Long target then ₹1 trailing: PRESENT
+          Fast Track short averaging: NONE
+          Fast Track short per-trade stop-loss: NONE
+          Short target then ₹1 trailing: PRESENT
+          Daily cumulative short gross loss blocker: ₹2,000
+          Forecast/research remains outside notification order fast path
+          Unit tests: PASS
+          Android lint: PASS
+          APK build: PASS
+          APK signature verification: PASS
+          EOF
+          (cd android && zip -qr "../$STAGE/MultifyTraderPro-v4.3.0-source.zip" . -x '.gradle/*' '*/build/*' 'app/multify-v4-stable.jks')
+
+      - name: Upload v4.3 APK and validation
+        uses: actions/upload-artifact@v4
+        with:
+          name: MultifyTraderPro-VivoY73-v4.3.0-statistical-waves
+          path: |
+            build-output/MultifyTraderPro-VivoY73-v4.3.0-statistical-waves.apk
+            build-output/MultifyTraderPro-v4.3.0-source.zip
+            build-output/SIGNATURE.txt
+            build-output/BADGING.txt
+            build-output/SHA256.txt
+            build-output/VALIDATION-v4.3.0.txt
+            android/app/build/reports/tests/testDebugUnitTest/
+            android/app/build/reports/lint-results-debug.html
+          if-no-files-found: error
+          retention-days: 14
