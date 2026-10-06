@@ -1,0 +1,139 @@
+diff -ruN '--exclude=multify-v4-stable.jks' baseline/android/app/build.gradle.kts src/android/app/build.gradle.kts
+--- baseline/android/app/build.gradle.kts	2026-10-05 18:40:25.000000000 +0000
++++ src/android/app/build.gradle.kts	2026-10-06 09:47:18.960838746 +0000
+@@ -27,8 +27,8 @@
+         applicationId = "com.multify.traderpro.vivoy73final"
+         minSdk = 26
+         targetSdk = 35
+-        versionCode = 410
+-        versionName = "4.1.0-final-learning30"
++        versionCode = 420
++        versionName = "4.2.0-manual-entry-final"
+         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+         vectorDrawables.useSupportLibrary = true
+     }
+diff -ruN '--exclude=multify-v4-stable.jks' baseline/android/app/src/main/AndroidManifest.xml src/android/app/src/main/AndroidManifest.xml
+--- baseline/android/app/src/main/AndroidManifest.xml	2026-10-05 19:05:17.000000000 +0000
++++ src/android/app/src/main/AndroidManifest.xml	2026-10-06 09:47:18.960654114 +0000
+@@ -5,6 +5,8 @@
+     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
++    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
++    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+ 
+     <application
+         android:name=".MultifyApp"
+@@ -39,6 +41,16 @@
+         </provider>
+ 
+         <service
++            android:name=".service.TradingEngineForegroundService"
++            android:exported="false"
++            android:foregroundServiceType="specialUse"
++            android:stopWithTask="false">
++            <property
++                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
++                android:value="Persistent user-enabled event-driven trading signal processing and open-position monitoring" />
++        </service>
++
++        <service
+             android:name=".service.MultifyNotificationListenerService"
+             android:exported="true"
+             android:label="Multify signal capture"
+diff -ruN '--exclude=multify-v4-stable.jks' baseline/android/app/src/main/java/com/multify/traderpro/MainActivity.kt src/android/app/src/main/java/com/multify/traderpro/MainActivity.kt
+--- baseline/android/app/src/main/java/com/multify/traderpro/MainActivity.kt	2026-10-01 16:04:36.000000000 +0000
++++ src/android/app/src/main/java/com/multify/traderpro/MainActivity.kt	2026-10-06 09:47:18.960783605 +0000
+@@ -9,6 +9,7 @@
+ import androidx.activity.result.contract.ActivityResultContracts
+ import androidx.compose.foundation.isSystemInDarkTheme
+ import androidx.core.content.ContextCompat
++import com.multify.traderpro.service.TradingEngineForegroundService
+ import com.multify.traderpro.ui.screens.TraderApp
+ import com.multify.traderpro.ui.theme.MultifyTraderTheme
+ import dagger.hilt.android.AndroidEntryPoint
+@@ -23,6 +24,7 @@
+         super.onCreate(savedInstanceState)
+         enableEdgeToEdge()
+         requestPostNotificationsIfNeeded()
++        TradingEngineForegroundService.ensureRunning(this)
+         setContent {
+             MultifyTraderTheme(darkTheme = isSystemInDarkTheme()) {
+                 TraderApp()
+diff -ruN '--exclude=multify-v4-stable.jks' baseline/android/app/src/main/java/com/multify/traderpro/data/repository/TradingRepository.kt src/android/app/src/main/java/com/multify/traderpro/data/repository/TradingRepository.kt
+--- baseline/android/app/src/main/java/com/multify/traderpro/data/repository/TradingRepository.kt	2026-10-05 18:41:10.000000000 +0000
++++ src/android/app/src/main/java/com/multify/traderpro/data/repository/TradingRepository.kt	2026-10-06 09:44:38.036327861 +0000
+@@ -656,6 +656,62 @@
+         return filter.isBlank() || packageName.contains(filter, ignoreCase = true)
+     }
+ 
++    /**
++     * Injects a user-entered paid-equity lifecycle event into exactly the same parser, NSE-master,
++     * authentication, risk, Shadow and optional Fast Track path used by captured notifications.
++     * Manual entry is not a live-trading bypass: when Fast Track/live execution is OFF it remains
++     * simulation/analysis only, and when enabled every existing broker/risk guard still applies.
++     */
++    suspend fun submitManualSignal(action: String, rawSymbol: String, observedPrice: Double? = null): Long {
++        val symbol = rawSymbol.trim().uppercase(Locale.US)
++        require(symbol.matches(Regex("[A-Z0-9&._-]{1,32}"))) { "Enter a valid NSE trading symbol" }
++        require(observedPrice == null || observedPrice > 0.0) { "Observed price must be greater than zero" }
++        val normalizedAction = action.trim().uppercase(Locale.US)
++        require(normalizedAction == "BUY" || normalizedAction == "BOOK_PROFIT") { "Choose BUY or BOOK PROFIT" }
++
++        val now = System.currentTimeMillis()
++        val body = when (normalizedAction) {
++            "BUY" -> buildString {
++                append("MANUAL EQUITY BUY: ").append(symbol)
++                observedPrice?.let { append("\nOBSERVED PRICE: ").append(fmt(it)) }
++            }
++            else -> buildString {
++                append("BOOK PROFIT: ").append(symbol)
++                observedPrice?.let { append("\nEXIT PRICE: ").append(fmt(it)) }
++                append("\nMANUAL ENTRY")
++            }
++        }
++        val title = if (normalizedAction == "BUY") "Manual paid Equity BUY" else "Manual Book Profit"
++        val parsed = parser.parse(title, body, body)
++        val expected = if (normalizedAction == "BUY") SignalType.TRADE_RELEASE else SignalType.BOOK_PROFIT
++        require(parsed.type == expected && parsed.symbol.equals(symbol, true)) { "Manual signal could not be validated" }
++        val fingerprintBytes = "manual\n$normalizedAction\n$symbol\n$now".toByteArray(Charsets.UTF_8)
++        val fingerprint = MessageDigest.getInstance("SHA-256").digest(fingerprintBytes).joinToString("") { "%02x".format(it) }
++        val id = dao.insert(
++            SignalEventEntity(
++                fingerprint = fingerprint,
++                receivedAtMs = now,
++                postedAtMs = now,
++                sourcePackage = MANUAL_SOURCE,
++                appLabel = "Manual entry",
++                title = title,
++                text = body,
++                bigText = body,
++                signalType = parsed.type.name,
++                symbol = symbol,
++                summary = parsed.summary(),
++                confidence = 1.0
++            )
++        )
++        require(id > 0L) { "Manual signal was already submitted" }
++        auditLogger.log("SIGNAL", "MANUAL_SUBMITTED", mapOf(
++            "event_id" to id, "signal_type" to parsed.type.name, "symbol" to symbol,
++            "observed_price" to observedPrice, "fast_track_effective" to preferences.settings.first().fastTrackEffective
++        ))
++        processEvent(id)
++        return id
++    }
++
+     suspend fun isLiveExecutionEnabled(): Boolean = preferences.settings.first().liveExecutionEffective
+ 
+     suspend fun processEvent(eventId: Long) {
+@@ -2033,6 +2089,7 @@
+     private fun formatEventTime(ms: Long): String = java.text.SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(java.util.Date(ms))
+ 
+     companion object {
++        private const val MANUAL_SOURCE = "com.multify.traderpro.manual"
+         private val INDIA = ZoneId.of("Asia/Kolkata")
+         private val HIST_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+         private const val MIN_BUDGET = 10_000L
+diff -ruN '--exclude=multify-v4-stable.jks' baseline/android/app/src/main/java/com/multify/traderpro/domain/NotificationParser.kt src/android/app/src/main/java/com/multify/traderpro/domain/NotificationParser.kt
+--- baseline/android/app/src/main/java/com/multify/traderpro/domain/NotificationParser.kt	2026-10-02 14:20:51.000000000 +0000
++++ src/android/app/src/main/java/com/multify/traderpro/domain/

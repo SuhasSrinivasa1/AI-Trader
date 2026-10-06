@@ -1,0 +1,62 @@
+    }
++        item { SectionTitle("Fast Track settings", "Optional real CNC notification/manual following. Paid Equity lifecycle only; Free, F&O and commodity alerts remain ignored.") }
+         item {
+             Card(
+                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+diff -ruN '--exclude=multify-v4-stable.jks' baseline/android/app/src/main/java/com/multify/traderpro/ui/screens/TraderViewModel.kt src/android/app/src/main/java/com/multify/traderpro/ui/screens/TraderViewModel.kt
+--- baseline/android/app/src/main/java/com/multify/traderpro/ui/screens/TraderViewModel.kt	2026-10-05 17:37:23.000000000 +0000
++++ src/android/app/src/main/java/com/multify/traderpro/ui/screens/TraderViewModel.kt	2026-10-06 09:44:54.869856855 +0000
+@@ -161,6 +161,30 @@
+         }
+     }
+ 
++    fun submitManualSignal(action: String, symbol: String, observedPriceText: String) {
++        viewModelScope.launch {
++            remote.value = remote.value.copy(loading = true, error = null, message = null)
++            val price = observedPriceText.replace(",", "").replace("₹", "").trim().takeIf { it.isNotBlank() }?.toDoubleOrNull()
++            if (observedPriceText.isNotBlank() && price == null) {
++                remote.value = remote.value.copy(loading = false, error = "Observed price is optional, but must be a valid number when entered")
++                return@launch
++            }
++            runCatching { repository.submitManualSignal(action, symbol, price) }
++                .onSuccess { eventId ->
++                    remote.value = remote.value.copy(
++                        loading = false,
++                        message = "Manual ${if (action == "BUY") "BUY" else "Book Profit"} processed · event #$eventId",
++                        error = null
++                    )
++                    // High-resolution response sampling intentionally runs outside the submit path so
++                    // the UI returns immediately instead of waiting through the 5-minute sample window.
++                    launch { runCatching { repository.sampleSignal(eventId) } }
++                    refresh(silent = true)
++                }
++                .onFailure { remote.value = remote.value.copy(loading = false, error = it.userMessage()) }
++        }
++    }
++
+     fun resetHalt() {
+         viewModelScope.launch {
+             remote.value = remote.value.copy(loading = true, error = null, message = null)
+diff -ruN '--exclude=multify-v4-stable.jks' baseline/android/app/src/test/java/com/multify/traderpro/domain/NotificationParserTest.kt src/android/app/src/test/java/com/multify/traderpro/domain/NotificationParserTest.kt
+--- baseline/android/app/src/test/java/com/multify/traderpro/domain/NotificationParserTest.kt	2026-10-01 16:04:36.000000000 +0000
++++ src/android/app/src/test/java/com/multify/traderpro/domain/NotificationParserTest.kt	2026-10-06 09:47:18.960933476 +0000
+@@ -35,4 +35,19 @@
+         assertEquals("SHADOWFAX", s.symbol)
+         assertEquals(251.05, s.exitPrice!!, 0.0001)
+     }
++
++    @Test fun parsesManualBuyWithoutInventingTargetOrStop() {
++        val s = parser.parse("Manual paid Equity BUY", "MANUAL EQUITY BUY: TIMEX", "MANUAL EQUITY BUY: TIMEX\nOBSERVED PRICE: 739.10")
++        assertEquals(SignalType.TRADE_RELEASE, s.type)
++        assertEquals("TIMEX", s.symbol)
++        assertEquals(null, s.target)
++        assertEquals(null, s.stopLoss)
++    }
++
++    @Test fun parsesManualBookProfit() {
++        val s = parser.parse("Manual Book Profit", "BOOK PROFIT: TIMEX", "BOOK PROFIT: TIMEX\nEXIT PRICE: 739.10\nMANUAL ENTRY")
++        assertEquals(SignalType.BOOK_PROFIT, s.type)
++        assertEquals("TIMEX", s.symbol)
++        assertEquals(739.10, s.exitPrice!!, 0.0001)
++    }
+ }

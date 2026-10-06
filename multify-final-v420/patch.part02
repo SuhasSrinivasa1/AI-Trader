@@ -1,0 +1,167 @@
+s.cancel
++import kotlinx.coroutines.delay
++import kotlinx.coroutines.isActive
++import kotlinx.coroutines.launch
++import java.time.LocalTime
++import java.time.ZoneId
++import java.time.ZonedDateTime
++import javax.inject.Inject
++
++/**
++ * Persistent execution/monitoring lane for time-critical notification events.
++ *
++ * NotificationListenerService is only the capture edge. It hands recognized events here immediately;
++ * WorkManager is used only when this direct lane cannot process an event. Keeping monitoring outside
++ * the notification listener also means Vivo/Funtouch listener rebinds do not kill open-position care.
++ */
++@AndroidEntryPoint
++class TradingEngineForegroundService : Service() {
++    @Inject lateinit var repository: TradingRepository
++    @Inject lateinit var auditLogger: AuditLogger
++
++    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
++    private var monitorJob: Job? = null
++    private val prefs by lazy { getSharedPreferences(PREFS, Context.MODE_PRIVATE) }
++
++    override fun onCreate() {
++        super.onCreate()
++        createChannel()
++        startForeground(NOTIFICATION_ID, statusNotification("Engine warm", statusLine()))
++        startMonitors()
++        auditLogger.log("RUNTIME", "FOREGROUND_ENGINE_STARTED")
++    }
++
++    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
++        when (intent?.action) {
++            ACTION_PROCESS_EVENT -> {
++                val eventId = intent.getLongExtra(EXTRA_EVENT_ID, -1L)
++                val signalType = intent.getStringExtra(EXTRA_SIGNAL_TYPE).orEmpty()
++                if (signalType == SignalType.PRE_ALERT.name) {
++                    updateStatus("HOT / ARMED", "Pre-alert received · broker/NSE warm-up in progress")
++                }
++                if (eventId > 0L) processEvent(eventId, signalType)
++            }
++            ACTION_LISTENER_CONNECTED -> onListenerState(connected = true)
++            ACTION_LISTENER_DISCONNECTED -> onListenerState(connected = false)
++            ACTION_ENSURE_RUNNING, null -> updateStatus("Engine active", statusLine())
++        }
++        return START_STICKY
++    }
++
++    override fun onDestroy() {
++        auditLogger.log("RUNTIME", "FOREGROUND_ENGINE_STOPPED")
++        scope.cancel()
++        super.onDestroy()
++    }
++
++    override fun onBind(intent: Intent?): IBinder? = null
++
++    private fun processEvent(eventId: Long, signalType: String) {
++        scope.launch {
++            val result = runCatching { repository.processEvent(eventId) }
++            if (result.isFailure) {
++                auditLogger.log(
++                    "RUNTIME", "DIRECT_EVENT_PROCESSING_FAILED",
++                    mapOf("event_id" to eventId, "error" to (result.exceptionOrNull()?.message ?: "unknown"))
++                )
++                enqueueRecovery(eventId)
++            } else {
++                updateStatus("Engine active", statusLine())
++            }
++            if (signalType == SignalType.TRADE_RELEASE.name || signalType == SignalType.BOOK_PROFIT.name) {
++                launch { runCatching { repository.sampleSignal(eventId) } }
++            }
++        }
++    }
++
++    private fun startMonitors() {
++        if (monitorJob?.isActive == true) return
++        monitorJob = scope.launch {
++            runCatching { repository.ensureHistoricalSeed() }
++            while (isActive) {
++                val shadowCount = runCatching { repository.monitorShadowPositions() }.getOrDefault(0)
++                val managedCount = runCatching { repository.monitorManagedPositions() }.getOrDefault(0)
++                val learningCount = runCatching { repository.monitorLearningObservations() }.getOrDefault(0)
++                val now = ZonedDateTime.now(ZoneId.of("Asia/Kolkata"))
++                if (now.dayOfWeek.value < 6 && now.toLocalTime() >= LocalTime.of(9, 16) && now.toLocalTime() <= LocalTime.of(10, 0)) {
++                    runCatching { repository.generateDailyForecasts(false) }
++                }
++                if (now.dayOfWeek.value < 6 && now.toLocalTime() >= LocalTime.of(15, 35)) {
++                    runCatching { repository.runAfterHoursResearch(false) }
++                }
++                delay(if (shadowCount + managedCount + learningCount > 0) 2_000L else 10_000L)
++            }
++        }
++    }
++
++    private fun onListenerState(connected: Boolean) {
++        val connections = prefs.getInt(KEY_CONNECTIONS, 0)
++        val disconnects = prefs.getInt(KEY_DISCONNECTS, 0)
++        if (connected) {
++            val newConnections = connections + 1
++            prefs.edit().putInt(KEY_CONNECTIONS, newConnections).apply()
++            val reconnects = (newConnections - 1).coerceAtLeast(0)
++            auditLogger.log("RUNTIME", "LISTENER_WATCHDOG_CONNECTED", mapOf("connections" to newConnections, "reconnects" to reconnects, "disconnects" to disconnects))
++            updateStatus("Listener stable", "Engine active · reconnects $reconnects · disconnects $disconnects")
++        } else {
++            val newDisconnects = disconnects + 1
++            prefs.edit().putInt(KEY_DISCONNECTS, newDisconnects).apply()
++            auditLogger.log("RUNTIME", "LISTENER_WATCHDOG_DISCONNECTED", mapOf("connections" to connections, "disconnects" to newDisconnects))
++            updateStatus("Listener reconnecting", "Engine remains active · disconnects $newDisconnects")
++        }
++    }
++
++    private fun statusLine(): String {
++        val connections = prefs.getInt(KEY_CONNECTIONS, 0)
++        val reconnects = (connections - 1).coerceAtLeast(0)
++        val disconnects = prefs.getInt(KEY_DISCONNECTS, 0)
++        return "Direct execution lane ready · listener reconnects $reconnects · disconnects $disconnects"
++    }
++
++    private fun enqueueRecovery(eventId: Long) {
++        val constraints = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
++        val request = OneTimeWorkRequestBuilder<SignalForwardWorker>()
++            .setInputData(Data.Builder().putLong(SignalForwardWorker.KEY_EVENT_ID, eventId).build())
++            .setConstraints(constraints)
++            .build()
++        WorkManager.getInstance(this).enqueueUniqueWork("signal-forward-$eventId", ExistingWorkPolicy.KEEP, request)
++    }
++
++    private fun createChannel() {
++        getSystemService(NotificationManager::class.java).createNotificationChannel(
++            NotificationChannel(CHANNEL_ID, "Trading engine runtime", NotificationManager.IMPORTANCE_LOW).apply {
++                description = "Persistent Multify capture/execution runtime and listener watchdog"
++                setShowBadge(false)
++            }
++        )
++    }
++
++    private fun updateStatus(title: String, text: String) {
++        getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, statusNotification(title, text))
++    }
++
++    private fun statusNotification(title: String, text: String): android.app.Notification {
++        val openIntent = Intent(this, MainActivity::class.java)
++        val pending = PendingIntent.getActivity(
++            this, 0, openIntent,
++            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
++        )
++        return NotificationCompat.Builder(this, CHANNEL_ID)
++            .setSmallIcon(R.drawable.ic_stat_trader)
++            .setContentTitle(title)
++            .setContentText(text)
++            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
++            .setContentIntent(pending)
++            .setOngoing(true)
++            .setSilent(true)
++            .setCategory(NotificationCompat.CATEGORY_SERVICE)
++            .build()
++    }
++
++    companion object {
++        private const val CHANNEL_ID = "trading_engine_runtime"
++        private const val NOTIFICATION_ID = 4101
++        private const val PREFS = "engine_watchdog"
++        private const val KEY_CONNECTIONS = "listener_connections"
++        private const val KEY_DISCONNECTS = "listener_disconnects"
++        

@@ -1,0 +1,122 @@
+private const val ACTION_ENSURE_RUNNING = "com.multify.traderpro.action.ENGINE_START"
++        private const val ACTION_PROCESS_EVENT = "com.multify.traderpro.action.PROCESS_EVENT"
++        private const val ACTION_LISTENER_CONNECTED = "com.multify.traderpro.action.LISTENER_CONNECTED"
++        private const val ACTION_LISTENER_DISCONNECTED = "com.multify.traderpro.action.LISTENER_DISCONNECTED"
++        private const val EXTRA_EVENT_ID = "event_id"
++        private const val EXTRA_SIGNAL_TYPE = "signal_type"
++
++        fun ensureRunning(context: Context): Boolean = start(context, Intent(context, TradingEngineForegroundService::class.java).setAction(ACTION_ENSURE_RUNNING))
++
++        fun processEvent(context: Context, eventId: Long, signalType: String): Boolean = start(
++            context,
++            Intent(context, TradingEngineForegroundService::class.java)
++                .setAction(ACTION_PROCESS_EVENT)
++                .putExtra(EXTRA_EVENT_ID, eventId)
++                .putExtra(EXTRA_SIGNAL_TYPE, signalType)
++        )
++
++        fun listenerConnected(context: Context): Boolean = start(context, Intent(context, TradingEngineForegroundService::class.java).setAction(ACTION_LISTENER_CONNECTED))
++        fun listenerDisconnected(context: Context): Boolean = start(context, Intent(context, TradingEngineForegroundService::class.java).setAction(ACTION_LISTENER_DISCONNECTED))
++
++        private fun start(context: Context, intent: Intent): Boolean = runCatching {
++            ContextCompat.startForegroundService(context, intent)
++            true
++        }.getOrDefault(false)
++    }
++}
+diff -ruN '--exclude=multify-v4-stable.jks' baseline/android/app/src/main/java/com/multify/traderpro/ui/screens/TraderApp.kt src/android/app/src/main/java/com/multify/traderpro/ui/screens/TraderApp.kt
+--- baseline/android/app/src/main/java/com/multify/traderpro/ui/screens/TraderApp.kt	2026-10-05 18:40:25.000000000 +0000
++++ src/android/app/src/main/java/com/multify/traderpro/ui/screens/TraderApp.kt	2026-10-06 09:45:27.662419490 +0000
+@@ -193,6 +193,7 @@
+                 )
+                 Destination.Manual -> ManualScreen(
+                     state = state,
++                    onManualSubmit = viewModel::submitManualSignal,
+                     onBudgetChanged = viewModel::setFastTrackBudget,
+                     onFastTrackRequested = {
+                         if (state.settings.fastTrackEffective) viewModel.setFastTrackExecution(false) else showFastTrackConfirm = true
+@@ -825,10 +826,14 @@
+ @Composable
+ private fun ManualScreen(
+     state: TraderUiState,
++    onManualSubmit: (String, String, String) -> Unit,
+     onBudgetChanged: (Long) -> Unit,
+     onFastTrackRequested: () -> Unit,
+     onPostSellShortChanged: (Boolean) -> Unit
+ ) {
++    var symbol by rememberSaveable { mutableStateOf("") }
++    var observedPrice by rememberSaveable { mutableStateOf("") }
++    var manualAction by rememberSaveable { mutableStateOf("BUY") }
+     var budget by remember(state.settings.fastTrackBudgetRupees) { mutableStateOf(state.settings.fastTrackBudgetRupees.toFloat()) }
+     val enabled = state.settings.fastTrackEffective
+     val canEnable = state.settings.brokerAuthenticated && state.settings.staticIpMatched && state.settings.brokerDdpiEnabled && !state.settings.safetyHalt
+@@ -839,7 +844,72 @@
+         contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp, 14.dp, 16.dp, 32.dp),
+         verticalArrangement = Arrangement.spacedBy(14.dp)
+     ) {
+-        item { SectionTitle("Manual · notification auto buy/sell", "A separate, deliberately simple Multify-following engine. Paid Equity notifications only; Free, F&O and commodity alerts are ignored.") }
++        item { SectionTitle("Manual entry", "Enter a paid Equity lifecycle call yourself when a notification is missed. It is injected into the same Shadow / Fast Track pipeline and cannot bypass safety rules.") }
++        item {
++            Card(
++                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = .24f)),
++                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = .22f)),
++                shape = RoundedCornerShape(20.dp)
++            ) {
++                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
++                    Text("Enter Multify call", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
++                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
++                        Button(
++                            onClick = { manualAction = "BUY" },
++                            modifier = Modifier.weight(1f),
++                            colors = if (manualAction == "BUY") ButtonDefaults.buttonColors() else ButtonDefaults.outlinedButtonColors()
++                        ) { Text("BUY call") }
++                        OutlinedButton(
++                            onClick = { manualAction = "BOOK_PROFIT" },
++                            modifier = Modifier.weight(1f)
++                        ) { Text(if (manualAction == "BOOK_PROFIT") "✓ Book Profit" else "Book Profit") }
++                    }
++                    OutlinedTextField(
++                        value = symbol,
++                        onValueChange = { symbol = it.uppercase(Locale.US).filter { ch -> ch.isLetterOrDigit() || ch in "&._-" }.take(32) },
++                        modifier = Modifier.fillMaxWidth(),
++                        label = { Text("NSE symbol") },
++                        placeholder = { Text("e.g. TIMEX") },
++                        singleLine = true
++                    )
++                    OutlinedTextField(
++                        value = observedPrice,
++                        onValueChange = { observedPrice = it.filter { ch -> ch.isDigit() || ch == '.' }.take(12) },
++                        modifier = Modifier.fillMaxWidth(),
++                        label = { Text("Observed price (optional)") },
++                        supportingText = { Text("Audit reference only; execution always uses the current Groww quote.") },
++                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
++                        singleLine = true
++                    )
++                    Button(
++                        onClick = {
++                            onManualSubmit(manualAction, symbol.trim(), observedPrice.trim())
++                            observedPrice = ""
++                        },
++                        enabled = symbol.isNotBlank() && !state.loading,
++                        modifier = Modifier.fillMaxWidth()
++                    ) {
++                        Text(
++                            when {
++                                manualAction == "BUY" && state.settings.fastTrackEffective -> "Process BUY · Fast Track LIVE"
++                                manualAction == "BUY" -> "Process BUY"
++                                state.settings.fastTrackEffective -> "Process Book Profit · may sell/short LIVE"
++                                else -> "Process Book Profit"
++                            }
++                        )
++                    }
++                    Text(
++                        if (state.settings.fastTrackEffective)
++                            "Fast Track is ON: this manual event can place real Groww orders, subject to authentication, static-IP, DDPI, ownership, cash, session and hard-risk checks."
++                        else
++                            "Fast Track is OFF: the manual event is stored and processed for Shadow/learning only; no Manual real order is sent.",
++                        style = MaterialTheme.typography.bodySmall,
++                        color = if (state.settings.fastTrackEffective) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
++                    )
++                }
++            }
++    
