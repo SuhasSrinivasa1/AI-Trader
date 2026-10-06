@@ -54,7 +54,7 @@ jobs:
           grep -q 'MANUAL.*EQUITY.*BUY' "$ROOT/domain/NotificationParser.kt"
           grep -q 'TradingEngineForegroundService' android/app/src/main/AndroidManifest.xml
           grep -q 'ContextCompat.startForegroundService' "$ROOT/service/TradingEngineForegroundService.kt"
-          grep -q 'WorkManager.*recovery' "$ROOT/service/TradingEngineForegroundService.kt"
+          grep -q 'enqueueRecovery(eventId)' "$ROOT/service/TradingEngineForegroundService.kt"
           grep -q 'parsesManualBuyWithoutInventingTargetOrStop' "$TEST"
           grep -q 'parsesManualBookProfit' "$TEST"
 
