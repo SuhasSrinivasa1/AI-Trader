@@ -52,7 +52,7 @@ jobs:
           grep -q 'SESSION_KILL_SWITCH' canonical/app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
           grep -q 'isThreePmPriorityWindow' canonical/app/src/main/java/com/suhas/ucsentinel/domain/engine/AutomationPolicy.kt
           test -f canonical/app/src/main/java/com/suhas/ucsentinel/data/local/PersistentLearningVault.kt
-          grep -q 'global_edge_learning_vault_control_v172' canonical/app/src/main/java/com/suhas/ucsentinel/data/local/PersistentLearningVault.kt
+          grep -q 'global_edge_learning_vault_control_v171' canonical/app/src/main/java/com/suhas/ucsentinel/data/local/PersistentLearningVault.kt
           grep -q 'restoreLearningVault' canonical/app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
           test -f canonical/app/src/main/java/com/suhas/ucsentinel/data/local/StrategyLearningDatabase.kt
           test -f canonical/app/src/main/java/com/suhas/ucsentinel/domain/engine/StrategyGovernanceV2.kt
