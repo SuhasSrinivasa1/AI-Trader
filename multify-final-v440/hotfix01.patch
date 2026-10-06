@@ -1,0 +1,10 @@
+--- v440_patchtest/app/src/main/java/com/multify/traderpro/ui/screens/TraderApp.kt	2026-10-06 19:12:46.814553164 +0000
++++ v440_src/app/src/main/java/com/multify/traderpro/ui/screens/TraderApp.kt	2026-10-06 19:24:37.221832124 +0000
+@@ -69,6 +69,7 @@
+ import androidx.compose.material3.TextButton
+ import androidx.compose.material3.Switch
+ import androidx.compose.material3.Slider
++import androidx.compose.material3.Surface
+ import androidx.compose.runtime.Composable
+ import androidx.compose.runtime.LaunchedEffect
+ import androidx.compose.runtime.getValue
