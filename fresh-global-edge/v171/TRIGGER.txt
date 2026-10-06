@@ -1,0 +1,1 @@
+Build signed Global Edge AI Trader v1.6.11 persistent-learning-vault release after green canonical CI cccfc8d35fe512d66d3b73b193b249801e32c50a.
