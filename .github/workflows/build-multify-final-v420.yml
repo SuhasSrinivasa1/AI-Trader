@@ -36,6 +36,8 @@ jobs:
           test -f android/app/build.gradle.kts
           cat multify-final-v420/patch.part* > /tmp/multify-v420.patch
           (cd android && patch -p2 --batch --forward < /tmp/multify-v420.patch)
+          # Android 15 lint requires explicit subdomain handling for every debug-only cleartext host.
+          sed -i -E 's#<domain>([^<]+)</domain>#<domain includeSubdomains="false">\1</domain>#g' android/app/src/debug/res/xml/network_security_config.xml
           grep -q 'versionCode = 420' android/app/build.gradle.kts
           grep -q 'versionName = "4.2.0-manual-entry-final"' android/app/build.gradle.kts
           base64 -d multify-final-v4/stable_signing_key.jks.b64 > android/app/multify-v4-stable.jks
