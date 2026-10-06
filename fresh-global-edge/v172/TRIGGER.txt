@@ -1,0 +1,1 @@
+Build signed Global Edge AI Trader v1.6.12 manual-entry release from canonical source with preserved update certificate.
