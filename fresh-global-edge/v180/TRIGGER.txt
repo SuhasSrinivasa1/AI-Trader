@@ -1,0 +1,1 @@
+Build signed Global Edge AI Trader v1.7.0 architecture release from canonical main 8b54066b18bfb2ce7670f557a45f91237933bf43. Unit tests + release build already passed on app source; canonical verification marker was corrected.
