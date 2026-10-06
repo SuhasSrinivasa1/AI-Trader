@@ -61,7 +61,7 @@ jobs:
           grep -q 'waveCount' "$ROOT/data/preferences/AppPreferences.kt"
           grep -q '"LONG_ONLY"' "$ROOT/data/repository/TradingRepository.kt"
           grep -q '"SHORT_ONLY"' "$ROOT/data/repository/TradingRepository.kt"
-          grep -q 'waveStats' "$ROOT/network/ApiModels.kt"
+          grep -q 'waveStats' "$ROOT/data/network/ApiModels.kt"
           grep -q 'updateForecastOutcome' "$ROOT/data/local/LearningDao.kt"
           grep -q 'TradingEngineForegroundService' android/app/src/main/AndroidManifest.xml
           grep -q '750L' "$ROOT/service/TradingEngineForegroundService.kt"
