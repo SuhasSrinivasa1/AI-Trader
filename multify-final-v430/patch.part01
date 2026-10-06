@@ -1,0 +1,112 @@
+    val brokerAuthenticated = booleanPreferencesKey("broker_authenticated")
+@@ -96,7 +100,18 @@
+     }
+ 
+     suspend fun setFastTrackBudget(value: Long) {
+-        context.dataStore.edit { it[Keys.fastTrackBudgetRupees] = value.coerceIn(10_000L, 200_000L) }
++        val snapped = ((value.coerceIn(10_000L, 200_000L) + 2_500L) / 5_000L) * 5_000L
++        context.dataStore.edit { it[Keys.fastTrackBudgetRupees] = snapped.coerceIn(10_000L, 200_000L) }
++    }
++
++    suspend fun setExecutionMode(value: String) {
++        val mode = value.trim().uppercase()
++        require(mode in setOf("AUTO", "LONG_ONLY", "SHORT_ONLY")) { "Execution mode must be AUTO, LONG ONLY or SHORT ONLY" }
++        context.dataStore.edit { it[Keys.executionMode] = mode }
++    }
++
++    suspend fun setWaveCount(value: Int) {
++        context.dataStore.edit { it[Keys.waveCount] = value.coerceIn(1, 20).toLong() }
+     }
+ 
+     suspend fun setPostSellShortEnabled(value: Boolean) {
+@@ -185,9 +200,11 @@
+         expectedStaticIp = this[Keys.expectedStaticIp].orEmpty(),
+         packageFilter = this[Keys.packageFilter].orEmpty(),
+         dailyBudgetRupees = (this[Keys.dailyBudgetRupees] ?: 200_000L).coerceIn(10_000L, 200_000L),
+-        fastTrackBudgetRupees = (this[Keys.fastTrackBudgetRupees] ?: 200_000L).coerceIn(10_000L, 200_000L),
++        fastTrackBudgetRupees = (this[Keys.fastTrackBudgetRupees] ?: 100_000L).coerceIn(10_000L, 200_000L),
+         liveExecutionEnabled = this[Keys.liveExecutionEnabled] ?: false,
+         fastTrackEnabled = this[Keys.fastTrackEnabled] ?: false,
++        executionMode = (this[Keys.executionMode] ?: "AUTO").takeIf { it in setOf("AUTO", "LONG_ONLY", "SHORT_ONLY") } ?: "AUTO",
++        waveCount = (this[Keys.waveCount] ?: 1L).toInt().coerceIn(1, 20),
+         postSellShortEnabled = this[Keys.postSellShortEnabled] ?: true,
+         onboardingComplete = this[Keys.onboardingComplete] ?: false,
+         brokerAuthenticated = this[Keys.brokerAuthenticated] ?: false,
+diff -ruN v42base/app/src/main/java/com/multify/traderpro/data/repository/TradingRepository.kt v43src/app/src/main/java/com/multify/traderpro/data/repository/TradingRepository.kt
+--- v42base/app/src/main/java/com/multify/traderpro/data/repository/TradingRepository.kt	2026-10-06 10:25:15.000000000 +0000
++++ v43src/app/src/main/java/com/multify/traderpro/data/repository/TradingRepository.kt	2026-10-06 14:43:32.306014866 +0000
+@@ -40,6 +40,7 @@
+ import com.multify.traderpro.data.network.RecentDecisionDto
+ import com.multify.traderpro.data.network.RiskStatusDto
+ import com.multify.traderpro.data.network.LearningStatsDto
++import com.multify.traderpro.data.network.WaveStatDto
+ import com.multify.traderpro.data.network.ForecastDto
+ import com.multify.traderpro.data.network.ResearchDto
+ import com.multify.traderpro.data.network.StrategyInsightDto
+@@ -53,6 +54,7 @@
+ import com.multify.traderpro.domain.SignalType
+ import com.multify.traderpro.engine.BudgetAllocator
+ import com.multify.traderpro.engine.AdaptiveLearningMath
++import com.multify.traderpro.engine.DeterministicExecutionRules
+ import com.multify.traderpro.engine.LocalStrategyEngine
+ import com.multify.traderpro.engine.StrategyEvaluation
+ import kotlinx.coroutines.delay
+@@ -162,6 +164,25 @@
+         }
+     }
+ 
++    private suspend fun waveStats(): List<WaveStatDto> {
++        val trades = shadowDao.allTrades().filter { it.regime.startsWith("WAVE_") }
++        if (trades.isEmpty()) return (1..20).map { WaveStatDto(wave = it) }
++        val latestDates = trades.map { Instant.ofEpochMilli(it.closedAtMs).atZone(INDIA).toLocalDate() }
++            .distinct().sortedDescending().take(30).toSet()
++        val rolling = trades.filter { Instant.ofEpochMilli(it.closedAtMs).atZone(INDIA).toLocalDate() in latestDates }
++        return (1..20).map { wave ->
++            val rows = rolling.filter { waveNumber(it.regime) == wave }
++            val ups = rows.filter { it.side == "LONG" }.map { (it.exitPrice - it.entryPrice) / it.entryPrice * 100.0 }
++            val downs = rows.filter { it.side == "SHORT" }.map { (it.entryPrice - it.exitPrice) / it.entryPrice * 100.0 }
++            WaveStatDto(
++                wave = wave,
++                averageUpPct = if (ups.isEmpty()) 0.0 else ups.average(),
++                averageDownPct = if (downs.isEmpty()) 0.0 else downs.average(),
++                upSamples = ups.size, downSamples = downs.size
++            )
++        }
++    }
++
+     suspend fun learningStats(): LearningStatsDto {
+         ensureHistoricalSeed()
+         val calls = learningDao.allCalls().filter { it.action.equals("BUY", true) }
+@@ -345,47 +366,49 @@
+     suspend fun generateDailyForecasts(force: Boolean = false): List<ForecastDto> {
+         ensureHistoricalSeed()
+         val today = LocalDate.now(INDIA).toString()
+-        if (!force) {
+-            val existing = learningDao.forecastsForDate(today)
+-            if (existing.size >= 5) return existing.map { it.toDto() }
+-        }
+-        val token = ensureToken() ?: return learningDao.forecastsForDate(today).map { it.toDto() }
++        val existing = learningDao.forecastsForDate(today)
++        if (existing.size >= 5) return existing.map { it.toDto() }
++        val token = ensureToken() ?: return existing.map { it.toDto() }
+         val calls = learningDao.allCalls().filter { it.action.equals("BUY", true) }
+         val dates = calls.map { it.callDate }.distinct().sortedDescending().take(30).toSet()
+         val rolling = calls.filter { it.callDate in dates }
++        val priorForecasts = learningDao.allForecasts().filter { it.forecastDate != today && it.result in setOf("WIN", "FAIL") }
++        val existingSymbols = existing.map { it.symbol }.toSet()
+         val candidates = rolling.groupBy { it.symbol }
+             .map { (symbol, xs) -> Triple(symbol, xs.size, xs.maxOf { it.callDate }) }
++            .filter { it.first !in existingSymbols }
+             .sortedWith(compareByDescending<Triple<String,Int,String>> { it.second }.thenByDescending { it.third })
+-            .take(18)
++            .take(30)
++        val learned = learningStats()
++        val expectedMovePct = (learned.longMedianPct.takeIf { it > 0.0 } ?: learned.longAveragePct).coerceAtLeast(.25)
+         val scored = mutableListOf<ForecastEntity>()
+         for ((symbol, count, _) in candidates) {
+             val eval = runCatching { forecastEvaluation(symbol, token) }.getOrNull() ?: continue
+             val chosen = if (eval.first.confidence >= eval.second.confidence) eval.first else eval.second
++            val history = priorForecasts.filter { it.symbol == symbol }
++            val winRateBonus = if (history.size >= 3) ((history.count { it.result == "WIN" }.toDouble() / history.size) - .5) * .12 else 0.0
++            val multifyRows = rolling.filter { it.symbol == symbol && it.longRealizedPct != null }
++            val multifySuccessBonus = if (multifyRows.size >= 2) ((multifyRows.count { (it.longRealizedPct ?: -1.0) > 0.0 }.toDouble() / multifyRows.size) - .5) * .10 else 0.0
