@@ -42,9 +42,9 @@ jobs:
           for f in multify-final-v430/v430.patch.gz.part*.b64; do
             base64 -d "$f" >> /tmp/multify-v430.patch.gz
           done
-          echo "8d8ddddb9aed4a61449b2c61db9c6cd1042717421f9147c3fa74100af992d2a0  /tmp/multify-v430.patch.gz" | sha256sum -c -
+          echo "8f434d107294adfb4d39ff0584f13409a49513c7298dab85786b7638a866dc2e  /tmp/multify-v430.patch.gz" | sha256sum -c -
           gzip -dc /tmp/multify-v430.patch.gz > /tmp/multify-v430.patch
-          echo "200cff7bf1718811e02db7820735e059c1184f37299efbd8a9ba989ead5474c4  /tmp/multify-v430.patch" | sha256sum -c -
+          echo "ed912725b1104d4f16291a548a9430ac1935e9abb0dbd0e58e0362d6c61d29e2  /tmp/multify-v430.patch" | sha256sum -c -
           (cd android && patch -p1 --batch --forward < /tmp/multify-v430.patch)
           sed -i -E 's#<domain>([^<]+)</domain>#<domain includeSubdomains="false">\1</domain>#g' android/app/src/debug/res/xml/network_security_config.xml
           sed -i '/applicationIdSuffix = ".debug"/d' android/app/build.gradle.kts
@@ -72,6 +72,14 @@ jobs:
           grep -q 'LONG_ONLY' "$UI"
           grep -q 'SHORT_ONLY' "$UI"
           grep -q 'Campaign / Shadow budget' "$UI"
+          grep -q '20-wave statistical audit' "$UI"
+          grep -q 'INTRADAY_FORECAST_APPEND' "$REPO"
+          grep -q 'finalizeForecastOutcomes' "$REPO"
+          grep -q 'waveStatistics' "$REPO"
+          grep -q 'FOLLOW_WAVE_1' "$REPO"
+          grep -q 'POST_SELL_WAVE_' "$REPO"
+          grep -q 'MIGRATION_4_5' "$ROOT/data/local/AppDatabase.kt"
+          grep -q 'outcome: String = "PENDING"' "$ROOT/data/local/LearningEntities.kt"
           grep -q 'TradingEngineForegroundService' android/app/src/main/AndroidManifest.xml
           grep -q 'ContextCompat.startForegroundService' "$ROOT/service/TradingEngineForegroundService.kt"
           grep -q 'enqueueRecovery(eventId)' "$ROOT/service/TradingEngineForegroundService.kt"
@@ -133,6 +141,10 @@ jobs:
           Short target then ₹1 trailing: PRESENT
           Daily cumulative short gross loss blocker: ₹2,000
           Forecast/research remains outside notification order fast path
+          Forecasts frozen append-only up to five/day with entry/target/stop: PRESENT
+          After-close WIN/FAIL/OPEN/AMBIGUOUS forecast audit: PRESENT
+          Selected-budget Shadow multi-wave simulation 1-20: PRESENT
+          Independent 20-wave up/down audit: PRESENT
           Unit tests: PASS
           Android lint: PASS
           APK build: PASS
