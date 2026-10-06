@@ -49,6 +49,7 @@ jobs:
 
           cat multify-final-v440/patch.gz.b64.part* | base64 -d | gzip -d > /tmp/multify-v440.patch
           (cd android && patch -p1 --batch --forward < /tmp/multify-v440.patch)
+          (cd android && patch -p1 --batch --forward < ../multify-final-v440/hotfix01.patch)
 
           grep -q 'versionCode = 440' android/app/build.gradle.kts
           grep -q 'versionName = "4.4.0-wave-pivot-simple-ui"' android/app/build.gradle.kts
