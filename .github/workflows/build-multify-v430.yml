@@ -37,6 +37,13 @@ jobs:
           test -f android/app/build.gradle.kts
           cat multify-final-v420/patch.part* > /tmp/multify-v420.patch
           (cd android && patch -p2 --batch --forward < /tmp/multify-v420.patch)
+          cat > /tmp/v430-payload.sha256 <<'SHA'
+          b665496b211904820016f897b3f36a4b33a482327b1dec16ce551615664d3832  multify-final-v430/patch.gz.b64.part00
+          61be86a3604edfd740f279656e6dfaaa313517e6451c553a0a2253d9e34ae494  multify-final-v430/patch.gz.b64.part01
+          1eee34c338e6708e733772af3516c12d7ef534ade18dc3ac875c7dd9e1607aa6  multify-final-v430/patch.gz.b64.part02
+          0e91aae656d3acf7251d720f08a95ec019e676dc6ec5300c3695f77e8ae0e908  multify-final-v430/patch.gz.b64.part03
+          SHA
+          sha256sum -c /tmp/v430-payload.sha256
           cat multify-final-v430/patch.gz.b64.part* | base64 -d | gzip -dc > /tmp/multify-v430.patch
           echo "84a09882a3074df01db6600f394dceeec535916dcec620381425f3f98a1c9b64  /tmp/multify-v430.patch" | sha256sum -c -
           (cd android && patch -p1 --batch --forward < /tmp/multify-v430.patch)
