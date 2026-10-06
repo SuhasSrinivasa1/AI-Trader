@@ -38,7 +38,13 @@ jobs:
           test -f android/app/build.gradle.kts
           cat multify-final-v420/patch.part* > /tmp/multify-v420.patch
           (cd android && patch -p2 --batch --forward < /tmp/multify-v420.patch)
-          base64 -d multify-final-v430/v430.patch.gz.b64 | gzip -d > /tmp/multify-v430.patch
+          : > /tmp/multify-v430.patch.gz
+          for f in multify-final-v430/v430.patch.gz.part*.b64; do
+            base64 -d "$f" >> /tmp/multify-v430.patch.gz
+          done
+          echo "8d8ddddb9aed4a61449b2c61db9c6cd1042717421f9147c3fa74100af992d2a0  /tmp/multify-v430.patch.gz" | sha256sum -c -
+          gzip -dc /tmp/multify-v430.patch.gz > /tmp/multify-v430.patch
+          echo "200cff7bf1718811e02db7820735e059c1184f37299efbd8a9ba989ead5474c4  /tmp/multify-v430.patch" | sha256sum -c -
           (cd android && patch -p1 --batch --forward < /tmp/multify-v430.patch)
           sed -i -E 's#<domain>([^<]+)</domain>#<domain includeSubdomains="false">\1</domain>#g' android/app/src/debug/res/xml/network_security_config.xml
           sed -i '/applicationIdSuffix = ".debug"/d' android/app/build.gradle.kts
