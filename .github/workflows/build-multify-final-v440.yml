@@ -85,7 +85,94 @@ jobs:
           grep -q 'Configuration("Settings"' "$ROOT/ui/screens/TraderApp.kt"
           grep -q '20-wave averages' "$ROOT/ui/screens/TraderApp.kt"
           grep -q '30 calendar days' "$ROOT/ui/screens/TraderApp.kt"
-          grep -q '^date,symbol,source,action,entry_price,target_pct,target_price,exit_price,realized_return_pct,buy_at_ms,sell_at_ms$' "$SEED"
+          head -n 1 "$SEED" | tr -d '\\r' | grep -q '^date,symbol,source,action,entry_price,target_pct,target_price,exit_price,realized_return_pct,buy_at_ms,sell_at_ms
+          test "$(wc -l < "$SEED")" -gt 100
+          ! grep -q 'reconstructHistoricalShort' "$ROOT/data/repository/TradingRepository.kt"
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK 35
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Unit tests and lint
+        working-directory: android
+        run: gradle --no-daemon --console=plain :app:testDebugUnitTest :app:lintDebug
+
+      - name: Build stable-signed APK
+        working-directory: android
+        run: gradle --no-daemon --stacktrace :app:assembleDebug
+
+      - name: Verify APK signature, identity and stage output
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=android/app/build/outputs/apk/debug
+          STAGE=build-output
+          mkdir -p "$STAGE"
+          APK="$STAGE/MultifyTraderPro-VivoY73-v4.4.0-wave-pivot-30day.apk"
+          cp "$OUT/app-debug.apk" "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee "$STAGE/SIGNATURE.txt"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | tee "$STAGE/BADGING.txt"
+          grep -q "package: name='com.multify.traderpro.vivoy73final'" "$STAGE/BADGING.txt"
+          grep -q "versionCode='440'" "$STAGE/BADGING.txt"
+          grep -q "versionName='4.4.0-wave-pivot-30day-debug'" "$STAGE/BADGING.txt"
+          sha256sum "$APK" | tee "$STAGE/SHA256.txt"
+          cat > "$STAGE/VALIDATION-v4.4.0.txt" <<'EOV'
+          Version: 4.4.0-wave-pivot-30day
+          Wave definition: LIVE PRICE PIVOTS, NOT CANDLE PATTERNS
+          Pivot rule: 0.40% favourable move + 0.40% reversal confirmation
+          Wave 1 anchor: actual Groww fill when available
+          Independent waves: Up/Down 1-20
+          Excel seed scope: WAVE-1 LONG ONLY
+          Long learning window: LATEST 30 CALENDAR DAYS
+          Short historical backfill: NONE
+          Short learning start: 2026-10-07 live confirmed Down pivots
+          Profit trail: ₹1
+          Long stop-loss: NONE
+          Negative long sell: PROHIBITED in deterministic Multify lane
+          Short averaging: NONE
+          Per-trade short stop: NONE
+          Daily cumulative short gross-loss blocker: ₹2,000
+          UI: Execution | Forecast | Settings
+          Live + Shadow P&L: PINNED
+          Diagnostic ZIP: RAW CAMPAIGNS + CONFIRMED PIVOTS + 20-WAVE STATS + 30-DAY SNAPSHOT
+          Unit tests: PASS
+          Android lint: PASS
+          APK build: PASS
+          APK signature verification: PASS
+          EOV
+          (cd android && zip -qr "../$STAGE/MultifyTraderPro-v4.4.0-source.zip" . -x '.gradle/*' '*/build/*' 'app/multify-v4-stable.jks')
+
+      - name: Upload v4.4 APK and validation
+        uses: actions/upload-artifact@v4
+        with:
+          name: MultifyTraderPro-VivoY73-v4.4.0-wave-pivot-30day
+          path: |
+            build-output/MultifyTraderPro-VivoY73-v4.4.0-wave-pivot-30day.apk
+            build-output/MultifyTraderPro-v4.4.0-source.zip
+            build-output/SIGNATURE.txt
+            build-output/BADGING.txt
+            build-output/SHA256.txt
+            build-output/VALIDATION-v4.4.0.txt
+            android/app/build/reports/tests/testDebugUnitTest/
+            android/app/build/reports/lint-results-debug.html
+          if-no-files-found: error
+          retention-days: 14
+
           test "$(wc -l < "$SEED")" -gt 100
           ! grep -q 'reconstructHistoricalShort' "$ROOT/data/repository/TradingRepository.kt"
 
