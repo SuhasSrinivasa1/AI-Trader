@@ -22,6 +22,7 @@ At each confirmed 0.40% pivot, the engine computes one transparent directional s
 Execution is pivot-safe:
 - A confirmed **Down** pivot is the only place Wave 2+ AUTO may open a selected **LONG**.
 - A confirmed **Up** pivot is the only place Wave 2+ AUTO may open a selected **SHORT**.
+- The directional score is evaluated only when a pivot is confirmed; it is not polled into repeated entries between pivots.
 - If the stronger mathematical side does not match the next safe pivot entry, the leg is **skipped** rather than chased.
 - Each execution Wave 2–20 is therefore one selected position, not an automatic long+short pair.
 
