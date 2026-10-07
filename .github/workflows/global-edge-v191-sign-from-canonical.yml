@@ -133,7 +133,7 @@ jobs:
             echo 'build=SUCCESS'
             echo 'canonical_repo=SuhasSrinivasa1/Global-Edge-AI-Trader'
             echo 'package=com.suhas.globaledgeai'
-            echo 'versionCode=190'
+            echo 'versionCode=191'
             echo 'versionName=1.8.1'
             echo "signer_sha256=$CERT_SHA"
             echo 'update_certificate_preserved=true'
