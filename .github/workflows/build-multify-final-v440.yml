@@ -1,0 +1,174 @@
+name: Build Multify Trader Pro v4.4 Pivot Waves
+
+on:
+  push:
+    branches:
+      - multify-final-v440-wave-pivot-30day-20261007
+    paths:
+      - 'multify-final-v420/**'
+      - 'multify-final-v430/**'
+      - 'multify-final-v440/**'
+      - '.github/workflows/build-multify-final-v440.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout v4.4 payload and stable signing material
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout: |
+            multify-final-v420
+            multify-final-v430
+            multify-final-v440
+            multify-final-v4/stable_signing_key.jks.b64
+            .github/workflows/build-multify-final-v440.yml
+          sparse-checkout-cone-mode: false
+
+      - name: Restore v4.3 source and apply v4.4 delta
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat multify-final-v420/source.part* | base64 -d > /tmp/multify-v410-android.tgz
+          tar -xzf /tmp/multify-v410-android.tgz
+          test -f android/app/build.gradle.kts
+          cat multify-final-v420/patch.part* > /tmp/multify-v420.patch
+          (cd android && patch -p2 --batch --forward < /tmp/multify-v420.patch)
+          sed -i -E 's#<domain>([^<]+)</domain>#<domain includeSubdomains="false">\1</domain>#g' android/app/src/debug/res/xml/network_security_config.xml
+          sed -i '/applicationIdSuffix = ".debug"/d' android/app/build.gradle.kts
+
+          cat multify-final-v430/patch.gz.b64.part* | base64 -d | gzip -d > /tmp/multify-v430.patch
+          (cd android && patch -p1 --batch --forward < /tmp/multify-v430.patch)
+
+          cat multify-final-v440/patch.gz.b64.part* | base64 -d | gzip -d > /tmp/multify-v440.patch
+          (cd android && patch -p1 --batch --forward < /tmp/multify-v440.patch)
+
+          grep -q 'versionCode = 440' android/app/build.gradle.kts
+          grep -q 'versionName = "4.4.0-wave-pivot-30day"' android/app/build.gradle.kts
+          base64 -d multify-final-v4/stable_signing_key.jks.b64 > android/app/multify-v4-stable.jks
+
+      - name: Verify v4.4 statistical and execution contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=android/app/src/main/java/com/multify/traderpro
+          TESTROOT=android/app/src/test/java/com/multify/traderpro
+          SEED=android/app/src/main/assets/multify_history_seed.csv
+
+          grep -q 'WAVE_PIVOT_FRACTION = 0.004' "$ROOT/data/repository/TradingRepository.kt"
+          grep -q 'DEFAULT_UNTRAINED_WAVE_ARM_PCT = 0.40' "$ROOT/data/repository/TradingRepository.kt"
+          grep -q 'minusDays(29)' "$ROOT/data/repository/TradingRepository.kt"
+          grep -q 'rollingCalendarDays = 30' "$ROOT/data/repository/TradingRepository.kt"
+          grep -q 'SHORT_LEARNING_START_DATE = LocalDate.of(2026, 10, 7)' "$ROOT/data/repository/TradingRepository.kt"
+          grep -q 'uploaded_excel_wave1_long' "$ROOT/data/repository/TradingRepository.kt"
+          grep -q 'WaveCampaignEntity' "$ROOT/data/local/WaveEntities.kt"
+          grep -q 'WaveObservationEntity' "$ROOT/data/local/WaveEntities.kt"
+          grep -q 'startOrReanchorWaveCampaign' "$ROOT/data/repository/TradingRepository.kt"
+          grep -q 'monitorWaveCampaigns' "$ROOT/data/repository/TradingRepository.kt"
+          grep -q 'CAMPAIGN_REANCHORED_TO_LIVE_FILL' "$ROOT/data/repository/TradingRepository.kt"
+          grep -q 'WavePivotMath' "$ROOT/engine/WavePivotMath.kt"
+          grep -q 'percentageRuleIsScaleInvariant' "$TESTROOT/engine/WavePivotMathTest.kt"
+          grep -q 'subThresholdNoiseDoesNotCreateWave' "$TESTROOT/engine/WavePivotMathTest.kt"
+          grep -q 'PROFIT_TRAIL_RUPEES = 1.0' "$ROOT/data/repository/TradingRepository.kt"
+          grep -q 'AVERAGE_ADD_RUPEES = 5_000.0' "$ROOT/data/repository/TradingRepository.kt"
+          grep -q 'AVERAGE_STEP_FRACTION = 0.02' "$ROOT/engine/AdaptiveLearningMath.kt"
+          grep -q 'DAILY_SHORT_LOSS_BLOCKER = 2_000.0' "$ROOT/data/repository/TradingRepository.kt"
+          grep -q 'waves/confirmed_pivots.json' "$ROOT/data/repository/TradingRepository.kt"
+          grep -q 'Execution("Execution"' "$ROOT/ui/screens/TraderApp.kt"
+          grep -q 'Forecast("Forecast"' "$ROOT/ui/screens/TraderApp.kt"
+          grep -q 'Configuration("Settings"' "$ROOT/ui/screens/TraderApp.kt"
+          grep -q '20-wave averages' "$ROOT/ui/screens/TraderApp.kt"
+          grep -q '30 calendar days' "$ROOT/ui/screens/TraderApp.kt"
+          grep -q '^date,symbol,source,action,entry_price,target_pct,target_price,exit_price,realized_return_pct,buy_at_ms,sell_at_ms$' "$SEED"
+          test "$(wc -l < "$SEED")" -gt 100
+          ! grep -q 'reconstructHistoricalShort' "$ROOT/data/repository/TradingRepository.kt"
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK 35
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Unit tests and lint
+        working-directory: android
+        run: gradle --no-daemon --console=plain :app:testDebugUnitTest :app:lintDebug
+
+      - name: Build stable-signed APK
+        working-directory: android
+        run: gradle --no-daemon --stacktrace :app:assembleDebug
+
+      - name: Verify APK signature, identity and stage output
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=android/app/build/outputs/apk/debug
+          STAGE=build-output
+          mkdir -p "$STAGE"
+          APK="$STAGE/MultifyTraderPro-VivoY73-v4.4.0-wave-pivot-30day.apk"
+          cp "$OUT/app-debug.apk" "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee "$STAGE/SIGNATURE.txt"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | tee "$STAGE/BADGING.txt"
+          grep -q "package: name='com.multify.traderpro.vivoy73final'" "$STAGE/BADGING.txt"
+          grep -q "versionCode='440'" "$STAGE/BADGING.txt"
+          grep -q "versionName='4.4.0-wave-pivot-30day-debug'" "$STAGE/BADGING.txt"
+          sha256sum "$APK" | tee "$STAGE/SHA256.txt"
+          cat > "$STAGE/VALIDATION-v4.4.0.txt" <<'EOV'
+          Version: 4.4.0-wave-pivot-30day
+          Wave definition: LIVE PRICE PIVOTS, NOT CANDLE PATTERNS
+          Pivot rule: 0.40% favourable move + 0.40% reversal confirmation
+          Wave 1 anchor: actual Groww fill when available
+          Independent waves: Up/Down 1-20
+          Excel seed scope: WAVE-1 LONG ONLY
+          Long learning window: LATEST 30 CALENDAR DAYS
+          Short historical backfill: NONE
+          Short learning start: 2026-10-07 live confirmed Down pivots
+          Profit trail: ₹1
+          Long stop-loss: NONE
+          Negative long sell: PROHIBITED in deterministic Multify lane
+          Short averaging: NONE
+          Per-trade short stop: NONE
+          Daily cumulative short gross-loss blocker: ₹2,000
+          UI: Execution | Forecast | Settings
+          Live + Shadow P&L: PINNED
+          Diagnostic ZIP: RAW CAMPAIGNS + CONFIRMED PIVOTS + 20-WAVE STATS + 30-DAY SNAPSHOT
+          Unit tests: PASS
+          Android lint: PASS
+          APK build: PASS
+          APK signature verification: PASS
+          EOV
+          (cd android && zip -qr "../$STAGE/MultifyTraderPro-v4.4.0-source.zip" . -x '.gradle/*' '*/build/*' 'app/multify-v4-stable.jks')
+
+      - name: Upload v4.4 APK and validation
+        uses: actions/upload-artifact@v4
+        with:
+          name: MultifyTraderPro-VivoY73-v4.4.0-wave-pivot-30day
+          path: |
+            build-output/MultifyTraderPro-VivoY73-v4.4.0-wave-pivot-30day.apk
+            build-output/MultifyTraderPro-v4.4.0-source.zip
+            build-output/SIGNATURE.txt
+            build-output/BADGING.txt
+            build-output/SHA256.txt
+            build-output/VALIDATION-v4.4.0.txt
+            android/app/build/reports/tests/testDebugUnitTest/
+            android/app/build/reports/lint-results-debug.html
+          if-no-files-found: error
+          retention-days: 14
