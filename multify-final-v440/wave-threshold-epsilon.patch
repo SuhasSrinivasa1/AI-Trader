@@ -1,0 +1,21 @@
+--- v44repro/app/src/main/java/com/multify/traderpro/engine/WavePivotMath.kt	2026-10-07 03:23:46.878795365 +0000
++++ v44src/app/src/main/java/com/multify/traderpro/engine/WavePivotMath.kt	2026-10-07 03:31:23.752363666 +0000
+@@ -2,6 +2,7 @@
+ 
+ object WavePivotMath {
+     const val DEFAULT_THRESHOLD_FRACTION = 0.004
++    private const val EPSILON = 1e-12
+ 
+     fun favourableMoveFraction(direction: String, startPrice: Double, extremePrice: Double): Double {
+         if (startPrice <= 0.0 || extremePrice <= 0.0) return 0.0
+@@ -25,8 +26,8 @@
+         favourableMoveFraction(direction, startPrice, extremePrice) * 100.0
+ 
+     fun shouldArm(direction: String, startPrice: Double, extremePrice: Double, threshold: Double = DEFAULT_THRESHOLD_FRACTION): Boolean =
+-        favourableMoveFraction(direction, startPrice, extremePrice) >= threshold
++        favourableMoveFraction(direction, startPrice, extremePrice) + EPSILON >= threshold
+ 
+     fun shouldConfirm(direction: String, extremePrice: Double, currentPrice: Double, threshold: Double = DEFAULT_THRESHOLD_FRACTION): Boolean =
+-        reversalFraction(direction, extremePrice, currentPrice) >= threshold
++        reversalFraction(direction, extremePrice, currentPrice) + EPSILON >= threshold
+ }
