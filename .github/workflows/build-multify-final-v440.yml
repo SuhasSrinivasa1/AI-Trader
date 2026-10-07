@@ -1,0 +1,128 @@
+name: Build Multify Trader Pro v4.4 Wave Capture
+
+on:
+  push:
+    branches:
+      - multify-final-v440-wave-capture-20261007
+    paths:
+      - 'multify-final-v420/**'
+      - 'multify-final-v430/**'
+      - 'multify-final-v440/**'
+      - '.github/workflows/build-multify-final-v440.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout release payload
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout: |
+            multify-final-v420
+            multify-final-v430
+            multify-final-v440
+            multify-final-v4/stable_signing_key.jks.b64
+            .github/workflows/build-multify-final-v440.yml
+          sparse-checkout-cone-mode: false
+
+      - name: Restore v4.2 then apply v4.3 and v4.4
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat multify-final-v420/source.part* | base64 -d > /tmp/base.tgz
+          tar -xzf /tmp/base.tgz
+          cat multify-final-v420/patch.part* > /tmp/v420.patch
+          (cd android && patch -p2 --batch --forward < /tmp/v420.patch)
+          sed -i -E 's#<domain>([^<]+)</domain>#<domain includeSubdomains="false">\1</domain>#g' android/app/src/debug/res/xml/network_security_config.xml
+          sed -i '/applicationIdSuffix = ".debug"/d' android/app/build.gradle.kts
+          cat multify-final-v430/patch.gz.b64.part* | base64 -d | gzip -d > /tmp/v430.patch
+          (cd android && patch -p1 --batch --forward < /tmp/v430.patch)
+          cat multify-final-v440/patch.gz.b64.part* | base64 -d | gzip -d > /tmp/v440.patch
+          (cd android && patch -p1 --batch --forward < /tmp/v440.patch)
+          grep -q 'versionCode = 440' android/app/build.gradle.kts
+          grep -q 'versionName = "4.4.0-wave-capture-simple-ui"' android/app/build.gradle.kts
+          base64 -d multify-final-v4/stable_signing_key.jks.b64 > android/app/multify-v4-stable.jks
+
+      - name: Verify v4.4 contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=android/app/src/main/java/com/multify/traderpro
+          grep -q 'WAVE_REVERSAL_FRACTION = 0.004' "$ROOT/data/repository/TradingRepository.kt"
+          grep -q 'minusDays(29)' "$ROOT/data/repository/TradingRepository.kt"
+          grep -q 'EXCEL_WAVE1' android/app/src/main/assets/multify_history_seed.csv
+          grep -q 'WaveObservationEntity' "$ROOT/data/local/LearningEntities.kt"
+          grep -q 'WaveStateEntity' "$ROOT/data/local/LearningEntities.kt"
+          grep -q 'MIGRATION_5_6' "$ROOT/data/local/AppDatabase.kt"
+          grep -q 'allWaveObservations' "$ROOT/data/local/LearningDao.kt"
+          grep -q 'startWaveCapture' "$ROOT/data/repository/TradingRepository.kt"
+          grep -q 'captureWavePrice' "$ROOT/data/repository/TradingRepository.kt"
+          grep -q 'Execution("Execution"' "$ROOT/ui/screens/TraderApp.kt"
+          grep -q 'Forecast("Forecast"' "$ROOT/ui/screens/TraderApp.kt"
+          grep -q 'Settings("Settings"' "$ROOT/ui/screens/TraderApp.kt"
+          grep -q '20-wave averages' "$ROOT/ui/screens/TraderApp.kt"
+          grep -q 'PROFIT_TRAIL_RUPEES = 1.0' "$ROOT/data/repository/TradingRepository.kt"
+          grep -q 'DAILY_SHORT_LOSS_BLOCKER = 2_000.0' "$ROOT/data/repository/TradingRepository.kt"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Android SDK 35
+        run: |
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Unit tests and lint
+        working-directory: android
+        run: gradle --no-daemon --console=plain :app:testDebugUnitTest :app:lintDebug
+      - name: Build signed APK
+        working-directory: android
+        run: gradle --no-daemon --stacktrace :app:assembleDebug
+      - name: Verify and stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build-output
+          APK=build-output/MultifyTraderPro-VivoY73-v4.4.0-wave-capture-simple-ui.apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee build-output/SIGNATURE.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | tee build-output/BADGING.txt
+          grep -q "package: name='com.multify.traderpro.vivoy73final'" build-output/BADGING.txt
+          grep -q "versionCode='440'" build-output/BADGING.txt
+          grep -q "versionName='4.4.0-wave-capture-simple-ui-debug'" build-output/BADGING.txt
+          sha256sum "$APK" | tee build-output/SHA256.txt
+          cat > build-output/VALIDATION-v4.4.0.txt <<'EOF'
+          Wave-1 Long Excel seed: rolling latest 30 calendar days
+          Excel scope: Wave-1 Up only
+          Short / Down learning: live confirmed pivots only
+          Wave detector: >=0.4% leg + >=0.4% reversal
+          Wave observations: persistent Up/Down 1-20
+          Profit execution trail: ₹1 after learned arm level
+          UI navigation: Execution / Forecast / Settings
+          P&L strip: Shadow + Live visible globally
+          Unit tests/lint/build/signature: PASS
+          EOF
+          (cd android && zip -qr ../build-output/MultifyTraderPro-v4.4.0-source.zip . -x '.gradle/*' '*/build/*' 'app/multify-v4-stable.jks')
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MultifyTraderPro-VivoY73-v4.4.0-wave-capture-simple-ui
+          path: |
+            build-output/MultifyTraderPro-VivoY73-v4.4.0-wave-capture-simple-ui.apk
+            build-output/MultifyTraderPro-v4.4.0-source.zip
+            build-output/SIGNATURE.txt
+            build-output/BADGING.txt
+            build-output/SHA256.txt
+            build-output/VALIDATION-v4.4.0.txt
+            android/app/build/reports/tests/testDebugUnitTest/
+            android/app/build/reports/lint-results-debug.html
+          retention-days: 14
