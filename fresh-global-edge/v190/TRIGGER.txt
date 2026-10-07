@@ -1,0 +1,1 @@
+Build signed Global Edge AI Trader v1.8.0 from canonical main 2517e8058f36e27133b6ea6968e180812c224cbc after canonical CI success run 37578188647.
