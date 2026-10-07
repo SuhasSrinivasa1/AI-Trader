@@ -57,7 +57,7 @@ jobs:
           grep -q 'funnel full' app/src/main/java/com/suhas/ucsentinel/domain/engine/DemandScannerEngine.kt
           grep -q 'scanUpperCircuitThreePm' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
           grep -q 'restoreLearningVault' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
-          grep -q 'NearCloseAlarmScheduler' app/src/main/AndroidManifest.xml
+          grep -q 'NearCloseAlarmReceiver' app/src/main/AndroidManifest.xml
           ! grep -Rqi 'multify' app/src/main app/src/test
           ! grep -q 'NotificationListenerService' app/src/main/AndroidManifest.xml
           echo 'v1.8.2 architecture patch verification passed'
