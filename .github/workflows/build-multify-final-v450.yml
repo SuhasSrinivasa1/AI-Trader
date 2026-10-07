@@ -91,7 +91,8 @@ jobs:
           grep -q 'minusDays(29)' "$ROOT/data/repository/TradingRepository.kt"
           grep -q 'SHORT_LEARNING_START_DATE = LocalDate.of(2026, 10, 7)' "$ROOT/data/repository/TradingRepository.kt"
 
-          grep -q 'AUTO Wave 2+ = One side only' "$ROOT/ui/screens/TraderApp.kt"
+          grep -Fq 'AUTO Wave 2+' "$ROOT/ui/screens/TraderApp.kt"
+          grep -Fq 'One side only · trajectory-led directional gate' "$ROOT/ui/screens/TraderApp.kt"
           grep -q 'Execution("Execution"' "$ROOT/ui/screens/TraderApp.kt"
           grep -q 'Forecast("Forecast"' "$ROOT/ui/screens/TraderApp.kt"
           grep -q 'Configuration("Settings"' "$ROOT/ui/screens/TraderApp.kt"
