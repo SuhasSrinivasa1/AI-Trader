@@ -71,8 +71,8 @@ jobs:
           grep -q 'technical.*0.35\|0.35.*technical' "$ROOT/engine/DirectionalWaveMath.kt"
           grep -q 'fallingTrajectorySelectsShort' "$TESTROOT/engine/DirectionalWaveMathTest.kt"
           grep -q 'risingTrajectorySelectsLong' "$TESTROOT/engine/DirectionalWaveMathTest.kt"
-          grep -q 'trajectoryDominatesWeakConflictingTechnicalContext' "$TESTROOT/engine/DirectionalWaveMathTest.kt"
-          grep -q 'relativeVolumeStrengthensConfidenceWithoutFlippingSide' "$TESTROOT/engine/DirectionalWaveMathTest.kt"
+          grep -q 'trajectoryDominatesConflictingWeakTechnicalSignal' "$TESTROOT/engine/DirectionalWaveMathTest.kt"
+          grep -q 'relativeVolumeStrengthensButDoesNotFlipDirection' "$TESTROOT/engine/DirectionalWaveMathTest.kt"
 
           grep -q 'maybeExecuteDirectionalAuto' "$ROOT/data/repository/TradingRepository.kt"
           grep -q 'AUTO_WAVE_DIRECTION' "$ROOT/data/repository/TradingRepository.kt"
