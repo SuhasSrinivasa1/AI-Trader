@@ -1,0 +1,89 @@
+name: Build Multify TraderPro v4.3.0 Wave10
+
+on:
+  push:
+    branches:
+      - multify-v430-wave10-build
+    paths:
+      - 'multify-v430-ci/**'
+      - '.github/workflows/build-multify-v430-wave10.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android 35 build tools
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Reconstruct source
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat multify-v430-ci/source.part* > source.b64
+          base64 --decode source.b64 > source.tar.gz
+          tar -xzf source.tar.gz
+          test -f Multify-TraderPro-v4.3.0-wave10/app/build.gradle.kts
+
+      - name: Unit tests and release build
+        shell: bash
+        working-directory: Multify-TraderPro-v4.3.0-wave10
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --stacktrace :app:testDebugUnitTest :app:assembleRelease
+
+      - name: Validate unsigned APK and package identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="Multify-TraderPro-v4.3.0-wave10"
+          APK="$ROOT/app/build/outputs/apk/release/app-release-unsigned.apk"
+          if [ ! -f "$APK" ]; then
+            APK="$(find "$ROOT/app/build/outputs/apk/release" -maxdepth 1 -name '*.apk' | head -1)"
+          fi
+          test -n "$APK"
+          test -s "$APK"
+          mkdir -p release
+          cp "$APK" release/Multify-TraderPro-v4.3.0-wave10-UNSIGNED.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | tee release/package-check.txt
+          grep -q "package: name='com.multify.traderpro.vivoy73final'" release/package-check.txt
+          grep -q "versionCode='430'" release/package-check.txt
+          grep -q "versionName='4.3.0-wave10-adaptive'" release/package-check.txt
+          cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" release/apksigner.jar
+          cp "$ANDROID_HOME/build-tools/35.0.0/zipalign" release/zipalign
+          chmod +x release/zipalign
+          (cd "$ROOT" && zip -qr "../release/Multify-TraderPro-v4.3.0-wave10-source.zip" .)
+          sha256sum release/Multify-TraderPro-v4.3.0-wave10-UNSIGNED.apk > release/UNSIGNED-SHA256.txt
+
+      - name: Upload build handoff
+        uses: actions/upload-artifact@v4
+        with:
+          name: multify-v430-wave10-build-handoff
+          path: release/
+          if-no-files-found: error
+          retention-days: 7
