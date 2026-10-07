@@ -7,6 +7,7 @@ on:
     paths:
       - 'multify-final-v420/**'
       - 'multify-final-v430/**'
+      - 'multify-final-v440/**'
       - 'multify-final-v450/**'
       - '.github/workflows/build-multify-final-v450.yml'
   workflow_dispatch:
@@ -26,6 +27,7 @@ jobs:
           sparse-checkout: |
             multify-final-v420
             multify-final-v430
+            multify-final-v440
             multify-final-v450
             multify-final-v4/stable_signing_key.jks.b64
             .github/workflows/build-multify-final-v450.yml
@@ -46,9 +48,12 @@ jobs:
           cat multify-final-v430/patch.gz.b64.part* | base64 -d | gzip -d > /tmp/multify-v430.patch
           (cd android && patch -p1 --batch --forward < /tmp/multify-v430.patch)
 
-          cat multify-final-v450/patch.gz.b64.part* | base64 -d | gzip -d > /tmp/multify-v450.patch
+          cat multify-final-v440/patch.gz.b64.part* | base64 -d | gzip -d > /tmp/multify-v440.patch
+          (cd android && patch -p1 --batch --forward < /tmp/multify-v440.patch)
+          (cd android && patch -p1 --batch --forward < ../multify-final-v440/wave-threshold-epsilon.patch)
+
+          cat multify-final-v450/patch.gz.b64 | base64 -d | gzip -d > /tmp/multify-v450.patch
           (cd android && patch -p1 --batch --forward < /tmp/multify-v450.patch)
-          (cd android && patch -p1 --batch --forward < ../multify-final-v450/wave-threshold-epsilon.patch)
 
           grep -q 'versionCode = 450' android/app/build.gradle.kts
           grep -q 'versionName = "4.5.0-auto-direction-selector"' android/app/build.gradle.kts
@@ -133,7 +138,7 @@ jobs:
           OUT=android/app/build/outputs/apk/debug
           STAGE=build-output
           mkdir -p "$STAGE"
-          APK="$STAGE/MultifyTraderPro-VivoY73-v4.5.0-wave-pivot-30day.apk"
+          APK="$STAGE/MultifyTraderPro-VivoY73-v4.5.0-auto-direction-selector.apk"
           cp "$OUT/app-debug.apk" "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee "$STAGE/SIGNATURE.txt"
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | tee "$STAGE/BADGING.txt"
@@ -153,7 +158,7 @@ jobs:
           Short learning: WAVE-1 DOWN ONLY from live pivots
           AUTO Wave 1: deterministic Multify long + short
           AUTO Wave 2+: one-sided LONG / SHORT / HOLD selector
-          AUTO evidence: pivot trajectory + 1-minute candles + RVOL + VWAP/EMA + RSI/MACD + liquidity/order book + day context
+          AUTO evidence: pivot trajectory + 1-minute candles + RVOL + VWAP/EMA + RSI/MACD + liquidity/order book + day context + market cap/52-week position
           Selector ambiguity: HOLD / no live trade
           Short learning start: 2026-10-07 live confirmed Down pivots
           Profit trail: ₹1
@@ -175,9 +180,9 @@ jobs:
       - name: Upload v4.5 APK and validation
         uses: actions/upload-artifact@v4
         with:
-          name: MultifyTraderPro-VivoY73-v4.5.0-wave-pivot-30day
+          name: MultifyTraderPro-VivoY73-v4.5.0-auto-direction-selector
           path: |
-            build-output/MultifyTraderPro-VivoY73-v4.5.0-wave-pivot-30day.apk
+            build-output/MultifyTraderPro-VivoY73-v4.5.0-auto-direction-selector.apk
             build-output/MultifyTraderPro-v4.5.0-source.zip
             build-output/SIGNATURE.txt
             build-output/BADGING.txt
