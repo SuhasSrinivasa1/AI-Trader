@@ -1,0 +1,164 @@
+name: Build Multify Trader Pro v4.5 AUTO Direction
+
+on:
+  push:
+    branches:
+      - multify-final-v450-auto-direction-20261008
+    paths:
+      - 'multify-final-v420/**'
+      - 'multify-final-v430/**'
+      - 'multify-final-v440/**'
+      - 'multify-final-v450/**'
+      - '.github/workflows/build-multify-final-v450.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout v4.5 payload and stable signing material
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout: |
+            multify-final-v420
+            multify-final-v430
+            multify-final-v440
+            multify-final-v450
+            multify-final-v4/stable_signing_key.jks.b64
+            .github/workflows/build-multify-final-v450.yml
+          sparse-checkout-cone-mode: false
+
+      - name: Restore v4.4 source and apply v4.5 delta
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat multify-final-v420/source.part* | base64 -d > /tmp/multify-v410-android.tgz
+          tar -xzf /tmp/multify-v410-android.tgz
+          test -f android/app/build.gradle.kts
+          cat multify-final-v420/patch.part* > /tmp/multify-v420.patch
+          (cd android && patch -p2 --batch --forward < /tmp/multify-v420.patch)
+          sed -i -E 's#<domain>([^<]+)</domain>#<domain includeSubdomains="false">\1</domain>#g' android/app/src/debug/res/xml/network_security_config.xml
+          sed -i '/applicationIdSuffix = ".debug"/d' android/app/build.gradle.kts
+
+          cat multify-final-v430/patch.gz.b64.part* | base64 -d | gzip -d > /tmp/multify-v430.patch
+          (cd android && patch -p1 --batch --forward < /tmp/multify-v430.patch)
+
+          cat multify-final-v440/patch.gz.b64.part* | base64 -d | gzip -d > /tmp/multify-v440.patch
+          (cd android && patch -p1 --batch --forward < /tmp/multify-v440.patch)
+          (cd android && patch -p1 --batch --forward < ../multify-final-v440/wave-threshold-epsilon.patch)
+
+          cat multify-final-v450/patch.gz.b64.part* | base64 -d | gzip -d > /tmp/multify-v450.patch
+          (cd android && patch -p1 --batch --forward < /tmp/multify-v450.patch)
+
+          grep -q 'versionCode = 450' android/app/build.gradle.kts
+          grep -q 'versionName = "4.5.0-auto-wave-direction"' android/app/build.gradle.kts
+          base64 -d multify-final-v4/stable_signing_key.jks.b64 > android/app/multify-v4-stable.jks
+
+      - name: Verify v4.5 AUTO contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=android/app/src/main/java/com/multify/traderpro
+          TESTROOT=android/app/src/test/java/com/multify/traderpro
+          grep -q 'MIN_ABS_SCORE = 0.18' "$ROOT/engine/AutoWaveDirectionMath.kt"
+          grep -q 'persistentLowerHighLowerLowSelectsShort' "$TESTROOT/engine/AutoWaveDirectionMathTest.kt"
+          grep -q 'persistentHigherHighHigherLowSelectsLong' "$TESTROOT/engine/AutoWaveDirectionMathTest.kt"
+          grep -q 'mixedStructureCanSkip' "$TESTROOT/engine/AutoWaveDirectionMathTest.kt"
+          grep -q 'WAVE_DIRECTION_DECISION' "$ROOT/data/repository/TradingRepository.kt"
+          grep -q 'wave >= 2' "$ROOT/data/repository/TradingRepository.kt"
+          grep -q 'AUTO_WAVE_SKIPPED_LOW_EDGE' "$ROOT/data/repository/TradingRepository.kt"
+          grep -q 'DEFAULT_MULTIFY_PACKAGE = "com.multyfi.invest"' "$ROOT/data/repository/TradingRepository.kt"
+          grep -q 'BROKER_ORDER_LATENCY' "$ROOT/data/repository/TradingRepository.kt"
+          grep -q 'obs.direction == "DOWN" && obs.wave == 1' "$ROOT/data/repository/TradingRepository.kt"
+          grep -q 'map { it.callDate }.distinct().size' "$ROOT/data/repository/TradingRepository.kt"
+          grep -q 'HISTORICAL_SEED_VERSION = 450' "$ROOT/data/repository/TradingRepository.kt"
+          grep -q 'Wave 2 onward, each wave chooses ONE side only' "$ROOT/ui/screens/TraderApp.kt"
+          grep -q 'WAVE_PIVOT_FRACTION = 0.004' "$ROOT/data/repository/TradingRepository.kt"
+          grep -q 'minusDays(29)' "$ROOT/data/repository/TradingRepository.kt"
+          grep -q 'PROFIT_TRAIL_RUPEES = 1.0' "$ROOT/data/repository/TradingRepository.kt"
+          grep -q 'DAILY_SHORT_LOSS_BLOCKER = 2_000.0' "$ROOT/data/repository/TradingRepository.kt"
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK 35
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Unit tests and lint
+        working-directory: android
+        run: gradle --no-daemon --console=plain :app:testDebugUnitTest :app:lintDebug
+
+      - name: Build stable-signed APK
+        working-directory: android
+        run: gradle --no-daemon --stacktrace :app:assembleDebug
+
+      - name: Verify APK signature, identity and stage output
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=android/app/build/outputs/apk/debug
+          STAGE=build-output
+          mkdir -p "$STAGE"
+          APK="$STAGE/MultifyTraderPro-VivoY73-v4.5.0-auto-wave-direction.apk"
+          cp "$OUT/app-debug.apk" "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee "$STAGE/SIGNATURE.txt"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | tee "$STAGE/BADGING.txt"
+          grep -q "package: name='com.multify.traderpro.vivoy73final'" "$STAGE/BADGING.txt"
+          grep -q "versionCode='450'" "$STAGE/BADGING.txt"
+          grep -q "versionName='4.5.0-auto-wave-direction-debug'" "$STAGE/BADGING.txt"
+          sha256sum "$APK" | tee "$STAGE/SHA256.txt"
+          cat > "$STAGE/VALIDATION-v4.5.0.txt" <<'EOV'
+          Version: 4.5.0-auto-wave-direction
+          Wave 1 AUTO: deterministic Multify LONG then SHORT
+          Wave 2-20 AUTO: ONE side only LONG / SHORT / SKIP
+          AUTO inputs: pivots + VWAP + EMA + slope + MACD + RSI + RVOL/candle + ORB/Donchian + order book + day trend
+          Wave definition: 0.40% favourable move + 0.40% reversal
+          Excel seed: Wave-1 Long only
+          Long window: latest 30 calendar days
+          Default notification package: com.multyfi.invest
+          Broker order latency logging: PRESENT
+          Long stop-loss: NONE
+          Negative long sell: PROHIBITED
+          Short averaging: NONE
+          Per-trade short stop: NONE
+          Daily short gross-loss blocker: ₹2,000
+          Unit tests: PASS
+          Android lint: PASS
+          APK build: PASS
+          APK signature verification: PASS
+          EOV
+          (cd android && zip -qr "../$STAGE/MultifyTraderPro-v4.5.0-source.zip" . -x '.gradle/*' '*/build/*' 'app/multify-v4-stable.jks')
+
+      - name: Upload v4.5 APK and validation
+        uses: actions/upload-artifact@v4
+        with:
+          name: MultifyTraderPro-VivoY73-v4.5.0-auto-wave-direction
+          path: |
+            build-output/MultifyTraderPro-VivoY73-v4.5.0-auto-wave-direction.apk
+            build-output/MultifyTraderPro-v4.5.0-source.zip
+            build-output/SIGNATURE.txt
+            build-output/BADGING.txt
+            build-output/SHA256.txt
+            build-output/VALIDATION-v4.5.0.txt
+            android/app/build/reports/tests/testDebugUnitTest/
+            android/app/build/reports/lint-results-debug.html
+          if-no-files-found: error
+          retention-days: 14
