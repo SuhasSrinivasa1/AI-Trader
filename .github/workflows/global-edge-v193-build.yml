@@ -6,6 +6,10 @@ on:
       - '.github/workflows/global-edge-v193-build.yml'
       - '.github/workflows/global-edge-v194-build.yml'
       - 'fresh-global-edge/v194/**'
+  pull_request:
+    paths:
+      - '.github/workflows/global-edge-v193-build.yml'
+      - 'fresh-global-edge/v194/**'
   workflow_dispatch:
 
 permissions:
