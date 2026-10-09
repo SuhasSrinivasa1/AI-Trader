@@ -1,0 +1,119 @@
+name: Global Edge AI Trader v1.8.4B Diagonal Build
+
+on:
+  push:
+    paths:
+      - '.github/workflows/global-edge-v194b-build.yml'
+      - 'fresh-global-edge/v194b/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build-sign:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - name: Checkout signing repository
+        uses: actions/checkout@v4
+        with:
+          path: signing-repo
+      - name: Recover verified v1.8.3 source artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Global-Edge-AI-Trader-v1.8.3-FINAL
+          repository: SuhasSrinivasa1/AI-Trader
+          run-id: 37818452613
+          github-token: ${{ github.token }}
+          path: /tmp/v183-artifact
+      - name: Apply v1.8.4 patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/v194 && mkdir -p /tmp/v194
+          SRCZIP=$(find /tmp/v183-artifact -type f -name 'Global-Edge-AI-Trader-v1.8.3-source.zip' | head -n1)
+          test -n "$SRCZIP" && test -s "$SRCZIP"
+          unzip -q "$SRCZIP" -d /tmp/v194
+          tr -d '\r\n ' < signing-repo/fresh-global-edge/v194b/v183-to-v184.patch.gz.b64 | base64 -d > /tmp/v194.patch.gz
+          gunzip -c /tmp/v194.patch.gz > /tmp/v194.patch
+          cd /tmp/v194
+          git init -q
+          git apply --check /tmp/v194.patch
+          git apply /tmp/v194.patch
+          grep -q 'versionCode = 194' app/build.gradle.kts
+          grep -q 'DIAGONAL_UP' app/src/main/java/com/suhas/ucsentinel/domain/engine/DiagonalScannerEngine.kt
+          grep -q 'THREE_PM("3 PM UC")' app/src/main/java/com/suhas/ucsentinel/ui/InformationArchitectureScreens.kt
+          grep -q 'Top 5 candle patterns' app/src/main/java/com/suhas/ucsentinel/ui/MoreScreen.kt
+          grep -q 'Top 10 drivers' app/src/main/java/com/suhas/ucsentinel/ui/MoreScreen.kt
+          grep -q 'time>=LocalTime.of(15,0)' app/src/main/java/com/suhas/ucsentinel/domain/engine/AutomationPolicy.kt
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Unit tests and release APK
+        working-directory: /tmp/v194
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p out
+          gradle --no-daemon --console=plain clean testDebugUnitTest assembleRelease 2>&1 | tee out/GRADLE-BUILD-TEST.log
+      - name: Recover preserved signing material
+        uses: actions/download-artifact@v4
+        with:
+          name: Global-Edge-AI-Trader-v1.5.0-FINAL
+          repository: SuhasSrinivasa1/AI-Trader
+          run-id: 36146076154
+          github-token: ${{ github.token }}
+          path: /tmp/v150-artifact
+      - name: Sign and verify
+        working-directory: /tmp/v194
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out /tmp/signing
+          BACKUP=$(find /tmp/v150-artifact -type f -name 'Global-Edge-AI-Trader-v1.5.0-SIGNING-BACKUP.zip' | head -n1)
+          unzip -q "$BACKUP" -d /tmp/signing
+          INFO=/tmp/signing/SIGNING-INFO.txt
+          STORE_PASS=$(grep '^store_password=' "$INFO" | cut -d= -f2-)
+          KEY_PASS=$(grep '^key_password=' "$INFO" | cut -d= -f2-)
+          UNSIGNED=$(find app/build/outputs/apk/release -maxdepth 1 -type f -name '*release*.apk' | head -n1)
+          OUT=out/Global-Edge-AI-Trader-v1.8.4.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks /tmp/signing/global-edge-v1.5.0.keystore --ks-pass pass:"$STORE_PASS" --key-pass pass:"$KEY_PASS" --ks-key-alias globaledge --out "$OUT" "$UNSIGNED"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$OUT" | tee out/APK-SIGNATURE-VERIFY.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$OUT" | tee out/APK-BADGING.txt
+          grep -q "versionCode='194'" out/APK-BADGING.txt
+          grep -q "versionName='1.8.4'" out/APK-BADGING.txt
+          sha256sum "$OUT" | tee out/SHA256.txt
+      - name: Package source
+        working-directory: /tmp/v194
+        shell: bash
+        run: |
+          zip -qr out/Global-Edge-AI-Trader-v1.8.4-source.zip . -x '.git/*' '*/.gradle/*' '*/build/*' 'out/*' '*.keystore' '*.jks'
+      - name: Upload final artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Global-Edge-AI-Trader-v1.8.4-FINAL
+          retention-days: 90
+          if-no-files-found: error
+          path: |
+            /tmp/v194/out/Global-Edge-AI-Trader-v1.8.4.apk
+            /tmp/v194/out/Global-Edge-AI-Trader-v1.8.4-source.zip
+            /tmp/v194/out/APK-SIGNATURE-VERIFY.txt
+            /tmp/v194/out/APK-BADGING.txt
+            /tmp/v194/out/SHA256.txt
+            /tmp/v194/out/GRADLE-BUILD-TEST.log
