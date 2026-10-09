@@ -115,7 +115,7 @@ class DiagonalScannerEngine(private val growwClient: GrowwClient) {
                 dayChangePercent=quote.dayChangePercent,score=score,confidence=confidence,
                 passedSignals=signals.count{it.passed},totalSignals=signals.size,buySellRatio=ratio,volumeRatio=t.rvol,
                 consecutiveCircuitLikeDays=0,signals=signals,
-                activeStrategies=buildList{add(directionTag);add("DIAGONAL_RESEARCH");if(executionReady&&score>=settings.demandMinScore)add("DIAGONAL_LIVE")},
+                activeStrategies=buildList{add(directionTag);add("DIAGONAL_RESEARCH");if(executionReady&&score>=settings.demandMinScore)add("DIAGONAL_STRONG")},
                 generatedAt=System.currentTimeMillis(),modelVersion=MODEL_VERSION,predictionHorizonHours=6,
                 targetMovePct=(0.6+abs(t.netMovePct)*0.25).coerceIn(0.6,3.0),
                 setupScore=t.r2*100.0,accelerationScore=t.monotonicPct*100.0,microstructureScore=t.rvol*50.0
