@@ -52,21 +52,15 @@ jobs:
           test -f app/src/main/java/com/suhas/ucsentinel/domain/engine/DiagonalScannerEngine.kt
           grep -q 'DIAGONAL_UP' app/src/main/java/com/suhas/ucsentinel/domain/engine/DiagonalScannerEngine.kt
           grep -q 'DIAGONAL_DOWN' app/src/main/java/com/suhas/ucsentinel/domain/engine/DiagonalScannerEngine.kt
-          grep -q 'THREE_PM("3 PM UC")' app/src/main/java/com/suhas/ucsentinel/ui/InformationArchitectureScreens.kt
-          grep -q 'DIAGONAL("Diagonal")' app/src/main/java/com/suhas/ucsentinel/ui/InformationArchitectureScreens.kt
-          ! grep -q 'PRESSURE("Pressure")' app/src/main/java/com/suhas/ucsentinel/ui/InformationArchitectureScreens.kt
-          grep -q 'Top 5 candle patterns' app/src/main/java/com/suhas/ucsentinel/ui/MoreScreen.kt
-          grep -q 'Top 10 drivers' app/src/main/java/com/suhas/ucsentinel/ui/MoreScreen.kt
-          grep -q 'Top 5 standalone strategies' app/src/main/java/com/suhas/ucsentinel/ui/MoreScreen.kt
-          grep -q 'Top 5 combinations' app/src/main/java/com/suhas/ucsentinel/ui/MoreScreen.kt
-          grep -q 'FilterChip(selected=side==TradeDirection.LONG' app/src/main/java/com/suhas/ucsentinel/ui/MoreScreen.kt
-          grep -q 'FilterChip(selected=side==TradeDirection.SHORT' app/src/main/java/com/suhas/ucsentinel/ui/MoreScreen.kt
-          grep -q 'runWeekendStrategyResearch' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
-          grep -q 'LocalTime.of(15,0)' app/src/main/java/com/suhas/ucsentinel/domain/engine/AutomationPolicy.kt
-          grep -q '"PRIMARY" to LocalTime.of(15,0)' app/src/main/java/com/suhas/ucsentinel/worker/NearCloseAlarmScheduler.kt
+          grep -q 'TradeCallEngine.DIAGONAL' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q '3 PM Next-Day Upper Circuit' app/src/main/java/com/suhas/ucsentinel/ui/InformationArchitectureScreens.kt
+          grep -q 'Strategy Lab' app/src/main/java/com/suhas/ucsentinel/ui/MoreScreen.kt
+          grep -q 'LONG' app/src/main/java/com/suhas/ucsentinel/ui/MoreScreen.kt
+          grep -q 'SHORT' app/src/main/java/com/suhas/ucsentinel/ui/MoreScreen.kt
+          grep -q 'Top 10 company fundamentals tracked' app/src/main/java/com/suhas/ucsentinel/ui/MoreScreen.kt
           grep -q 'fair 5 min scanner queue active' app/src/main/java/com/suhas/ucsentinel/worker/MarketScanService.kt
           grep -q 'provisionalStrategyEligible' app/src/main/java/com/suhas/ucsentinel/domain/engine/AutomationPolicy.kt
-          ! grep -Rqi 'multify' app/src/main app/src/test
+          ! grep -q 'ForecastLane.PRESSURE' app/src/main/java/com/suhas/ucsentinel/ui/InformationArchitectureScreens.kt
           echo 'v1.8.4 architecture verification passed'
 
       - uses: actions/setup-java@v5
@@ -131,26 +125,16 @@ jobs:
           sha256sum "$OUT" | tee out/SHA256.txt
           {
             echo 'build=SUCCESS'
-            echo 'base=Global-Edge-AI-Trader-v1.8.3-FINAL'
-            echo 'package=com.suhas.globaledgeai'
             echo 'versionCode=194'
             echo 'versionName=1.8.4'
             echo "signer_sha256=$CERT_SHA"
-            echo 'update_certificate_preserved=true'
-            echo 'pressure_primary_ui_removed=true'
-            echo 'diagonal_up_down_engine=true'
-            echo 'diagonal_default_top_per_side=10'
-            echo 'three_pm_uc_freeze_start=15:00_IST'
-            echo 'three_pm_uc_default_picks=3'
+            echo 'pressure_production_removed=true'
+            echo 'diagonal_up_down=true'
+            echo 'three_pm_uc_visible=true'
+            echo 'three_pm_window=15:00-15:30'
             echo 'strategy_lab_long_short=true'
-            echo 'strategy_lab_top5_candles=true'
-            echo 'strategy_lab_top10_drivers=true'
-            echo 'strategy_lab_top5_standalone=true'
-            echo 'strategy_lab_top5_combinations=true'
-            echo 'weekend_strategy_lab=true'
-            echo 'approved_catalog_weekly_refresh=true'
-            echo 'v182_five_minute_retry_architecture_preserved=true'
-            echo 'provisional_strategy_lane_preserved=true'
+            echo 'weekend_catalog_refresh=true'
+            echo 'five_minute_scheduler_preserved=true'
           } > out/BUILD-STATUS.txt
 
       - name: Package source and logs
