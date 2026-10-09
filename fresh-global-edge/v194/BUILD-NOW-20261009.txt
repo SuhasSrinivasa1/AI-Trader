@@ -1,0 +1,1 @@
+Build v1.8.4 from the staged source patch and run the configured verification pipeline.
