@@ -1,10 +1,11 @@
-name: Global Edge AI Trader v1.8.3 Information Architecture Build
+name: Global Edge AI Trader v1.8.4 Diagonal Strategy Lab Build
 
 on:
   push:
     paths:
       - '.github/workflows/global-edge-v193-build.yml'
-      - 'fresh-global-edge/v193/**'
+      - '.github/workflows/global-edge-v194-build.yml'
+      - 'fresh-global-edge/v194/**'
   workflow_dispatch:
 
 permissions:
@@ -25,49 +26,49 @@ jobs:
         with:
           path: signing-repo
 
-      - name: Recover verified v1.8.2 source artifact
+      - name: Recover verified v1.8.3 source artifact
         uses: actions/download-artifact@v4
         with:
-          name: Global-Edge-AI-Trader-v1.8.2-FINAL
+          name: Global-Edge-AI-Trader-v1.8.3-FINAL
           repository: SuhasSrinivasa1/AI-Trader
-          run-id: 37642923097
+          run-id: 37818452613
           github-token: ${{ github.token }}
-          path: /tmp/v182-artifact
+          path: /tmp/v183-artifact
 
-      - name: Apply v1.8.3 information architecture patch
+      - name: Apply v1.8.4 architecture patch
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf /tmp/v193 && mkdir -p /tmp/v193
-          SRCZIP=$(find /tmp/v182-artifact -type f -name 'Global-Edge-AI-Trader-v1.8.2-source.zip' | head -n1)
+          rm -rf /tmp/v194 && mkdir -p /tmp/v194
+          SRCZIP=$(find /tmp/v183-artifact -type f -name 'Global-Edge-AI-Trader-v1.8.3-source.zip' | head -n1)
           test -n "$SRCZIP" && test -s "$SRCZIP"
-          unzip -q "$SRCZIP" -d /tmp/v193
-          tr -d '\r\n ' < signing-repo/fresh-global-edge/v193/v182-to-v183.patch.gz.b64 | base64 -d > /tmp/v193.patch.gz
-          gunzip -c /tmp/v193.patch.gz > /tmp/v193.patch
-          cd /tmp/v193
-          patch -p1 --batch < /tmp/v193.patch
+          unzip -q "$SRCZIP" -d /tmp/v194
+          tr -d '\r\n ' < signing-repo/fresh-global-edge/v194/v183-to-v184.patch.gz.b64 | base64 -d > /tmp/v194.patch.gz
+          gunzip -c /tmp/v194.patch.gz > /tmp/v194.patch
+          cd /tmp/v194
+          patch -p1 --batch < /tmp/v194.patch
 
-          grep -q 'versionCode = 193' app/build.gradle.kts
-          grep -q 'versionName = "1.8.3"' app/build.gradle.kts
-          test -f app/src/main/java/com/suhas/ucsentinel/ui/InformationArchitectureScreens.kt
-          grep -q 'LIVE("Live"' app/src/main/java/com/suhas/ucsentinel/ui/AppNavigation.kt
-          grep -q 'LEARNING("Learning"' app/src/main/java/com/suhas/ucsentinel/ui/AppNavigation.kt
-          grep -q 'FORECAST("Forecast"' app/src/main/java/com/suhas/ucsentinel/ui/AppNavigation.kt
-          grep -q 'SETTINGS("Settings"' app/src/main/java/com/suhas/ucsentinel/ui/AppNavigation.kt
-          grep -q 'LiveOverviewScreen' app/src/main/java/com/suhas/ucsentinel/ui/AppNavigation.kt
-          grep -q 'LearningOverviewScreen' app/src/main/java/com/suhas/ucsentinel/ui/AppNavigation.kt
-          grep -q 'ForecastOverviewScreen' app/src/main/java/com/suhas/ucsentinel/ui/AppNavigation.kt
-          grep -q 'val pages=listOf("auth","settings")' app/src/main/java/com/suhas/ucsentinel/ui/MoreScreen.kt
-          ! grep -q 'MainTab.UC' app/src/main/java/com/suhas/ucsentinel/ui/AppNavigation.kt
-          ! grep -q 'MainTab.STRATEGIES' app/src/main/java/com/suhas/ucsentinel/ui/AppNavigation.kt
-          ! grep -q 'MainTab.GLOBAL' app/src/main/java/com/suhas/ucsentinel/ui/AppNavigation.kt
-          ! grep -q 'MainTab.PORTFOLIO' app/src/main/java/com/suhas/ucsentinel/ui/AppNavigation.kt
-          grep -q 'provisionalStrategyEligible' app/src/main/java/com/suhas/ucsentinel/domain/engine/AutomationPolicy.kt
-          grep -q 'PROVISIONAL_LIVE_PUBLISHED_V182' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'versionCode = 194' app/build.gradle.kts
+          grep -q 'versionName = "1.8.4"' app/build.gradle.kts
+          test -f app/src/main/java/com/suhas/ucsentinel/domain/engine/DiagonalScannerEngine.kt
+          grep -q 'DIAGONAL_UP' app/src/main/java/com/suhas/ucsentinel/domain/engine/DiagonalScannerEngine.kt
+          grep -q 'DIAGONAL_DOWN' app/src/main/java/com/suhas/ucsentinel/domain/engine/DiagonalScannerEngine.kt
+          grep -q 'THREE_PM("3 PM UC")' app/src/main/java/com/suhas/ucsentinel/ui/InformationArchitectureScreens.kt
+          grep -q 'DIAGONAL("Diagonal")' app/src/main/java/com/suhas/ucsentinel/ui/InformationArchitectureScreens.kt
+          ! grep -q 'PRESSURE("Pressure")' app/src/main/java/com/suhas/ucsentinel/ui/InformationArchitectureScreens.kt
+          grep -q 'Top 5 candle patterns' app/src/main/java/com/suhas/ucsentinel/ui/MoreScreen.kt
+          grep -q 'Top 10 drivers' app/src/main/java/com/suhas/ucsentinel/ui/MoreScreen.kt
+          grep -q 'Top 5 standalone strategies' app/src/main/java/com/suhas/ucsentinel/ui/MoreScreen.kt
+          grep -q 'Top 5 combinations' app/src/main/java/com/suhas/ucsentinel/ui/MoreScreen.kt
+          grep -q 'FilterChip(selected=side==TradeDirection.LONG' app/src/main/java/com/suhas/ucsentinel/ui/MoreScreen.kt
+          grep -q 'FilterChip(selected=side==TradeDirection.SHORT' app/src/main/java/com/suhas/ucsentinel/ui/MoreScreen.kt
+          grep -q 'runWeekendStrategyResearch' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'LocalTime.of(15,0)' app/src/main/java/com/suhas/ucsentinel/domain/engine/AutomationPolicy.kt
+          grep -q '"PRIMARY" to LocalTime.of(15,0)' app/src/main/java/com/suhas/ucsentinel/worker/NearCloseAlarmScheduler.kt
           grep -q 'fair 5 min scanner queue active' app/src/main/java/com/suhas/ucsentinel/worker/MarketScanService.kt
-          grep -q 'scanUpperCircuitThreePm' app/src/main/java/com/suhas/ucsentinel/data/repository/UCSentinelRepository.kt
+          grep -q 'provisionalStrategyEligible' app/src/main/java/com/suhas/ucsentinel/domain/engine/AutomationPolicy.kt
           ! grep -Rqi 'multify' app/src/main app/src/test
-          echo 'v1.8.3 information architecture verification passed'
+          echo 'v1.8.4 architecture verification passed'
 
       - uses: actions/setup-java@v5
         with:
@@ -88,7 +89,7 @@ jobs:
           gradle-version: '8.11.1'
 
       - name: Unit tests and release APK
-        working-directory: /tmp/v193
+        working-directory: /tmp/v194
         shell: bash
         run: |
           set -o pipefail
@@ -106,7 +107,7 @@ jobs:
           path: /tmp/v150-artifact
 
       - name: Sign and verify preserved update certificate
-        working-directory: /tmp/v193
+        working-directory: /tmp/v194
         shell: bash
         run: |
           set -euo pipefail
@@ -119,51 +120,57 @@ jobs:
           STORE_PASS=$(grep '^store_password=' "$INFO" | cut -d= -f2-)
           KEY_PASS=$(grep '^key_password=' "$INFO" | cut -d= -f2-)
           UNSIGNED=$(find app/build/outputs/apk/release -maxdepth 1 -type f -name '*release*.apk' | head -n1)
-          OUT=out/Global-Edge-AI-Trader-v1.8.3.apk
+          OUT=out/Global-Edge-AI-Trader-v1.8.4.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KEYSTORE" --ks-pass pass:"$STORE_PASS" --key-pass pass:"$KEY_PASS" --ks-key-alias globaledge --out "$OUT" "$UNSIGNED"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$OUT" | tee out/APK-SIGNATURE-VERIFY.txt
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$OUT" | tee out/APK-BADGING.txt
           grep -q "package: name='com.suhas.globaledgeai'" out/APK-BADGING.txt
-          grep -q "versionCode='193'" out/APK-BADGING.txt
-          grep -q "versionName='1.8.3'" out/APK-BADGING.txt
+          grep -q "versionCode='194'" out/APK-BADGING.txt
+          grep -q "versionName='1.8.4'" out/APK-BADGING.txt
           CERT_SHA=$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$OUT" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n1)
           test "$CERT_SHA" = '31ffa51c23b76f450cf099d00b254870bf8eacc5ce79aee4458070a0fab783d7'
           sha256sum "$OUT" | tee out/SHA256.txt
           {
             echo 'build=SUCCESS'
-            echo 'base=Global-Edge-AI-Trader-v1.8.2-FINAL'
+            echo 'base=Global-Edge-AI-Trader-v1.8.3-FINAL'
             echo 'package=com.suhas.globaledgeai'
-            echo 'versionCode=193'
-            echo 'versionName=1.8.3'
+            echo 'versionCode=194'
+            echo 'versionName=1.8.4'
             echo "signer_sha256=$CERT_SHA"
             echo 'update_certificate_preserved=true'
-            echo 'primary_navigation=LIVE_LEARNING_FORECAST_SETTINGS'
-            echo 'live_source_of_truth=true'
-            echo 'learning_source_of_truth=true'
-            echo 'forecast_research_separated_from_live=true'
-            echo 'settings_consolidated=true'
-            echo 'compact_comparison_tables=true'
-            echo 'empty_scaffolds_preserved=true'
-            echo 'v182_trading_architecture_preserved=true'
+            echo 'pressure_primary_ui_removed=true'
+            echo 'diagonal_up_down_engine=true'
+            echo 'diagonal_default_top_per_side=10'
+            echo 'three_pm_uc_freeze_start=15:00_IST'
+            echo 'three_pm_uc_default_picks=3'
+            echo 'strategy_lab_long_short=true'
+            echo 'strategy_lab_top5_candles=true'
+            echo 'strategy_lab_top10_drivers=true'
+            echo 'strategy_lab_top5_standalone=true'
+            echo 'strategy_lab_top5_combinations=true'
+            echo 'weekend_strategy_lab=true'
+            echo 'approved_catalog_weekly_refresh=true'
+            echo 'v182_five_minute_retry_architecture_preserved=true'
+            echo 'provisional_strategy_lane_preserved=true'
           } > out/BUILD-STATUS.txt
 
       - name: Package source and logs
-        working-directory: /tmp/v193
+        working-directory: /tmp/v194
         shell: bash
         run: |
           set -euo pipefail
-          zip -qr out/Global-Edge-AI-Trader-v1.8.3-source.zip . -x '.git/*' '*/.gradle/*' '*/build/*' 'out/*' '*.keystore' '*.jks'
+          zip -qr out/Global-Edge-AI-Trader-v1.8.4-source.zip . -x '.git/*' '*/.gradle/*' '*/build/*' 'out/*' '*.keystore' '*.jks'
           cd out
-          zip -q Global-Edge-AI-Trader-v1.8.3-build-logs.zip APK-SIGNATURE-VERIFY.txt APK-BADGING.txt SHA256.txt BUILD-STATUS.txt TEST-RESULT-SUMMARY.txt GRADLE-BUILD-TEST.log
+          zip -q Global-Edge-AI-Trader-v1.8.4-build-logs.zip APK-SIGNATURE-VERIFY.txt APK-BADGING.txt SHA256.txt BUILD-STATUS.txt TEST-RESULT-SUMMARY.txt GRADLE-BUILD-TEST.log
 
-      - name: Upload final v1.8.3 artifact
+      - name: Upload final v1.8.4 artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Global-Edge-AI-Trader-v1.8.3-FINAL
+          name: Global-Edge-AI-Trader-v1.8.4-FINAL
           retention-days: 90
           if-no-files-found: error
           path: |
-            /tmp/v193/out/Global-Edge-AI-Trader-v1.8.3.apk
-            /tmp/v193/out/Global-Edge-AI-Trader-v1.8.3-source.zip
-            /tmp/v193/out/Global-Edge-AI-Trader-v1.8.3-build-logs.zip
-            /tmp/v193/out/BUILD-STATUS.txt
+            /tmp/v194/out/Global-Edge-AI-Trader-v1.8.4.apk
+            /tmp/v194/out/Global-Edge-AI-Trader-v1.8.4-source.zip
+            /tmp/v194/out/Global-Edge-AI-Trader-v1.8.4-build-logs.zip
+            /tmp/v194/out/BUILD-STATUS.txt
