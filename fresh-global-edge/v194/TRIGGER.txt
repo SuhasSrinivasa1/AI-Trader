@@ -1,0 +1,1 @@
+Trigger v1.8.4 signed build after workflow registration.
