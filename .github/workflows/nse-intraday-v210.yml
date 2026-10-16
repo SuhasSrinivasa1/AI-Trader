@@ -1,0 +1,79 @@
+name: Build NSE Intraday Momentum v2.1.0
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'build-input/v210-part-*.b64'
+      - '.github/workflows/nse-intraday-v210.yml'
+  workflow_dispatch:
+
+jobs:
+  build-sign-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK
+        run: yes | sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Expand and patch source payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf nse-v210
+          mkdir nse-v210
+          cat build-input/v210-part-00.b64 build-input/v210-part-01.b64 build-input/v210-part-02.b64 build-input/v210-part-03.b64 build-input/v210-part-04.b64 build-input/v210-part-05.b64 build-input/v210-part-06.b64 build-input/v210-part-07.b64 build-input/v210-part-08.b64 | base64 -d > "$RUNNER_TEMP/nse-v210.tgz"
+          tar -xzf "$RUNNER_TEMP/nse-v210.tgz" -C nse-v210
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('nse-v210/v200src/app/src/main/java/com/suhas/nsedeliverymomentum/DeliveryMomentumService.java')
+          s=p.read_text()
+          s=s.replace('c.recentPace','c.recent')
+          s=s.replace('c.lowerLows>=.50&&c.closeLocation<=.32','c.lowerLows>=.50&&c.loc<=.32')
+          p.write_text(s)
+          PY
+          test -f nse-v210/v200src/settings.gradle
+          test -f nse-v210/v200src/app/build.gradle
+          grep -q "versionName '2.1.0'" nse-v210/v200src/app/build.gradle
+          grep -q "versionCode 210" nse-v210/v200src/app/build.gradle
+      - name: Unit tests and lint
+        run: gradle --no-daemon --console=plain -p nse-v210/v200src :app:testDebugUnitTest :app:lintDebug
+      - name: Build release APK
+        run: gradle --no-daemon --console=plain -p nse-v210/v200src :app:assembleRelease
+      - name: Sign fresh-install release
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=nse-v210/v200src/app/build/outputs/apk/release
+          UNSIGNED="$OUT/app-release-unsigned.apk"
+          test -f "$UNSIGNED"
+          KEY="$RUNNER_TEMP/nse-intraday-v210.jks"
+          PASS='NseV210FreshInstallOnly!'
+          keytool -genkeypair -noprompt -keystore "$KEY" -storepass "$PASS" -keypass "$PASS" -alias nse-v210 -keyalg RSA -keysize 4096 -validity 10000 -dname "CN=NSE Intraday Momentum v2.1.0, OU=Fresh Install, O=Private Build, C=IN"
+          ALIGNED="$OUT/NSE-Intraday-Momentum-S24-v2.1.0-ADAPTIVE-DIRECTION-ALIGNED.apk"
+          FINAL="$OUT/NSE-Intraday-Momentum-S24-v2.1.0-ADAPTIVE-DIRECTION-FRESH-SIGNED.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$UNSIGNED" "$ALIGNED"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$KEY" --ks-key-alias nse-v210 --ks-pass pass:"$PASS" --key-pass pass:"$PASS" --v2-signing-enabled true --v3-signing-enabled true --out "$FINAL" "$ALIGNED"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$FINAL" | tee "$OUT/APKSIGNER-VERIFY.txt"
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -v 4 "$FINAL" > "$OUT/ZIPALIGN-VERIFY.txt"
+          sha256sum "$FINAL" > "$OUT/SHA256.txt"
+      - name: Upload verified APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: NSE-Intraday-Momentum-v2.1.0-VERIFIED
+          path: |
+            nse-v210/v200src/app/build/outputs/apk/release/NSE-Intraday-Momentum-S24-v2.1.0-ADAPTIVE-DIRECTION-FRESH-SIGNED.apk
+            nse-v210/v200src/app/build/outputs/apk/release/APKSIGNER-VERIFY.txt
+            nse-v210/v200src/app/build/outputs/apk/release/ZIPALIGN-VERIFY.txt
+            nse-v210/v200src/app/build/outputs/apk/release/SHA256.txt
+            nse-v210/v200src/app/build/reports/tests/testDebugUnitTest/
+            nse-v210/v200src/app/build/reports/lint-results-debug.html
+          if-no-files-found: error
