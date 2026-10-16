@@ -1,0 +1,1 @@
+Existing release signing secrets are not available under the expected GitHub Actions secret names.

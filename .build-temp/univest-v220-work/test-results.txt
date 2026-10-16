@@ -1,0 +1,1 @@
+Univest AutoTrade v2.2.0 CI test marker. GitHub Actions runs testReleaseUnitTest before signing; consult the workflow log for the full Gradle test output.
